@@ -172,6 +172,73 @@ def generate_email_template(
 
 
 @mcp.tool()
+def generate_artifact(
+    skill_id: str,
+    house_id: str,
+    custom_context: Optional[dict] = None,
+    app: bool = True,
+) -> dict:
+    """Generate an artifact using a skill template.
+
+    Args:
+        skill_id: The skill to use (one_pager, linkedin_post, email_template,
+                  battlecard, press_release, blog_post, faq_document)
+        house_id: UUID of the message house to ground in.
+        custom_context: Optional additional context for the prompt.
+        app: Set to True to render as a Prefab UI.
+
+    Returns:
+        Generated artifact with sections and raw content, optionally as Prefab UI.
+    """
+    from src.pipeline.generator import ArtifactGenerator
+    from src.pipeline.skills import SkillManager
+    from src.artifacts.prefab_generator import build_artifact_preview
+
+    store = Store()
+    store.init()
+    skills = SkillManager()
+
+    generator = ArtifactGenerator(store, skills)
+    artifact = generator.generate(skill_id, house_id, custom_context or {})
+
+    if app:
+        try:
+            prefab_app = build_artifact_preview(skill_id, artifact.sections, artifact.house_name, artifact.house_id)
+            return {
+                "skill_id": skill_id,
+                "house_name": artifact.house_name,
+                "sections": artifact.sections,
+                "raw_content": artifact.raw_content,
+                "grounded_messages": artifact.grounded_messages,
+                "prefab": prefab_app,
+            }
+        except Exception as e:
+            return {
+                "skill_id": skill_id,
+                "house_name": artifact.house_name,
+                "sections": artifact.sections,
+                "raw_content": artifact.raw_content,
+                "error": f"Prefab rendering failed: {e}",
+            }
+
+    return {
+        "skill_id": skill_id,
+        "house_name": artifact.house_name,
+        "sections": artifact.sections,
+        "raw_content": artifact.raw_content,
+        "grounded_messages": artifact.grounded_messages,
+    }
+
+
+@mcp.tool()
+def list_skills() -> dict:
+    """List all available artifact skills."""
+    from src.pipeline.skills import SkillManager
+    skills = SkillManager()
+    return {"skills": skills.list_skills()}
+
+
+@mcp.tool()
 def reset_conversation() -> dict:
     """Reset the grounding session context.
 

@@ -158,6 +158,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
                     Skills
                 </div>
+                <div class="nav-item" data-view="artifacts">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                    Artifacts
+                </div>
             </nav>
         </aside>
         
@@ -300,6 +304,56 @@
                 <p style="color: var(--text-muted); margin-bottom: 24px;">Skill files define how artifacts are generated — prompt templates, required sections, and Prefab UI structure.</p>
                 <div class="grid" id="skills-grid"></div>
             </section>
+            
+            <!-- Artifacts -->
+            <section id="artifacts" class="section">
+                <div class="header">
+                    <h1>Artifact Generator</h1>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px;">Generate marketing artifacts grounded in your messaging frameworks.</p>
+                
+                <div class="grid" style="grid-template-columns: 1fr 2fr; gap: 24px;">
+                    <div>
+                        <div class="card">
+                            <div class="card-title" style="margin-bottom: 16px;">Select Framework</div>
+                            <select class="form-select" id="artifact-house" onchange="loadArtifactSkills()">
+                                <option value="">Choose a framework...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-title" style="margin-bottom: 16px;">Select Artifact Type</div>
+                            <div id="artifact-skills-list"></div>
+                        </div>
+                        
+                        <button class="btn btn-primary" id="generate-btn" onclick="generateArtifact()" style="width: 100%;" disabled>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                            Generate Artifact
+                        </button>
+                    </div>
+                    
+                    <div>
+                        <div class="card" id="artifact-preview-card" style="display: none;">
+                            <div class="card-header">
+                                <span class="card-title">Preview</span>
+                                <button class="btn btn-secondary btn-sm" onclick="openPreviewInNewTab()">Open Full</button>
+                            </div>
+                            <div id="artifact-preview" style="background: white; border-radius: 4px; min-height: 400px; padding: 20px;">
+                            </div>
+                        </div>
+                        
+                        <div class="card" id="artifact-raw-card" style="display: none;">
+                            <div class="card-title" style="margin-bottom: 16px;">Raw Content</div>
+                            <div class="markdown-preview" id="artifact-raw" style="max-height: 300px; background: var(--bg);"></div>
+                        </div>
+                        
+                        <div class="empty" id="artifacts-empty">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                            <div>Select a framework and artifact type to generate</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
     
@@ -438,6 +492,7 @@
             if (viewId === 'houses') loadHouses();
             if (viewId === 'upload') resetUpload();
             if (viewId === 'skills') loadSkills();
+            if (viewId === 'artifacts') loadArtifactHouses();
         }
         
         // API
@@ -779,6 +834,94 @@
             }
         }
         
+        // Artifacts
+        let currentArtifactHtml = '';
+        
+        async function loadArtifactHouses() {
+            const res = await fetch(`${API}/houses`);
+            const houses = await res.json();
+            const select = document.getElementById('artifact-house');
+            select.innerHTML = '<option value="">Choose a framework...</option>' + 
+                houses.map(h => `<option value="${h.id}">${h.name}</option>`).join('');
+        }
+        
+        async function loadArtifactSkills() {
+            const houseId = document.getElementById('artifact-house').value;
+            const btn = document.getElementById('generate-btn');
+            
+            if (!houseId) {
+                btn.disabled = true;
+                return;
+            }
+            
+            btn.disabled = false;
+            
+            const res = await fetch(`${API}/skills`);
+            const skills = await res.json();
+            
+            document.getElementById('artifact-skills-list').innerHTML = skills.map(s => `
+                <div style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; cursor: pointer;" 
+                     onclick="selectArtifactSkill('${s.id}')" id="skill-option-${s.id}">
+                    <div style="font-weight: 500;">${s.name}</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">${s.description}</div>
+                </div>
+            `).join('');
+            
+            window.selectedArtifactSkill = null;
+        }
+        
+        function selectArtifactSkill(skillId) {
+            document.querySelectorAll('[id^="skill-option-"]').forEach(el => el.style.borderColor = 'var(--border)');
+            const el = document.getElementById(`skill-option-${skillId}`);
+            if (el) el.style.borderColor = 'var(--primary)';
+            window.selectedArtifactSkill = skillId;
+        }
+        
+        async function generateArtifact() {
+            const houseId = document.getElementById('artifact-house').value;
+            const skillId = window.selectedArtifactSkill;
+            
+            if (!houseId || !skillId) {
+                alert('Please select a framework and artifact type');
+                return;
+            }
+            
+            const btn = document.getElementById('generate-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span style="opacity: 0.5;">Generating...</span>';
+            
+            try {
+                const formData = new FormData();
+                formData.append('skill_id', skillId);
+                formData.append('house_id', houseId);
+                
+                const res = await fetch(`${API}/generate`, { method: 'POST', body: formData });
+                const data = await res.json();
+                
+                if (data.preview_html) {
+                    currentArtifactHtml = data.preview_html;
+                    document.getElementById('artifact-preview').innerHTML = data.preview_html;
+                    document.getElementById('artifact-preview-card').style.display = 'block';
+                    document.getElementById('artifact-raw-card').style.display = 'block';
+                    document.getElementById('artifact-raw').textContent = data.raw_content;
+                    document.getElementById('artifacts-empty').style.display = 'none';
+                }
+            } catch (e) {
+                alert('Error generating artifact: ' + e.message);
+            }
+            
+            btn.disabled = false;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Generate Artifact';
+        }
+        
+        function openPreviewInNewTab() {
+            if (currentArtifactHtml) {
+                const win = window.open('', '_blank');
+                win.document.write(currentArtifactHtml);
+                win.document.close();
+            }
+        }
+        
         // Modals
         function openModal(id) {
             document.getElementById(id).classList.add('active');
@@ -794,6 +937,7 @@
         });
         
         // Init
+        window.selectedArtifactSkill = null;
         loadDashboard();
     </script>
 </body>

@@ -480,6 +480,54 @@ def _delete_persona(persona_id: str) -> bool:
         return False
 
 
+# --- Artifact Generation & Preview ---
+
+@app.post("/api/generate")
+def generate_artifact(
+    skill_id: str = Form(...),
+    house_id: str = Form(...),
+    custom_context: Optional[dict] = Form(None),
+):
+    """Generate an artifact using a skill and return Prefab HTML for preview."""
+    from src.pipeline.generator import ArtifactGenerator
+    from src.artifacts.prefab_generator import build_artifact_preview
+
+    generator = ArtifactGenerator(store, skills)
+
+    try:
+        artifact = generator.generate(skill_id, house_id, custom_context or {})
+        
+        prefab_app = build_artifact_preview(skill_id, artifact.sections, artifact.house_name, artifact.house_id)
+        
+        html = prefab_app.html()
+        
+        return {
+            "skill_id": skill_id,
+            "house_name": artifact.house_name,
+            "sections": artifact.sections,
+            "raw_content": artifact.raw_content,
+            "preview_html": html,
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/preview/{skill_id}/{house_id}")
+def get_artifact_preview(skill_id: str, house_id: str):
+    """Get Prefab preview HTML for an artifact."""
+    from src.pipeline.generator import ArtifactGenerator
+    from src.artifacts.prefab_generator import build_artifact_preview
+
+    generator = ArtifactGenerator(store, skills)
+
+    try:
+        artifact = generator.generate(skill_id, house_id, {})
+        prefab_app = build_artifact_preview(skill_id, artifact.sections, artifact.house_name, artifact.house_id)
+        return {"html": prefab_app.html()}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 # --- Frontend ---
 
 @app.get("/", response_class=HTMLResponse)
