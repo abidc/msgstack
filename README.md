@@ -1,71 +1,80 @@
 # MsgStack MCP
 
-MCP server for marketing messaging grounding and dynamic asset generation via Prefab.
+MCP server + admin UI for marketing messaging grounding and dynamic asset generation via Prefab.
 
-Give any AI content tool (Claude, ChatGPT, Cursor) access to your brand's messaging frameworks and the ability to generate on-brand marketing artifacts — in-chat, via Prefab UI.
+**What it does:**
+- Upload source documents (PDF, DOCX, TXT) → extract → LLM structurer → structured MessageHouse
+- Manage messaging frameworks with key messages and personas
+- MCP tools for AI grounding (Claude, ChatGPT, Cursor)
+- Skill file system for artifact generation templates
+- Prefab-powered artifact previews
 
 ## Quick Start
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env  # add your OPENAI_API_KEY and PINECONE_API_KEY
+cp .env.example .env  # add your OPENAI_API_KEY
+
+# Start admin UI
+python -m src.web_app
+
+# Open http://localhost:8000
 ```
-
-```bash
-# Seed the database with sample data
-python -c "from seed_data.seed import seed; seed()"
-
-# Run the MCP server
-python -m src.server
-```
-
-## MCP Tools
-
-### Grounding
-- `search_messaging` — Semantic + metadata search across messaging frameworks
-- `set_active_house` — Pin a messaging framework for the session
-- `get_message_house` — Full retrieval of a message house with all key messages and personas
-- `list_message_houses` — Discover available messaging frameworks
-- `compare_houses` — Side-by-side comparison of two or more houses
-- `get_grounding_context` — Current session grounding state
-- `reset_conversation` — Clear session context
-
-### Artifact Generation (Prefab)
-- `generate_one_pager` — Messaging one-pager as an interactive Prefab UI
-- `generate_social_posts` — Channel-specific social copy grounded in messaging
-- `generate_email_template` — Funnel-stage email templates with subject/body/CTA
 
 ## Architecture
 
 ```
 src/
-├── models.py          # Pydantic data models
-├── store.py           # SQLite-backed message house storage
-├── server.py          # FastMCP server entry point
-├── grounding/
-│   ├── search.py      # Hybrid vector + metadata search with Pinecone
-│   ├── session.py     # In-memory session tracking
-│   └── tools.py       # MCP tool implementations
-├── artifacts/
-│   └── generators.py  # Prefab component trees
-├── pipeline/          # Content sync pipeline (Google Drive, Notion, OneDrive)
-└── sources/           # Source connectors
+├── models.py           # Pydantic data models
+├── store.py           # SQLite-backed storage
+├── server.py           # FastMCP server (MCP tools)
+├── web_app.py         # FastAPI admin UI
+├── web/index.html     # Single-page admin UI
+├── pipeline/
+│   ├── extract.py     # PDF/DOCX/TXT extraction
+│   ├── structure.py   # LLM structurer → MessageHouse
+│   └── skills.py      # Skill file manager
+└── grounding/
+    ├── search.py      # Hybrid Pinecone search
+    └── session.py     # Session tracking
 ```
+
+## MCP Tools
+
+### Grounding
+- `search_messaging` — Semantic + metadata search across frameworks
+- `set_active_house` — Pin a framework for the session
+- `get_message_house` — Full retrieval with key messages + personas
+- `list_message_houses` — Available frameworks
+
+### Artifacts
+- `generate_one_pager` — Prefab UI one-pager
+- `generate_social_posts` — Channel-specific copy
+- `generate_email_template` — Funnel-stage emails
+
+## Admin UI Features
+
+- **Dashboard** — Stats and recent frameworks
+- **Frameworks** — CRUD for messaging houses, key messages, personas
+- **Upload** — Drag-drop source files → auto-extract to MessageHouse
+- **Skills** — Manage artifact generation prompt templates
 
 ## Environment Variables
 
 ```env
-OPENAI_API_KEY=       # For embeddings
-PINECONE_API_KEY=     # For vector search
-PINECONE_INDEX=msgstack-chunks  # defaults to this
+OPENAI_API_KEY=       # Required for structurer
+PINECONE_API_KEY=    # Optional — for vector search
 ```
 
 ## Developing
 
 ```bash
-# Preview Prefab apps locally
-fastmcp dev apps src/server.py
+# Seed sample data
+python -c "from seed_data.seed import seed; seed()"
 
-# Run tests
-pytest tests/
+# Run admin UI
+python -m src.web_app
+
+# Run MCP server (for AI tool connection)
+python -m src.server
 ```
