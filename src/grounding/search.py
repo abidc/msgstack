@@ -180,10 +180,10 @@ class GroundingEngine:
                 GroundingResult(
                     chunk_id=chunk.id,
                     content=chunk.content,
-                    section_type=chunk.section_type.value,
+                    section_type=str(chunk.section_type),
                     priority=chunk.priority,
                     persona=chunk.persona,
-                    channel=chunk.channel.value,
+                    channel=str(chunk.channel),
                     channel_variants={},
                     source={
                         "house_id": str(chunk.message_house_id),
@@ -244,7 +244,7 @@ class GroundingEngine:
         for house in all_houses:
             messages = self.store.get_key_messages(house.id)
             for msg in messages:
-                if filters.section_types and msg.section_type.value not in filters.section_types:
+                if filters.section_types and str(msg.section_type) not in filters.section_types:
                     continue
                 if filters.personas:
                     matched = any(p.lower() in filters.personas for p in msg.personas)
@@ -261,7 +261,7 @@ class GroundingEngine:
                     GroundingResult(
                         chunk_id=str(msg.id),
                         content=msg.content,
-                        section_type=msg.section_type.value,
+                        section_type=str(msg.section_type),
                         priority=msg.priority,
                         persona=msg.personas[0] if msg.personas else None,
                         channel="all",
@@ -304,10 +304,10 @@ class GroundingEngine:
                     "values": vec,
                     "metadata": {
                         "content": content,
-                        "section_type": msg.section_type.value if hasattr(msg.section_type, "value") else msg.section_type,
+                        "section_type": str(msg.section_type),
                         "priority": msg.priority,
                         "persona": msg.personas[0] if msg.personas else "general",
-                        "channel": msg.channels[0].value if msg.channels and hasattr(msg.channels[0], "value") else (msg.channels[0] if msg.channels else "all"),
+                        "channel": str(msg.channels[0]) if msg.channels else "all",
                         "message_house_id": str(house_id),
                         "key_message_id": str(msg.id),
                         "house_name": house.name,

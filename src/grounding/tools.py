@@ -168,12 +168,12 @@ def get_message_house(
         result["key_messages"] = [
             {
                 "id": str(m.id),
-                "section_type": m.section_type.value,
+                "section_type": str(m.section_type),
                 "priority": m.priority,
                 "content": m.content,
                 "variants": m.variants,
                 "personas": m.personas,
-                "channels": [c.value for c in m.channels],
+                "channels": [str(c) for c in m.channels],
             }
             for m in messages
         ]
@@ -257,7 +257,7 @@ def compare_houses(house_ids: list[str]) -> dict:
 def _group_by_section(messages: list) -> dict:
     grouped: dict = {}
     for msg in messages:
-        st = msg.section_type.value
+        st = str(msg.section_type)
         grouped.setdefault(st, []).append(msg.content)
     return grouped
 
