@@ -8,7 +8,6 @@ from src.web_app import app as admin_app
 # stripping the prefix, so mcp_app always sees the full path it expects.
 mcp_app = mcp.http_app(
     transport="streamable-http",
-    stateless_http=True,
     middleware=[
         Middleware(
             CORSMiddleware,
