@@ -65,12 +65,12 @@ def _house_response(house: MessageHouse) -> dict:
         "key_messages": [
             {
                 "id": str(m.id),
-                "section_type": m.section_type.value,
+                "section_type": m.section_type.value if hasattr(m.section_type, "value") else m.section_type,
                 "priority": m.priority,
                 "content": m.content,
                 "variants": m.variants,
                 "personas": m.personas,
-                "channels": [c.value for c in m.channels],
+                "channels": [c.value if hasattr(c, "value") else c for c in m.channels],
             }
             for m in messages
         ],
