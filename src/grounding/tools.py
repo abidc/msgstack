@@ -113,8 +113,8 @@ def get_message_house(
     Args:
         house_id: UUID of the message house.
         house_name: Name of the message house (alternative to house_id).
-        include: Sections to include: 'key_messages', 'personas', 'positioning', 'all'.
-                 Defaults to 'all'.
+        include: Sections to include: ['key_messages'], ['personas'], ['positioning'], or ['all'].
+                 Defaults to ['all'].
     """
     engine = _get_engine()
     store = engine.store
@@ -139,7 +139,10 @@ def get_message_house(
         [p.name for p in store.get_personas(house.id)],
     )
 
-    include = include or ["all"]
+    if include is None:
+        include = ["all"]
+    elif isinstance(include, str):
+        include = [include]
     result = {
         "id": str(house.id),
         "name": house.name,

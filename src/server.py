@@ -112,7 +112,7 @@ def get_grounding_context() -> dict:
 
 
 @mcp.tool()
-def generate_one_pager(messaging_house_id: str, app: bool = True) -> dict:
+def generate_one_pager(messaging_house_id: str) -> dict:
     """Generate a messaging one-pager from a message house.
 
     Returns a structured display of the house's positioning, key messages,
@@ -120,13 +120,15 @@ def generate_one_pager(messaging_house_id: str, app: bool = True) -> dict:
 
     Args:
         messaging_house_id: UUID of the message house.
-        app: Set to True to render as an interactive Prefab UI.
     """
     from src.artifacts.generators import build_one_pager
     result = build_one_pager(messaging_house_id)
-    if "error" in result:
+    if isinstance(result, dict) and "error" in result:
         return result
-    return {"prefab": result, "raw": result}
+    try:
+        return {"prefab_html": result.html(), "title": result.title}
+    except Exception as e:
+        return {"error": f"Prefab rendering failed: {e}"}
 
 
 @mcp.tool()
@@ -134,7 +136,6 @@ def generate_social_posts(
     messaging_house_id: str,
     channels: Optional[list[str]] = None,
     count: int = 3,
-    app: bool = True,
 ) -> dict:
     """Generate social media posts grounded in the message house.
 
@@ -142,33 +143,36 @@ def generate_social_posts(
         messaging_house_id: UUID of the message house.
         channels: Which social channels (linkedin, twitter, etc.).
         count: Number of posts to generate per channel.
-        app: Set to True to render as an interactive Prefab UI.
     """
     from src.artifacts.generators import build_social_posts
     result = build_social_posts(messaging_house_id, channels)
-    if "error" in result:
+    if isinstance(result, dict) and "error" in result:
         return result
-    return {"prefab": result, "raw": result}
+    try:
+        return {"prefab_html": result.html(), "title": result.title}
+    except Exception as e:
+        return {"error": f"Prefab rendering failed: {e}"}
 
 
 @mcp.tool()
 def generate_email_template(
     messaging_house_id: str,
     stage: str = "awareness",
-    app: bool = True,
 ) -> dict:
     """Generate an email template grounded in the message house.
 
     Args:
         messaging_house_id: UUID of the message house.
         stage: Funnel stage: awareness, consideration, or decision.
-        app: Set to True to render as an interactive Prefab UI.
     """
     from src.artifacts.generators import build_email_template
     result = build_email_template(messaging_house_id, stage)
-    if "error" in result:
+    if isinstance(result, dict) and "error" in result:
         return result
-    return {"prefab": result, "raw": result}
+    try:
+        return {"prefab_html": result.html(), "title": result.title}
+    except Exception as e:
+        return {"error": f"Prefab rendering failed: {e}"}
 
 
 @mcp.tool()
@@ -210,7 +214,7 @@ def generate_artifact(
                 "sections": artifact.sections,
                 "raw_content": artifact.raw_content,
                 "grounded_messages": artifact.grounded_messages,
-                "prefab": prefab_app,
+                "prefab_html": prefab_app.html(),
             }
         except Exception as e:
             return {
