@@ -124,6 +124,59 @@ class GroundingResponse(BaseModel):
     grounding_context: GroundingContext
 
 
+COMPLETE_FRAMEWORK_SPEC = {
+    "description": "Definition of a complete MsgStack messaging framework (message house).",
+    "house_fields": {
+        "name": "Brand or product name",
+        "summary": "1-2 sentence product overview",
+        "positioning": "Full positioning statement — for [audience] who [need], [product] is [category] that [benefit]. Unlike [alt], [product] [key differentiator].",
+        "tagline": "7 words or fewer. Memorable and ownable.",
+        "differentiation": "2-3 specific ways this is better than alternatives (not just different).",
+        "audience": "Firmographic/demographic definition: role, company size, industry.",
+        "brand_personality": "Voice and tone descriptors (e.g. bold, precise, friendly).",
+        "status": "active | archived | needs_review",
+    },
+    "required_section_types": {
+        "headline": "Attention-grabbing primary messages. Min 3. Priority 1 = most important.",
+        "subhead": "Supporting messages that expand on headlines. Min 3.",
+        "benefit": "Specific value props with evidence or metrics. Min 4.",
+        "proof_point": "Quantified stats, customer counts, analyst citations. Min 3.",
+        "objection": "Common objections with concise counter-messaging. Min 3.",
+        "social_proof": "Customer quotes, awards, media mentions, G2/analyst recognition. Min 3.",
+        "positioning": "Core positioning message in key-message form. Min 1.",
+    },
+    "key_message_fields": {
+        "content": "The core message in plain language.",
+        "priority": "1 (highest) to 5. Top 3 should be the sharpest messages.",
+        "personas": "Which personas this message is most relevant for.",
+        "channels": "Channels where this message appears. 'all' = universal.",
+        "variants": {
+            "linkedin": "LinkedIn-optimized version (conversational, 15-20 words max)",
+            "email": "Email subject-line or body hook version (40-60 chars)",
+            "paid": "Paid ad version (punchy, benefit-first, 10-15 words)",
+            "twitter": "Twitter/X version (under 240 chars with punch)",
+        },
+    },
+    "persona_fields": {
+        "name": "Role title (e.g. CISO, VP Sales, HR Manager)",
+        "description": "Who they are, what they own, what success looks like for them.",
+        "pain_points": "3-5 specific frustrations this persona has today.",
+        "buying_triggers": "2-4 events or pressures that make them evaluate solutions.",
+        "objections": "2-4 reasons they hesitate to buy or switch.",
+    },
+    "minimum_personas": 2,
+    "completeness_checklist": [
+        "All 7 section types have at least 1 key message",
+        "headline, subhead, benefit, proof_point have 3+ messages each",
+        "At least 2 personas defined with all fields",
+        "All key messages have linkedin and email variants",
+        "Positioning statement is a full sentence (50+ chars)",
+        "Tagline is present and under 60 chars",
+        "Differentiation is specific and comparative (not generic)",
+    ],
+}
+
+
 class SearchFilters(BaseModel):
     section_types: list[str] | None = None
     personas: list[str] | None = None

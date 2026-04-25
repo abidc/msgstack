@@ -112,47 +112,97 @@ def get_grounding_context() -> dict:
     return grounding_tools.get_grounding_context().model_dump()
 
 
+def _resolve_house(store, house_id: Optional[str], house_name: Optional[str] = None):
+    """Resolve a message house by ID (UUID) or name, with fallback."""
+    from uuid import UUID as _UUID
+    house = None
+    if house_id:
+        try:
+            house = store.get_house(_UUID(house_id))
+        except (ValueError, AttributeError):
+            pass
+    if house is None and house_name:
+        house = store.get_house_by_name(house_name)
+    if house is None and house_id:
+        house = store.get_house_by_name(house_id)
+    return house
+
+
 @mcp.tool()
 def generate_one_pager(messaging_house_id: str) -> dict:
-    """Generate a messaging one-pager from a message house.
+    """Generate a structured messaging one-pager from a message house.
 
-    Returns a structured display of the house's positioning, key messages,
-    personas, and message inventory — rendered as a Prefab UI in chat.
+    Returns positioning, tagline, key messages by section, and personas
+    in a structured format — present this as a formatted document to the user.
 
     Args:
-        messaging_house_id: UUID of the message house.
+        messaging_house_id: UUID or name of the message house.
     """
-    from src.artifacts.generators import build_one_pager
-    result = build_one_pager(messaging_house_id)
-    if isinstance(result, dict) and "error" in result:
-        return result
-    try:
-        return {"prefab_html": result.html(), "title": result.title}
-    except Exception as e:
-        return {"error": f"Prefab rendering failed: {e}"}
+    store = Store()
+    store.init()
+    house = _resolve_house(store, messaging_house_id)
+    if not house:
+        return {"error": f"House not found. Use list_message_houses to find valid IDs."}
+
+    messages = store.get_key_messages(house.id)
+    personas = store.get_personas(house.id)
+
+    grouped = {}
+    for m in messages:
+        key = str(m.section_type)
+        grouped.setdefault(key, []).append(m.content)
+
+    return {
+        "house_name": house.name,
+        "tagline": house.tagline,
+        "positioning": house.positioning,
+        "differentiation": house.differentiation,
+        "audience": house.audience,
+        "key_messages": grouped,
+        "personas": [{"name": p.name, "description": p.description, "pain_points": p.pain_points} for p in personas],
+        "message_count": len(messages),
+    }
 
 
 @mcp.tool()
 def generate_social_posts(
     messaging_house_id: str,
     channels: Optional[list[str]] = None,
-    count: int = 3,
 ) -> dict:
-    """Generate social media posts grounded in the message house.
+    """Get social media post variants from a message house.
+
+    Returns pre-written LinkedIn/social variants stored in the message house.
+    Use generate_artifact with skill_id='linkedin_post' for LLM-generated posts.
 
     Args:
-        messaging_house_id: UUID of the message house.
-        channels: Which social channels (linkedin, twitter, etc.).
-        count: Number of posts to generate per channel.
+        messaging_house_id: UUID or name of the message house.
+        channels: Which channels: linkedin, twitter, email, etc.
     """
-    from src.artifacts.generators import build_social_posts
-    result = build_social_posts(messaging_house_id, channels)
-    if isinstance(result, dict) and "error" in result:
-        return result
-    try:
-        return {"prefab_html": result.html(), "title": result.title}
-    except Exception as e:
-        return {"error": f"Prefab rendering failed: {e}"}
+    store = Store()
+    store.init()
+    house = _resolve_house(store, messaging_house_id)
+    if not house:
+        return {"error": "House not found. Use list_message_houses."}
+
+    messages = store.get_key_messages(house.id)
+    target_channels = channels or ["linkedin"]
+    posts = []
+    for m in messages:
+        for channel in target_channels:
+            variant = (m.variants or {}).get(channel)
+            if variant:
+                posts.append({
+                    "channel": channel,
+                    "section_type": str(m.section_type),
+                    "content": variant,
+                    "priority": m.priority,
+                })
+
+    return {
+        "house_name": house.name,
+        "posts": posts,
+        "note": "These are pre-written channel variants. Use generate_artifact(skill_id='linkedin_post') for fresh LLM-generated posts.",
+    }
 
 
 @mcp.tool()
@@ -162,69 +212,82 @@ def generate_email_template(
 ) -> dict:
     """Generate an email template grounded in the message house.
 
+    Uses LLM to create a subject line, hook, body, and CTA for the funnel stage.
+    Returns the template content directly — present it to the user as a formatted email.
+
     Args:
-        messaging_house_id: UUID of the message house.
+        messaging_house_id: UUID or name of the message house.
         stage: Funnel stage: awareness, consideration, or decision.
     """
-    from src.artifacts.generators import build_email_template
-    result = build_email_template(messaging_house_id, stage)
-    if isinstance(result, dict) and "error" in result:
-        return result
-    try:
-        return {"prefab_html": result.html(), "title": result.title}
-    except Exception as e:
-        return {"error": f"Prefab rendering failed: {e}"}
+    from src.pipeline.generator import ArtifactGenerator
+    from src.pipeline.skills import SkillManager
+
+    store = Store()
+    store.init()
+    house = _resolve_house(store, messaging_house_id)
+    if not house:
+        return {"error": "House not found. Use list_message_houses."}
+
+    skills = SkillManager()
+    generator = ArtifactGenerator(store, skills)
+    artifact = generator.generate("email_template", str(house.id), {"stage": stage})
+    return {
+        "skill_id": "email_template",
+        "stage": stage,
+        "house_name": artifact.house_name,
+        "sections": artifact.sections,
+        "raw_content": artifact.raw_content,
+    }
 
 
 @mcp.tool()
 def generate_artifact(
     skill_id: str,
-    house_id: str,
+    house_id: Optional[str] = None,
+    house_name: Optional[str] = None,
     custom_context: Optional[dict] = None,
-    app: bool = True,
 ) -> dict:
-    """Generate an artifact using a skill template.
+    """Generate a marketing artifact grounded in a message house.
+
+    Use get_message_house or list_message_houses first to find the house_id.
+    You may also pass house_name directly instead of house_id.
 
     Args:
-        skill_id: The skill to use (one_pager, linkedin_post, email_template,
-                  battlecard, press_release, blog_post, faq_document)
-        house_id: UUID of the message house to ground in.
-        custom_context: Optional additional context for the prompt.
-        app: Set to True to render as a Prefab UI.
+        skill_id: The artifact type: one_pager, linkedin_post, email_template,
+                  battlecard, press_release, blog_post, faq_document
+        house_id: UUID of the message house (from list_message_houses).
+        house_name: Name of the message house (alternative to house_id).
+        custom_context: Optional extra context for the prompt (e.g. event details).
 
     Returns:
-        Generated artifact with sections and raw content, optionally as Prefab UI.
+        Generated artifact with labeled sections and full raw content ready to use.
+        Present the raw_content directly to the user in your response.
     """
     from src.pipeline.generator import ArtifactGenerator
     from src.pipeline.skills import SkillManager
-    from src.artifacts.prefab_generator import build_artifact_preview
 
     store = Store()
     store.init()
-    skills = SkillManager()
 
-    generator = ArtifactGenerator(store, skills)
-    artifact = generator.generate(skill_id, house_id, custom_context or {})
-
-    if app:
+    # Resolve house by name if no UUID given or if UUID is invalid
+    house = None
+    if house_id:
         try:
-            prefab_app = build_artifact_preview(skill_id, artifact.sections, artifact.house_name, artifact.house_id)
-            return {
-                "skill_id": skill_id,
-                "house_name": artifact.house_name,
-                "sections": artifact.sections,
-                "raw_content": artifact.raw_content,
-                "grounded_messages": artifact.grounded_messages,
-                "prefab_html": prefab_app.html(),
-            }
-        except Exception as e:
-            return {
-                "skill_id": skill_id,
-                "house_name": artifact.house_name,
-                "sections": artifact.sections,
-                "raw_content": artifact.raw_content,
-                "error": f"Prefab rendering failed: {e}",
-            }
+            from uuid import UUID as _UUID
+            house = store.get_house(_UUID(house_id))
+        except (ValueError, AttributeError):
+            house = None
+    if house is None and house_name:
+        house = store.get_house_by_name(house_name)
+    if house is None and house_id and not house_name:
+        # LLM may have passed name in house_id field
+        house = store.get_house_by_name(house_id)
+    if house is None:
+        return {"error": f"House not found. Use list_message_houses to get valid IDs."}
+
+    skills = SkillManager()
+    generator = ArtifactGenerator(store, skills)
+    artifact = generator.generate(skill_id, str(house.id), custom_context or {})
 
     return {
         "skill_id": skill_id,
@@ -252,6 +315,93 @@ def reset_conversation() -> dict:
     """
     reset_session()
     return {"message": "Session reset. No active message house."}
+
+
+@mcp.tool()
+def get_framework_spec() -> dict:
+    """Return the specification for a complete MsgStack messaging framework.
+
+    Use this to understand what a fully-populated message house should contain:
+    required fields, section types, message counts, persona structure, and
+    channel variants. Also returns a completeness checklist.
+    """
+    from src.models import COMPLETE_FRAMEWORK_SPEC
+    return COMPLETE_FRAMEWORK_SPEC
+
+
+@mcp.tool()
+def check_framework_completeness(house_id: Optional[str] = None, house_name: Optional[str] = None) -> dict:
+    """Check how complete a message house is against the framework spec.
+
+    Returns a completeness report with what's present, what's missing, and a score.
+
+    Args:
+        house_id: UUID of the message house.
+        house_name: Name of the message house (alternative to house_id).
+    """
+    from src.models import COMPLETE_FRAMEWORK_SPEC, SectionType
+
+    store = Store()
+    store.init()
+    house = _resolve_house(store, house_id, house_name)
+    if not house:
+        return {"error": "House not found. Use list_message_houses to find valid IDs."}
+
+    messages = store.get_key_messages(house.id)
+    personas = store.get_personas(house.id)
+
+    by_section = {}
+    for m in messages:
+        key = str(m.section_type)
+        by_section.setdefault(key, []).append(m)
+
+    checks = []
+    passed = 0
+    total = 0
+
+    def check(label, condition):
+        nonlocal passed, total
+        total += 1
+        result = bool(condition)
+        if result:
+            passed += 1
+        checks.append({"check": label, "passed": result})
+
+    check("Positioning field filled (50+ chars)", len(house.positioning or "") >= 50)
+    check("Tagline present and under 60 chars", bool(house.tagline) and len(house.tagline) < 60)
+    check("Differentiation is specific (30+ chars)", len(house.differentiation or "") >= 30)
+    check("Audience defined", bool(house.audience))
+    check("Brand personality defined", bool(house.brand_personality))
+
+    required_min = {"headline": 3, "subhead": 3, "benefit": 3, "proof_point": 3, "objection": 3, "social_proof": 3, "positioning": 1}
+    for section, min_count in required_min.items():
+        msgs = by_section.get(section, [])
+        check(f"{section}: {min_count}+ messages (has {len(msgs)})", len(msgs) >= min_count)
+
+    check("2+ personas defined", len(personas) >= 2)
+    for p in personas[:3]:
+        check(f"Persona '{p.name}': pain_points defined", bool(p.pain_points))
+        check(f"Persona '{p.name}': buying_triggers defined", bool(p.buying_triggers))
+        check(f"Persona '{p.name}': objections defined", bool(p.objections))
+
+    msgs_with_linkedin = sum(1 for m in messages if (m.variants or {}).get("linkedin"))
+    msgs_with_email = sum(1 for m in messages if (m.variants or {}).get("email"))
+    check(f"LinkedIn variants on 5+ messages (has {msgs_with_linkedin})", msgs_with_linkedin >= 5)
+    check(f"Email variants on 5+ messages (has {msgs_with_email})", msgs_with_email >= 5)
+
+    score = round((passed / total) * 100) if total else 0
+
+    return {
+        "house_name": house.name,
+        "score": score,
+        "passed": passed,
+        "total": total,
+        "checks": checks,
+        "missing": [c["check"] for c in checks if not c["passed"]],
+        "message_count": len(messages),
+        "persona_count": len(personas),
+        "sections_covered": list(by_section.keys()),
+    }
 
 
 @mcp.tool()

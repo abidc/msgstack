@@ -96,11 +96,18 @@ class ArtifactGenerator:
             "differentiation": house.differentiation,
             "audience": house.audience,
             "key_messages": "\n".join(
-                f"- {m.section_type.value}: {m.content}" for m in messages[:10]
+                f"- {str(m.section_type)}: {m.content}" for m in messages[:10]
             ),
             "primary_message": messages[0].content if messages else "",
             "persona": personas[0].name if personas else "",
             "objections": ", ".join(personas[0].objections[:3]) if personas and personas[0].objections else "",
+            # Defaults for optional skill template variables
+            "stage": "awareness",
+            "topic": f"why {house.name} transforms how teams work",
+            "tone": "confident and educational",
+            "target_length": "800",
+            "competitor": "the status quo",
+            "announcement": f"{house.name} platform launch",
         }
         context.update(custom)
         return context
