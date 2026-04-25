@@ -19,10 +19,10 @@ from prefab_ui.components import (
     H4,
     Muted,
     P,
+    Page,
     Row,
     Separator,
     Text,
-    View,
 )
 from prefab_ui.actions.mcp import CallTool, SendMessage
 
@@ -48,15 +48,15 @@ def build_one_pager(house_id: str, app_config=None):
 
     table_data = [
         {
-            "section": m.section_type.value.title(),
+            "section": str(m.section_type).replace("_", " ").title(),
             "message": m.content[:100] + ("..." if len(m.content) > 100 else ""),
             "priority": str(m.priority),
-            "channels": ", ".join(c.value for c in m.channels),
+            "channels": ", ".join(str(c) for c in m.channels),
         }
         for m in messages
     ]
 
-    with View(title=house.name, gap=4) as view:
+    with Page(title=house.name) as view:
         with Card():
             with CardHeader():
                 with Row(align="center", gap=3):
@@ -83,11 +83,11 @@ def build_one_pager(house_id: str, app_config=None):
             with CardContent():
                 with Column(gap=3):
                     for section in SectionType:
-                        msgs = [m for m in messages if m.section_type == section]
+                        msgs = [m for m in messages if str(m.section_type) == section.value]
                         if not msgs:
                             continue
                         with Column(gap=2):
-                            H4(section.value.title())
+                            H4(section.value.replace("_", " ").title())
                             for msg in msgs[:3]:
                                 with Row(gap=2, wrap=True, align="center"):
                                     Badge(str(msg.priority), variant="outline")
@@ -138,18 +138,12 @@ def build_one_pager(house_id: str, app_config=None):
                     Button(
                         "Generate LinkedIn Post",
                         variant="default",
-                        on_click=CallTool(
-                            "generate_social_posts",
-                            {"messaging_house_id": str(house.id), "channels": ["linkedin"]},
-                        ),
+                        on_click=CallTool("generate_social_posts", arguments={"messaging_house_id": str(house.id), "channels": ["linkedin"]}),
                     )
                     Button(
                         "Generate Email",
                         variant="outline",
-                        on_click=CallTool(
-                            "generate_email_template",
-                            {"messaging_house_id": str(house.id), "stage": "awareness"},
-                        ),
+                        on_click=CallTool("generate_email_template", arguments={"messaging_house_id": str(house.id), "stage": "awareness"}),
                     )
                 with Row(gap=2, align="center"):
                     Muted(
@@ -157,11 +151,7 @@ def build_one_pager(house_id: str, app_config=None):
                     )
                     Muted(f"• {len(messages)} messages • {len(personas)} personas")
 
-    return PrefabApp(
-        view=view,
-        title=house.name,
-        config=app_config,
-    )
+    return PrefabApp(view=view, title=house.name)
 
 
 def build_social_posts(house_id: str, channels: list[str] = None, app_config=None):
@@ -183,13 +173,13 @@ def build_social_posts(house_id: str, channels: list[str] = None, app_config=Non
             {
                 "id": f"post-{i+1}",
                 "channel": "LinkedIn",
-                "section": msg.section_type.value.title(),
+                "section": str(msg.section_type).replace("_", " ").title(),
                 "content": variant,
                 "priority": msg.priority,
             }
         )
 
-    with View(title=f"Social Posts — {house.name}", gap=4) as view:
+    with Page(title=f"Social Posts — {house.name}") as view:
         with Card():
             with CardHeader():
                 with Row(align="center", gap=2):
@@ -215,17 +205,14 @@ def build_social_posts(house_id: str, channels: list[str] = None, app_config=Non
                                     Button(
                                         "Rewrite",
                                         variant="ghost",
-                                        on_click=CallTool(
-                                            "search_messaging",
-                                            {
-                                                "query": f"linkedin {post['section']} for {house.name}",
-                                                "section_types": [post["section"].lower()],
-                                                "channels": ["linkedin"],
-                                            },
-                                        ),
+                                        on_click=CallTool("search_messaging", arguments={
+                                            "query": f"linkedin {post['section']} for {house.name}",
+                                            "section_types": [post["section"].lower()],
+                                            "channels": ["linkedin"],
+                                        }),
                                     )
 
-    return PrefabApp(view=view, title=house.name, config=app_config)
+    return PrefabApp(view=view, title=house.name)
 
 
 def build_email_template(house_id: str, stage: str = "awareness", app_config=None):
@@ -240,8 +227,8 @@ def build_email_template(house_id: str, stage: str = "awareness", app_config=Non
         return {"error": f"House {house_id} not found"}
 
     messages = store.get_key_messages(UUID(house_id))
-    benefits = [m for m in messages if m.section_type == SectionType.BENEFIT]
-    headlines = [m for m in messages if m.section_type == SectionType.HEADLINE]
+    benefits = [m for m in messages if str(m.section_type) == "benefit"]
+    headlines = [m for m in messages if str(m.section_type) == "headline"]
 
     stage_content = {
         "awareness": {
@@ -266,7 +253,7 @@ def build_email_template(house_id: str, stage: str = "awareness", app_config=Non
 
     content = stage_content.get(stage, stage_content["awareness"])
 
-    with View(title=f"Email Template — {stage_labels}", gap=4) as view:
+    with Page(title=f"Email Template — {stage_labels}") as view:
         with Card():
             with CardHeader():
                 with Row(align="center", gap=2):
@@ -288,14 +275,11 @@ def build_email_template(house_id: str, stage: str = "awareness", app_config=Non
                                 Button(
                                     "Rewrite Subject",
                                     variant="ghost",
-                                    on_click=CallTool(
-                                        "search_messaging",
-                                        {
-                                            "query": f"email subject {stage} for {house.name}",
-                                            "section_types": ["headline", "subhead"],
-                                            "channels": ["email"],
-                                        },
-                                    ),
+                                    on_click=CallTool("search_messaging", arguments={
+                                        "query": f"email subject {stage} for {house.name}",
+                                        "section_types": ["headline", "subhead"],
+                                        "channels": ["email"],
+                                    }),
                                 )
 
                     with Card():
@@ -337,11 +321,8 @@ def build_email_template(house_id: str, stage: str = "awareness", app_config=Non
                             Button(
                                 f"Switch to {label}",
                                 variant="ghost",
-                                size="small",
-                                on_click=CallTool(
-                                    "generate_email_template",
-                                    {"messaging_house_id": str(house.id), "stage": s},
-                                ),
+                                size="sm",
+                                on_click=CallTool("generate_email_template", arguments={"messaging_house_id": str(house.id), "stage": s}),
                             )
 
-    return PrefabApp(view=view, title=house.name, config=app_config)
+    return PrefabApp(view=view, title=house.name)

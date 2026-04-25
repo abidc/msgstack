@@ -18,10 +18,10 @@ from prefab_ui.components import (
     H4,
     Muted,
     P,
+    Page,
     Row,
     Separator,
     Text,
-    View,
 )
 from prefab_ui.actions.mcp import SendMessage, CallTool
 
@@ -58,7 +58,7 @@ def _section_text(val):
 
 
 def _build_one_pager(sections: dict, house_name: str, house_id: str) -> PrefabApp:
-    with View(title=f"One-Pager: {house_name}", gap=4) as view:
+    with Page(title=f"One-Pager: {house_name}") as view:
         with Card():
             with CardHeader():
                 CardTitle(house_name)
@@ -90,7 +90,7 @@ def _build_one_pager(sections: dict, house_name: str, house_id: str) -> PrefabAp
             with CardFooter():
                 with Row(gap=2):
                     Button("Copy to Clipboard", variant="outline", on_click=SendMessage(f"One-pager for {house_name}:\n\n{_section_text(sections.get('positioning', ''))}"))
-                    Button("Generate Another", variant="default", on_click=CallTool("generate_artifact", {"skill_id": "one_pager", "house_id": house_id}))
+                    Button("Generate Another", variant="default", on_click=CallTool("generate_artifact", arguments={"skill_id": "one_pager", "house_id": house_id}))
 
     return PrefabApp(view=view, title=f"One-Pager: {house_name}")
 
@@ -98,7 +98,7 @@ def _build_one_pager(sections: dict, house_name: str, house_id: str) -> PrefabAp
 def _build_linkedin_post(sections: dict, house_name: str, house_id: str) -> PrefabApp:
     content = _section_text(sections.get("body") or sections.get("content") or "")
     
-    with View(title=f"LinkedIn Post: {house_name}", gap=4) as view:
+    with Page(title=f"LinkedIn Post: {house_name}") as view:
         with Card():
             with CardHeader():
                 with Row(align="center", gap=2):
@@ -109,7 +109,7 @@ def _build_linkedin_post(sections: dict, house_name: str, house_id: str) -> Pref
             with CardFooter():
                 with Row(gap=2):
                     Button("Use This Post", variant="outline", on_click=SendMessage(content))
-                    Button("Rewrite", variant="ghost", on_click=CallTool("generate_artifact", {"skill_id": "linkedin_post", "house_id": house_id}))
+                    Button("Rewrite", variant="ghost", on_click=CallTool("generate_artifact", arguments={"skill_id": "linkedin_post", "house_id": house_id}))
 
     return PrefabApp(view=view, title=f"LinkedIn Post: {house_name}")
 
@@ -119,7 +119,7 @@ def _build_email_template(sections: dict, house_name: str, house_id: str) -> Pre
     body = _section_text(sections.get("body", ""))
     cta = _section_text(sections.get("cta", ""))
     
-    with View(title=f"Email: {house_name}", gap=4) as view:
+    with Page(title=f"Email: {house_name}") as view:
         with Card():
             with CardHeader():
                 CardTitle("Email Template")
@@ -147,7 +147,7 @@ def _build_email_template(sections: dict, house_name: str, house_id: str) -> Pre
             with CardFooter():
                 with Row(gap=2):
                     Button("Use Template", variant="outline", on_click=SendMessage(f"Subject: {subject}\n\n{body}\n\n{cta}"))
-                    Button("Regenerate", variant="default", on_click=CallTool("generate_artifact", {"skill_id": "email_template", "house_id": house_id}))
+                    Button("Regenerate", variant="default", on_click=CallTool("generate_artifact", arguments={"skill_id": "email_template", "house_id": house_id}))
 
     return PrefabApp(view=view, title=f"Email Template: {house_name}")
 
@@ -157,7 +157,7 @@ def _build_battlecard(sections: dict, house_name: str, house_id: str) -> PrefabA
     strengths = sections.get("our_strengths", [])
     weaknesses = sections.get("their_weaknesses", [])
     
-    with View(title=f"Battlecard: {competitor}", gap=4) as view:
+    with Page(title=f"Battlecard: {competitor}") as view:
         with Card():
             with CardHeader():
                 with Row(align="center", gap=2):
@@ -195,7 +195,7 @@ def _build_press_release(sections: dict, house_name: str, house_id: str) -> Pref
     headline = _section_text(sections.get("headline", ""))
     lead = _section_text(sections.get("lead") or sections.get("body", ""))
     
-    with View(title=f"Press Release: {house_name}", gap=4) as view:
+    with Page(title=f"Press Release: {house_name}") as view:
         with Card():
             with CardHeader():
                 Badge("Press Release", variant="default")
@@ -205,7 +205,7 @@ def _build_press_release(sections: dict, house_name: str, house_id: str) -> Pref
             with CardFooter():
                 with Row(gap=2):
                     Button("Copy PR", variant="outline", on_click=SendMessage(f"{headline}\n\n{lead}"))
-                    Button("Regenerate", variant="ghost", on_click=CallTool("generate_artifact", {"skill_id": "press_release", "house_id": house_id}))
+                    Button("Regenerate", variant="ghost", on_click=CallTool("generate_artifact", arguments={"skill_id": "press_release", "house_id": house_id}))
 
     return PrefabApp(view=view, title=f"Press Release: {house_name}")
 
@@ -214,7 +214,7 @@ def _build_blog_post(sections: dict, house_name: str, house_id: str) -> PrefabAp
     title = _section_text(sections.get("title", ""))
     intro = _section_text(sections.get("intro") or sections.get("introduction", ""))
     
-    with View(title=f"Blog Post: {house_name}", gap=4) as view:
+    with Page(title=f"Blog Post: {house_name}") as view:
         with Card():
             with CardHeader():
                 Badge("Blog Post", variant="default")
@@ -237,7 +237,7 @@ def _build_faq(sections: dict, house_name: str, house_id: str) -> PrefabApp:
         elif key.lower().startswith("a") and qa_pairs:
             qa_pairs[-1]["a"] = _section_text(val)
     
-    with View(title=f"FAQ: {house_name}", gap=4) as view:
+    with Page(title=f"FAQ: {house_name}") as view:
         with Card():
             with CardHeader():
                 Badge("FAQ Document", variant="default")
@@ -255,7 +255,7 @@ def _build_faq(sections: dict, house_name: str, house_id: str) -> PrefabApp:
 
 
 def _build_generic(sections: dict, house_name: str, house_id: str) -> PrefabApp:
-    with View(title=f"Artifact: {house_name}", gap=4) as view:
+    with Page(title=f"Artifact: {house_name}") as view:
         with Card():
             with CardHeader():
                 CardTitle(f"Generated: {house_name}")

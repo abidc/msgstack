@@ -70,16 +70,17 @@ def set_active_house(house_id: str) -> dict:
 def get_message_house(
     house_id: Optional[str] = None,
     house_name: Optional[str] = None,
-    include: Optional[list[str]] = None,
 ) -> dict:
-    """Retrieve a full message house with all key messages and personas.
+    """Retrieve a full message house with all key messages, personas, and positioning.
+
+    Returns all content: positioning statement, tagline, differentiation, key messages
+    by section type, and full persona profiles.
 
     Args:
         house_id: UUID of the message house.
         house_name: Name of the message house (alternative to house_id).
-        include: Sections to include: 'key_messages', 'personas', 'positioning', 'all'.
     """
-    return grounding_tools.get_message_house(house_id, house_name, include)
+    return grounding_tools.get_message_house(house_id, house_name, ["all"])
 
 
 @mcp.tool()
