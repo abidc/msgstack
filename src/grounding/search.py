@@ -304,10 +304,10 @@ class GroundingEngine:
                     "values": vec,
                     "metadata": {
                         "content": content,
-                        "section_type": msg.section_type.value,
+                        "section_type": msg.section_type.value if hasattr(msg.section_type, "value") else msg.section_type,
                         "priority": msg.priority,
                         "persona": msg.personas[0] if msg.personas else "general",
-                        "channel": msg.channels[0].value if msg.channels else "all",
+                        "channel": msg.channels[0].value if msg.channels and hasattr(msg.channels[0], "value") else (msg.channels[0] if msg.channels else "all"),
                         "message_house_id": str(house_id),
                         "key_message_id": str(msg.id),
                         "house_name": house.name,

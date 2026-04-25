@@ -25,6 +25,10 @@ from sqlalchemy.orm import (
 from src.models import Channel, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
 
 
+def _to_db(data: dict) -> dict:
+    return {k: str(v) if isinstance(v, UUID) else v for k, v in data.items()}
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -67,6 +71,7 @@ class KeyMessageModel(Base):
     personas: Mapped[list] = mapped_column(JSON, default=list)
     channels: Mapped[list] = mapped_column(JSON, default=["all"])
     source_chunk_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    message_house: Mapped["HouseModel"] = relationship(back_populates="key_messages")
 
 
 class PersonaModel(Base):
@@ -103,7 +108,7 @@ class Store:
                 for k, v in house.model_dump().items():
                     setattr(existing, k, v)
             else:
-                s.add(HouseModel(**house.model_dump()))
+                s.add(HouseModel(**_to_db(house.model_dump())))
             s.commit()
 
     def get_house(self, house_id: UUID) -> MessageHouse | None:
@@ -132,7 +137,7 @@ class Store:
                 for k, v in msg.model_dump().items():
                     setattr(existing, k, v)
             else:
-                s.add(KeyMessageModel(**msg.model_dump()))
+                s.add(KeyMessageModel(**_to_db(msg.model_dump())))
             s.commit()
 
     def get_key_messages(self, house_id: UUID) -> list[KeyMessage]:
@@ -152,7 +157,7 @@ class Store:
                 for k, v in persona.model_dump().items():
                     setattr(existing, k, v)
             else:
-                s.add(PersonaModel(**persona.model_dump()))
+                s.add(PersonaModel(**_to_db(persona.model_dump())))
             s.commit()
 
     def get_personas(self, house_id: UUID) -> list[Persona]:

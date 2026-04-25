@@ -22,7 +22,7 @@ from src.pipeline.skills import SkillManager
 
 load_dotenv()
 
-app = FastAPI(title="MsgStack Admin", version="0.1.0")
+app = FastAPI(title="MsgStack Admin", version="0.1.0", redirect_slashes=False)
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,11 +34,10 @@ app.add_middleware(
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
-STORE_PATH = DATA_DIR / "msgstack.db"
 UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-store = Store(str(STORE_PATH))
+store = Store("msgstack.db")
 store.init()
 
 skills = SkillManager(skills_dir=str(DATA_DIR / "skills"))
@@ -390,12 +389,26 @@ async def extract_upload(
     save_path.parent.mkdir(exist_ok=True)
     save_path.write_text(markdown)
 
+    from src.grounding.search import GroundingEngine
+    engine = GroundingEngine(
+        store=store,
+        openai_api_key=os.environ.get("OPENAI_API_KEY"),
+        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+    )
+    try:
+        engine.index_house(house.id)
+        indexed = True
+    except Exception:
+        indexed = False
+
     return {
         "id": str(house.id),
         "name": house.name,
         "status": "created",
         "message_count": len(structured.key_messages),
         "persona_count": len(structured.personas),
+        "indexed": indexed,
         "markdown": markdown,
     }
 
@@ -443,6 +456,101 @@ def get_stats():
         "message_count": total_messages,
         "persona_count": total_personas,
         "skill_count": len(skill_list),
+    }
+
+
+# --- Seed & Index ---
+
+@app.post("/api/seed")
+def run_seed():
+    """Run the seed script and index all houses to Pinecone."""
+    from seed_data.seed import seed as run_seed_script
+    from src.grounding.search import GroundingEngine
+
+    run_seed_script()
+
+    houses = store.list_houses()
+    total_messages = sum(len(store.get_key_messages(h.id)) for h in houses)
+    total_personas = sum(len(store.get_personas(h.id)) for h in houses)
+
+    engine = GroundingEngine(
+        store=store,
+        openai_api_key=os.environ.get("OPENAI_API_KEY"),
+        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+    )
+
+    indexed_count = 0
+    for house in houses:
+        try:
+            engine.index_house(house.id)
+            indexed_count += 1
+        except Exception:
+            pass
+
+    return {
+        "seeded": len(houses),
+        "indexed": indexed_count,
+        "total_messages": total_messages,
+        "total_personas": total_personas,
+    }
+
+
+@app.post("/api/houses/{house_id}/index")
+def index_house(house_id: str):
+    """Index a single house to Pinecone."""
+    from src.grounding.search import GroundingEngine
+
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+
+    engine = GroundingEngine(
+        store=store,
+        openai_api_key=os.environ.get("OPENAI_API_KEY"),
+        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+    )
+
+    vectors_indexed = engine.index_house(house_uuid)
+
+    return {
+        "house_id": str(house.id),
+        "house_name": house.name,
+        "vectors_indexed": vectors_indexed,
+    }
+
+
+@app.post("/api/index-all")
+def index_all_houses():
+    """Index all houses to Pinecone."""
+    from src.grounding.search import GroundingEngine
+
+    houses = store.list_houses()
+
+    engine = GroundingEngine(
+        store=store,
+        openai_api_key=os.environ.get("OPENAI_API_KEY"),
+        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+    )
+
+    total_vectors = 0
+    for house in houses:
+        try:
+            vectors = engine.index_house(house.id)
+            total_vectors += vectors
+        except Exception:
+            pass
+
+    return {
+        "indexed_houses": len(houses),
+        "total_vectors": total_vectors,
     }
 
 

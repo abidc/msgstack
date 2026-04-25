@@ -12,7 +12,7 @@ from src.store import Store
 
 load_dotenv()
 
-mcp = FastMCP("MsgStack", dependencies=["fastmcp[apps]"])
+mcp = FastMCP("MsgStack")
 
 
 @mcp.tool()

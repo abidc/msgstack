@@ -162,6 +162,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                     Artifacts
                 </div>
+                <div class="nav-item" data-view="seed">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    Seed & Index
+                </div>
             </nav>
         </aside>
         
@@ -192,6 +196,23 @@
                 
                 <div class="card">
                     <div class="card-header">
+                        <span class="card-title">Database Setup</span>
+                    </div>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" id="seed-btn" onclick="runSeed()">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                            Seed with 10 Sample Frameworks
+                        </button>
+                        <button class="btn btn-secondary" id="index-all-btn" onclick="runIndexAll()">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                            Index All to Pinecone
+                        </button>
+                    </div>
+                    <div id="seed-result" style="margin-top: 12px; font-size: 14px; color: var(--success); display: none;"></div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
                         <span class="card-title">Recent Frameworks</span>
                         <button class="btn btn-secondary btn-sm" onclick="showView('houses')">View All</button>
                     </div>
@@ -199,6 +220,28 @@
                         <thead><tr><th>Name</th><th>Source</th><th>Messages</th><th>Personas</th><th>Last Synced</th></tr></thead>
                         <tbody></tbody>
                     </table>
+                </div>
+            </section>
+            
+            <!-- Seed & Index Section -->
+            <section id="seed" class="section">
+                <div class="header">
+                    <h1>Seed & Index</h1>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px;">Seed your database with sample message houses and index them to Pinecone for semantic search.</p>
+                <div class="card">
+                    <div class="card-title" style="margin-bottom: 16px;">Database Seeding</div>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+                        <button class="btn btn-primary" id="seed-section-btn" onclick="runSeed()">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                            Seed with 10 Sample Frameworks
+                        </button>
+                        <button class="btn btn-secondary" id="index-section-btn" onclick="runIndexAll()">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                            Index All to Pinecone
+                        </button>
+                    </div>
+                    <div id="seed-section-result" style="font-size: 14px; color: var(--success); display: none;"></div>
                 </div>
             </section>
             
@@ -493,6 +536,7 @@
             if (viewId === 'upload') resetUpload();
             if (viewId === 'skills') loadSkills();
             if (viewId === 'artifacts') loadArtifactHouses();
+            if (viewId === 'seed') loadDashboard();
         }
         
         // API
@@ -506,6 +550,79 @@
             document.getElementById('stat-personas').textContent = data.persona_count;
             document.getElementById('stat-skills').textContent = data.skill_count;
             return data;
+        }
+        
+        async function runSeed() {
+            const btn = document.getElementById('seed-btn');
+            const btnSection = document.getElementById('seed-section-btn');
+            if (btn) { btn.disabled = true; btn.innerHTML = 'Seeding...'; }
+            if (btnSection) { btnSection.disabled = true; btnSection.innerHTML = 'Seeding...'; }
+            
+            try {
+                const res = await fetch(`${API}/seed`, { method: 'POST' });
+                const data = await res.json();
+                
+                const resultEl = document.getElementById('seed-result');
+                const resultSectionEl = document.getElementById('seed-section-result');
+                const msg = `Seeded ${data.seeded} frameworks, indexed ${data.indexed} to Pinecone, ${data.total_messages} messages, ${data.total_personas} personas`;
+                
+                if (resultEl) { resultEl.textContent = msg; resultEl.style.display = 'block'; }
+                if (resultSectionEl) { resultSectionEl.textContent = msg; resultSectionEl.style.display = 'block'; }
+                
+                loadDashboard();
+            } catch (e) {
+                alert('Error seeding: ' + e.message);
+            }
+            
+            if (btn) { btn.disabled = false; btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Seed with 10 Sample Frameworks'; }
+            if (btnSection) { btnSection.disabled = false; btnSection.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Seed with 10 Sample Frameworks'; }
+        }
+        
+        async function runIndexAll() {
+            const btn = document.getElementById('index-all-btn');
+            const btnSection = document.getElementById('index-section-btn');
+            if (btn) { btn.disabled = true; btn.innerHTML = 'Indexing...'; }
+            if (btnSection) { btnSection.disabled = true; btnSection.innerHTML = 'Indexing...'; }
+            
+            try {
+                const res = await fetch(`${API}/index-all`, { method: 'POST' });
+                const data = await res.json();
+                
+                const resultEl = document.getElementById('seed-result');
+                const resultSectionEl = document.getElementById('seed-section-result');
+                const msg = `Indexed ${data.indexed_houses} houses, ${data.total_vectors} total vectors`;
+                
+                if (resultEl) { resultEl.textContent = msg; resultEl.style.display = 'block'; }
+                if (resultSectionEl) { resultSectionEl.textContent = msg; resultSectionEl.style.display = 'block'; }
+            } catch (e) {
+                alert('Error indexing: ' + e.message);
+            }
+            
+            if (btn) { btn.disabled = false; btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Index All to Pinecone'; }
+            if (btnSection) { btnSection.disabled = false; btnSection.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Index All to Pinecone'; }
+        }
+        
+        async function indexHouse(houseId, cardEl) {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Indexing...';
+            
+            try {
+                const res = await fetch(`${API}/houses/${houseId}/index`, { method: 'POST' });
+                const data = await res.json();
+                
+                btn.textContent = `Indexed ${data.vectors_indexed} vectors`;
+                btn.style.color = 'var(--success)';
+            } catch (e) {
+                btn.textContent = 'Error indexing';
+                btn.style.color = 'var(--danger)';
+            }
+            
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = 'Index to Pinecone';
+                btn.style.color = '';
+            }, 2000);
         }
         
         // Dashboard
@@ -550,10 +667,11 @@
                         <span class="badge badge-success">${h.status}</span>
                     </div>
                     <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">${h.summary}</p>
-                    <div style="display: flex; gap: 12px; font-size: 13px; color: var(--text-muted);">
+                    <div style="display: flex; gap: 12px; font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
                         <span>${h.message_count} messages</span>
                         <span>${h.persona_count} personas</span>
                     </div>
+                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); indexHouse('${h.id}', this)">Index to Pinecone</button>
                 </div>
             `).join('')}</div>`;
         }
@@ -766,7 +884,7 @@
                 const res = await fetch(`${API}/extract`, { method: 'POST', body: formData });
                 const data = await res.json();
                 
-                alert(`Framework "${data.name}" created with ${data.message_count} messages and ${data.persona_count} personas!`);
+                alert(`Framework "${data.name}" created with ${data.message_count} messages — indexed to Pinecone automatically.`);
                 showView('houses');
             } catch (e) {
                 alert('Error: ' + e.message);
