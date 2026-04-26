@@ -641,7 +641,7 @@ def serve_prefab_artifact(artifact_type: str, house_id: str, stage: str = "aware
     if isinstance(app_obj, dict) and "error" in app_obj:
         raise HTTPException(404, app_obj["error"])
 
-    return HTMLResponse(content=app_obj.html())
+    return HTMLResponse(content=app_obj.html(renderer_mode="bundled"))
 
 
 @app.get("/api/preview/{skill_id}/{house_id}")
