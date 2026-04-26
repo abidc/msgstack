@@ -246,11 +246,11 @@ def generate_artifact(
     house_id: Optional[str] = None,
     house_name: Optional[str] = None,
     custom_context: Optional[dict] = None,
-) -> dict:
+) -> str:
     """Generate a marketing artifact grounded in a message house.
 
-    Use get_message_house or list_message_houses first to find the house_id.
-    You may also pass house_name directly instead of house_id.
+    Returns the complete artifact text. Display it in full to the user —
+    do not summarize or paraphrase it.
 
     Args:
         skill_id: The artifact type: one_pager, linkedin_post, email_template,
@@ -258,10 +258,6 @@ def generate_artifact(
         house_id: UUID of the message house (from list_message_houses).
         house_name: Name of the message house (alternative to house_id).
         custom_context: Optional extra context for the prompt (e.g. event details).
-
-    Returns:
-        Generated artifact with labeled sections and full raw content ready to use.
-        Present the raw_content directly to the user in your response.
     """
     from src.pipeline.generator import ArtifactGenerator
     from src.pipeline.skills import SkillManager
@@ -269,7 +265,6 @@ def generate_artifact(
     store = Store()
     store.init()
 
-    # Resolve house by name if no UUID given or if UUID is invalid
     house = None
     if house_id:
         try:
@@ -280,26 +275,16 @@ def generate_artifact(
     if house is None and house_name:
         house = store.get_house_by_name(house_name)
     if house is None and house_id and not house_name:
-        # LLM may have passed name in house_id field
         house = store.get_house_by_name(house_id)
     if house is None:
         all_houses = store.list_houses()
-        return {
-            "error": "House not found. Specify house_name from the list below.",
-            "available_houses": [{"name": h.name, "id": str(h.id)} for h in all_houses],
-        }
+        names = ", ".join(h.name for h in all_houses)
+        return f"House not found. Available houses: {names}"
 
     skills = SkillManager()
     generator = ArtifactGenerator(store, skills)
     artifact = generator.generate(skill_id, str(house.id), custom_context or {})
-
-    return {
-        "skill_id": skill_id,
-        "house_name": artifact.house_name,
-        "sections": artifact.sections,
-        "raw_content": artifact.raw_content,
-        "grounded_messages": artifact.grounded_messages,
-    }
+    return artifact.raw_content
 
 
 @mcp.tool()
