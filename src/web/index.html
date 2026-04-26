@@ -407,10 +407,9 @@
                             <div class="card-title" id="upload-filename"></div>
                             <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="upload-stats"></div>
                         </div>
-                        <button class="btn btn-primary" id="process-btn" onclick="processUploadedFile()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                            Extract with AI
-                        </button>
+                        <div id="process-status" style="font-size:12px;color:var(--text-2);display:flex;align-items:center;gap:6px;">
+                            <span class="spinner"></span> Structuring with AI...
+                        </div>
                     </div>
                     <div class="markdown-preview" id="upload-preview-text" style="max-height:150px;"></div>
                 </div>
@@ -1005,7 +1004,7 @@ fileInput.addEventListener('change', () => { if (fileInput.files.length) handleF
 
 async function handleFile(file) {
     uploadedFile = file;
-    uploadZone.innerHTML = `<div style="padding:24px;color:var(--text-2);">Extracting text from <strong>${esc(file.name)}</strong>…</div>`;
+    uploadZone.innerHTML = `<div style="padding:24px;color:var(--text-2);"><span class="spinner"></span> Reading <strong>${esc(file.name)}</strong>…</div>`;
     const formData = new FormData();
     formData.append('file', file);
     try {
@@ -1015,7 +1014,9 @@ async function handleFile(file) {
         document.getElementById('upload-stats').textContent = `${data.word_count.toLocaleString()} words · ${data.chunk_count} chunks`;
         document.getElementById('upload-preview-text').textContent = data.preview;
         document.getElementById('upload-preview-card').style.display = 'block';
-        uploadZone.innerHTML = `<div style="padding:16px;color:var(--success);font-size:13px;">✓ Extracted ${data.word_count.toLocaleString()} words from ${esc(file.name)}</div>`;
+        uploadZone.innerHTML = `<div style="padding:16px;color:var(--success);font-size:13px;">&#10003; Read ${data.word_count.toLocaleString()} words from ${esc(file.name)} &mdash; running AI extraction...</div>`;
+        // Auto-trigger extraction immediately after text read
+        processUploadedFile();
     } catch (e) {
         uploadZone.innerHTML = `<div style="padding:16px;color:var(--danger);">Error: ${esc(e.message)}</div>`;
     }
@@ -1023,17 +1024,18 @@ async function handleFile(file) {
 
 async function processUploadedFile() {
     if (!uploadedFile) return;
-    const btn = document.getElementById('process-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Structuring with AI…';
+    const statusEl = document.getElementById('process-status');
+    if (statusEl) statusEl.innerHTML = '<span class="spinner"></span> Structuring with AI...';
     const formData = new FormData();
     formData.append('file', uploadedFile);
     formData.append('source_name', uploadedFile.name.replace(/\.[^.]+$/, ''));
     try {
         const data = await fetch(`${API}/extract`, {method:'POST', body:formData}).then(r=>r.json());
+        if (data.detail) throw new Error(data.detail);
         extractedHouseId = data.id;
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--success);">&#10003; Extracted</span>';
         document.getElementById('extraction-name').textContent = data.name;
-        document.getElementById('extraction-meta').textContent = `${data.message_count} messages · ${data.persona_count} personas · ${data.indexed ? 'indexed to Pinecone' : 'not indexed'}`;
+        document.getElementById('extraction-meta').textContent = `${data.message_count} messages · ${data.persona_count} personas · ${data.indexed ? 'indexed' : 'not indexed'}`;
         const score = data.completeness_score ?? 100;
         document.getElementById('completeness-fill').style.width = score + '%';
         document.getElementById('completeness-label').textContent = `Completeness: ${score}% · ${(data.missing_sections||[]).length} sections missing`;
@@ -1043,12 +1045,11 @@ async function processUploadedFile() {
             document.getElementById('kym-content').textContent = data.know_your_market;
         }
         renderMissingSections(data.missing_sections || [], data.id);
-        toast(`"${data.name}" created successfully`, 'success');
+        toast(`"${data.name}" extracted successfully`, 'success');
     } catch (e) {
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger);">Extraction failed</span>';
         toast('Extraction failed: ' + e.message, 'error');
     }
-    btn.disabled = false;
-    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Extract with AI';
 }
 
 function renderMissingSections(missing, houseId) {
