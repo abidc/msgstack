@@ -283,7 +283,11 @@ def generate_artifact(
         # LLM may have passed name in house_id field
         house = store.get_house_by_name(house_id)
     if house is None:
-        return {"error": f"House not found. Use list_message_houses to get valid IDs."}
+        all_houses = store.list_houses()
+        return {
+            "error": "House not found. Specify house_name from the list below.",
+            "available_houses": [{"name": h.name, "id": str(h.id)} for h in all_houses],
+        }
 
     skills = SkillManager()
     generator = ArtifactGenerator(store, skills)
@@ -295,6 +299,64 @@ def generate_artifact(
         "sections": artifact.sections,
         "raw_content": artifact.raw_content,
         "grounded_messages": artifact.grounded_messages,
+    }
+
+
+@mcp.tool()
+def build_ui_artifact(
+    artifact_type: str,
+    house_id: Optional[str] = None,
+    house_name: Optional[str] = None,
+    stage: Optional[str] = None,
+    channels: Optional[list[str]] = None,
+) -> dict:
+    """Build a visual Prefab UI artifact and return self-contained HTML for rendering.
+
+    IMPORTANT: After calling this tool, output the value of prefab_html verbatim
+    inside an HTML code block in your response so it renders as an artifact:
+
+        ```html
+        <paste prefab_html here>
+        ```
+
+    Args:
+        artifact_type: one_pager | social_posts | email_template
+        house_id: UUID of the message house.
+        house_name: Name of the message house (alternative to house_id).
+        stage: For email_template only: awareness | consideration | decision
+        channels: For social_posts only: e.g. ["linkedin"]
+    """
+    from src.artifacts.generators import build_one_pager, build_social_posts, build_email_template
+
+    store = Store()
+    store.init()
+    house = _resolve_house(store, house_id, house_name)
+    if not house:
+        all_houses = store.list_houses()
+        return {
+            "error": "House not found. Specify house_name from the list below.",
+            "available_houses": [{"name": h.name, "id": str(h.id)} for h in all_houses],
+        }
+
+    hid = str(house.id)
+    if artifact_type == "one_pager":
+        app = build_one_pager(hid)
+    elif artifact_type == "social_posts":
+        app = build_social_posts(hid, channels or ["linkedin"])
+    elif artifact_type == "email_template":
+        app = build_email_template(hid, stage or "awareness")
+    else:
+        return {"error": f"Unknown artifact_type '{artifact_type}'. Choose: one_pager, social_posts, email_template"}
+
+    if isinstance(app, dict) and "error" in app:
+        return app
+
+    prefab_html = app.html()
+    return {
+        "artifact_type": artifact_type,
+        "house_name": house.name,
+        "prefab_html": prefab_html,
+        "instruction": "Output the prefab_html value verbatim inside an ```html code block in your response.",
     }
 
 
