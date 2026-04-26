@@ -79,11 +79,19 @@ def set_active_house(house_id: str) -> dict:
     store = engine.store
     session = get_session()
 
-    house = store.get_house(UUID(house_id))
+    house = None
+    try:
+        house = store.get_house(UUID(house_id))
+    except (ValueError, AttributeError):
+        pass
     if not house:
-        return {"error": f"House {house_id} not found"}
+        house = store.get_house_by_name(house_id)
+    if not house:
+        all_houses = store.list_houses()
+        names = ", ".join(h.name for h in all_houses)
+        return {"error": f"House '{house_id}' not found. Available: {names}"}
 
-    personas = store.get_personas(UUID(house_id))
+    personas = store.get_personas(house.id)
     persona_names = [p.name for p in personas]
 
     ctx = session.set_active_house(
