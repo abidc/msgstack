@@ -620,6 +620,30 @@ def generate_artifact(
         raise HTTPException(500, str(e))
 
 
+@app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)
+def serve_prefab_artifact(artifact_type: str, house_id: str, stage: str = "awareness", channels: str = "linkedin"):
+    """Serve a fully-rendered Prefab artifact as a standalone HTML page."""
+    from src.artifacts.generators import build_one_pager, build_social_posts, build_email_template
+    try:
+        hid = str(UUID(house_id))
+    except ValueError:
+        raise HTTPException(400, "Invalid house_id UUID")
+
+    if artifact_type == "one_pager":
+        app_obj = build_one_pager(hid)
+    elif artifact_type == "social_posts":
+        app_obj = build_social_posts(hid, channels.split(","))
+    elif artifact_type == "email_template":
+        app_obj = build_email_template(hid, stage)
+    else:
+        raise HTTPException(400, f"Unknown artifact_type '{artifact_type}'. Use: one_pager, social_posts, email_template")
+
+    if isinstance(app_obj, dict) and "error" in app_obj:
+        raise HTTPException(404, app_obj["error"])
+
+    return HTMLResponse(content=app_obj.html())
+
+
 @app.get("/api/preview/{skill_id}/{house_id}")
 def get_artifact_preview(skill_id: str, house_id: str):
     """Get Prefab preview HTML for an artifact."""

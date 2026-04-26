@@ -310,14 +310,10 @@ def build_ui_artifact(
     stage: Optional[str] = None,
     channels: Optional[list[str]] = None,
 ) -> dict:
-    """Build a visual Prefab UI artifact and return self-contained HTML for rendering.
+    """Build a visual Prefab UI artifact and return a clickable URL to open it.
 
-    IMPORTANT: After calling this tool, output the value of prefab_html verbatim
-    inside an HTML code block in your response so it renders as an artifact:
-
-        ```html
-        <paste prefab_html here>
-        ```
+    Present the artifact_url as a clickable link to the user. The URL opens
+    a fully-rendered interactive UI in the browser.
 
     Args:
         artifact_type: one_pager | social_posts | email_template
@@ -326,8 +322,6 @@ def build_ui_artifact(
         stage: For email_template only: awareness | consideration | decision
         channels: For social_posts only: e.g. ["linkedin"]
     """
-    from src.artifacts.generators import build_one_pager, build_social_posts, build_email_template
-
     store = Store()
     store.init()
     house = _resolve_house(store, house_id, house_name)
@@ -338,25 +332,24 @@ def build_ui_artifact(
             "available_houses": [{"name": h.name, "id": str(h.id)} for h in all_houses],
         }
 
-    hid = str(house.id)
-    if artifact_type == "one_pager":
-        app = build_one_pager(hid)
-    elif artifact_type == "social_posts":
-        app = build_social_posts(hid, channels or ["linkedin"])
-    elif artifact_type == "email_template":
-        app = build_email_template(hid, stage or "awareness")
-    else:
-        return {"error": f"Unknown artifact_type '{artifact_type}'. Choose: one_pager, social_posts, email_template"}
+    valid_types = ["one_pager", "social_posts", "email_template"]
+    if artifact_type not in valid_types:
+        return {"error": f"Unknown artifact_type '{artifact_type}'. Choose: {', '.join(valid_types)}"}
 
-    if isinstance(app, dict) and "error" in app:
-        return app
+    base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
+    params = ""
+    if artifact_type == "email_template" and stage:
+        params = f"?stage={stage}"
+    elif artifact_type == "social_posts" and channels:
+        params = f"?channels={','.join(channels)}"
 
-    prefab_html = app.html()
+    artifact_url = f"{base_url}/artifact/{artifact_type}/{house.id}{params}"
+
     return {
         "artifact_type": artifact_type,
         "house_name": house.name,
-        "prefab_html": prefab_html,
-        "instruction": "Output the prefab_html value verbatim inside an ```html code block in your response.",
+        "artifact_url": artifact_url,
+        "message": f"Open this URL to view the interactive {artifact_type.replace('_', ' ')} for {house.name}: {artifact_url}",
     }
 
 
