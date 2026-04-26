@@ -4,7 +4,7 @@ import os
 from typing import Optional
 
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StructuredHouse(BaseModel):
@@ -17,6 +17,10 @@ class StructuredHouse(BaseModel):
     differentiation: str
     key_messages: list[dict]
     personas: list[dict]
+    missing_sections: list[str] = Field(default_factory=list)
+
+REQUIRED_SECTIONS = ["summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"]
+REQUIRED_MESSAGE_TYPES = ["headline", "benefit", "proof_point", "objection"]
 
 
 STRUCTURER_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete MessageHouse in markdown format.
@@ -87,7 +91,7 @@ class HouseStructurer:
 
     def structure(self, text: str, source_name: str = "Untitled Source") -> StructuredHouse:
         """Run the structurer LLM on raw text and return a StructuredHouse."""
-        prompt = STRUCTURER_PROMPT.format(content=text[:8000])
+        prompt = STRUCTURER_PROMPT.format(content=text[:24000])
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -113,33 +117,33 @@ class HouseStructurer:
 
         for line in lines:
             stripped = line.strip()
+            # Only split on ## headers — preserve ### sub-headers as content
+            # so that _parse_key_messages receives the full block including subsections
             if stripped.startswith("## "):
                 if current_section and current_content:
                     sections[current_section] = "\n".join(current_content).strip()
                 current_section = stripped[3:].strip().lower().replace(" ", "_")
                 current_content = []
-            elif stripped.startswith("### "):
-                if current_section and current_content:
-                    sections[current_section] = "\n".join(current_content).strip()
-                current_section = stripped[4:].strip().lower().replace(" ", "_")
-                current_content = []
             elif current_section is not None:
-                current_content.append(stripped)
+                current_content.append(line)  # preserve original line (including ###)
 
         if current_section and current_content:
             sections[current_section] = "\n".join(current_content).strip()
 
         name = source_name
-        if "# " in md:
-            name = md[md.index("# ") + 2 :].split("\n")[0].strip()
+        for line in md.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("# ") and not stripped.startswith("## "):
+                name = stripped[2:].strip()
+                break
 
         key_messages = self._parse_key_messages(sections.get("key_messages", ""))
         personas = self._parse_personas(sections.get("personas", ""))
 
-        return StructuredHouse(
+        house = StructuredHouse(
             name=name,
             summary=sections.get("summary", ""),
-            audience=sections.get("target_audience", ""),
+            audience=sections.get("target_audience", "") or sections.get("audience", ""),
             brand_personality=sections.get("brand_personality", ""),
             positioning=sections.get("positioning", ""),
             tagline=sections.get("tagline", ""),
@@ -147,6 +151,32 @@ class HouseStructurer:
             key_messages=key_messages,
             personas=personas,
         )
+        house.missing_sections = self._find_missing(house)
+        return house
+
+    def _find_missing(self, house: "StructuredHouse") -> list[str]:
+        missing = []
+        field_map = {
+            "summary": house.summary,
+            "audience": house.audience,
+            "brand_personality": house.brand_personality,
+            "positioning": house.positioning,
+            "tagline": house.tagline,
+            "differentiation": house.differentiation,
+        }
+        for field, value in field_map.items():
+            if not value or value.strip() in ("", "[Not found in source]"):
+                missing.append(field)
+
+        found_types = {m["section_type"] for m in house.key_messages}
+        for t in REQUIRED_MESSAGE_TYPES:
+            if t not in found_types:
+                missing.append(f"messages:{t}")
+
+        if not house.personas:
+            missing.append("personas")
+
+        return missing
 
     def _parse_key_messages(self, text: str) -> list[dict]:
         messages = []

@@ -410,6 +410,8 @@ async def extract_upload(
         "persona_count": len(structured.personas),
         "indexed": indexed,
         "markdown": markdown,
+        "missing_sections": structured.missing_sections,
+        "completeness_score": max(0, 100 - len(structured.missing_sections) * 10),
     }
 
 
@@ -439,8 +441,21 @@ def get_skill(skill_id: str):
 
 @app.put("/api/skills/{skill_id}")
 def update_skill(skill_id: str, data: dict):
-    updated = skills.update_skill(skill_id, data)
-    return updated
+    return skills.update_skill(skill_id, data)
+
+
+@app.post("/api/skills")
+def create_skill(data: dict):
+    if not data.get("id"):
+        raise HTTPException(400, "id is required")
+    return skills.update_skill(data["id"], data)
+
+
+@app.delete("/api/skills/{skill_id}")
+def delete_skill(skill_id: str):
+    if not skills.delete_skill(skill_id):
+        raise HTTPException(404, f"Skill {skill_id} not found")
+    return {"ok": True}
 
 
 # --- Stats ---
@@ -596,28 +611,73 @@ def generate_artifact(
     house_id: str = Form(...),
     custom_context: Optional[dict] = Form(None),
 ):
-    """Generate an artifact using a skill and return Prefab HTML for preview."""
+    """Generate an artifact using a skill and return content for preview."""
     from src.pipeline.generator import ArtifactGenerator
-    from src.artifacts.prefab_generator import build_artifact_preview
 
     generator = ArtifactGenerator(store, skills)
 
     try:
         artifact = generator.generate(skill_id, house_id, custom_context or {})
-        
-        prefab_app = build_artifact_preview(skill_id, artifact.sections, artifact.house_name, artifact.house_id)
-        
-        html = prefab_app.html()
-        
+        visual_types = {"one_pager", "social_posts", "email_template"}
+        artifact_type = skill_id if skill_id in visual_types else None
+        visual_url = f"{os.environ.get('MSGSTACK_BASE_URL', 'http://localhost:8001')}/artifact/{artifact_type}/{house_id}" if artifact_type else None
         return {
             "skill_id": skill_id,
             "house_name": artifact.house_name,
+            "house_id": house_id,
             "sections": artifact.sections,
             "raw_content": artifact.raw_content,
-            "preview_html": html,
+            "visual_url": visual_url,
         }
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+_SECTION_PROMPTS = {
+    "summary": "Write a 2-3 sentence product summary for {name}. Positioning: {positioning}",
+    "audience": "Describe the target audience for {name} in one focused paragraph. Use: {positioning}",
+    "brand_personality": "Define the brand personality/voice for {name} in 2-3 sentences. Positioning: {positioning}",
+    "tagline": "Write a punchy tagline (7 words or fewer) for {name}. Positioning: {positioning}",
+    "differentiation": "List 2-3 key differentiators for {name} vs competitors. Positioning: {positioning}",
+    "messages:headline": "Write 3 compelling benefit-led headlines for {name}. Positioning: {positioning}. Return as a bulleted list.",
+    "messages:benefit": "Write 3 outcome-focused benefit statements for {name}. Positioning: {positioning}. Return as a bulleted list.",
+    "messages:proof_point": "Write 3 credible proof points / stats for {name}. If no real stats exist in context, create plausible placeholders clearly marked [PLACEHOLDER]. Positioning: {positioning}. Return as a bulleted list.",
+    "messages:objection": "Write 3 common objection handlers for {name}. Positioning: {positioning}. Return as a bulleted list.",
+    "personas": "Define 2 key buyer personas for {name}. For each include: name, role/description, 3 pain points, 2 buying triggers, 2 objections. Positioning: {positioning}",
+}
+
+
+@app.post("/api/generate-section")
+def generate_section(house_id: str = Form(...), section: str = Form(...)):
+    """Generate content for a specific missing section using the LLM."""
+    try:
+        h = store.get_house(UUID(house_id))
+    except Exception:
+        raise HTTPException(400, "Invalid house_id")
+    if not h:
+        raise HTTPException(404, "House not found")
+
+    template = _SECTION_PROMPTS.get(section)
+    if not template:
+        raise HTTPException(400, f"Unknown section: {section}")
+
+    prompt = template.format(
+        name=h.name,
+        positioning=h.positioning or h.summary or "",
+    )
+
+    import openai as _oai
+    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a B2B messaging strategist. Be specific, benefit-led, and concise."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.5,
+        max_tokens=600,
+    )
+    return {"section": section, "content": resp.choices[0].message.content.strip()}
 
 
 @app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)

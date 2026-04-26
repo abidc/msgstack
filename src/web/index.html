@@ -3,362 +3,544 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MsgStack Admin</title>
+    <title>MsgStack</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
-            --bg: #0f0f12;
-            --bg-elevated: #18181c;
-            --bg-hover: #222228;
-            --border: #2a2a32;
-            --text: #f4f4f5;
-            --text-muted: #a1a1aa;
-            --primary: #6366f1;
-            --primary-hover: #818cf8;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
+            --bg: #0c0c10;
+            --bg-1: #131318;
+            --bg-2: #1a1a21;
+            --bg-3: #222230;
+            --border: #2c2c3a;
+            --border-light: #3a3a4a;
+            --text: #f0f0f5;
+            --text-2: #a0a0b5;
+            --text-3: #606075;
+            --primary: #7c6af7;
+            --primary-dim: rgba(124,106,247,0.15);
+            --primary-hover: #9585f9;
+            --success: #34d399;
+            --success-dim: rgba(52,211,153,0.12);
+            --warn: #fbbf24;
+            --warn-dim: rgba(251,191,36,0.12);
+            --danger: #f87171;
+            --danger-dim: rgba(248,113,113,0.12);
             --radius: 8px;
+            --radius-lg: 12px;
         }
-        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        .app { display: flex; height: 100vh; }
-        .sidebar { width: 220px; background: var(--bg-elevated); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; flex-shrink: 0; }
-        .main { flex: 1; overflow-y: auto; padding: 32px; }
-        .logo { font-size: 18px; font-weight: 700; color: var(--primary); margin-bottom: 28px; display: flex; align-items: center; gap: 8px; }
-        .nav-item { padding: 9px 12px; border-radius: var(--radius); cursor: pointer; color: var(--text-muted); transition: all 0.15s; margin-bottom: 2px; display: flex; align-items: center; gap: 10px; font-size: 14px; }
-        .nav-item:hover { background: var(--bg-hover); color: var(--text); }
-        .nav-item.active { background: var(--primary); color: white; }
-        .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
-        .header h1 { font-size: 24px; font-weight: 600; }
-        .btn { padding: 8px 14px; border-radius: var(--radius); font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+        .app { display: flex; height: 100vh; overflow: hidden; }
+
+        /* ── Sidebar ── */
+        .sidebar { width: 216px; background: var(--bg-1); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; flex-shrink: 0; }
+        .logo { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 24px; padding: 0 8px; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
+        .logo-icon { width: 26px; height: 26px; background: var(--primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; }
+        .nav-section { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); padding: 0 8px; margin: 16px 0 6px; }
+        .nav-item { padding: 7px 8px; border-radius: var(--radius); cursor: pointer; color: var(--text-2); transition: all 0.12s; margin-bottom: 1px; display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 500; }
+        .nav-item:hover { background: var(--bg-2); color: var(--text); }
+        .nav-item.active { background: var(--primary-dim); color: var(--primary); }
+        .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.8; }
+        .nav-item.active svg { opacity: 1; }
+        .sidebar-footer { margin-top: auto; padding: 0 8px; font-size: 11px; color: var(--text-3); }
+
+        /* ── Main ── */
+        .main { flex: 1; overflow-y: auto; background: var(--bg); }
+        .page { padding: 32px 36px; max-width: 1100px; }
+        .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; gap: 16px; }
+        .page-title { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+        .page-subtitle { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+
+        /* ── Buttons ── */
+        .btn { padding: 7px 13px; border-radius: var(--radius); font-weight: 500; cursor: pointer; border: none; transition: all 0.12s; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-family: inherit; white-space: nowrap; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-primary:hover { background: var(--primary-hover); }
-        .btn-secondary { background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border); }
-        .btn-secondary:hover { background: var(--bg-hover); }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn-sm { padding: 5px 10px; font-size: 12px; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
-        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-        .card-title { font-weight: 600; font-size: 15px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+        .btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
+        .btn-ghost:hover { background: var(--bg-2); color: var(--text); border-color: var(--border-light); }
+        .btn-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(248,113,113,0.25); }
+        .btn-danger:hover { background: rgba(248,113,113,0.2); }
+        .btn-success { background: var(--success-dim); color: var(--success); border: 1px solid rgba(52,211,153,0.25); }
+        .btn-sm { padding: 4px 9px; font-size: 12px; }
+        .btn-xs { padding: 3px 7px; font-size: 11px; }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+        .btn svg { width: 13px; height: 13px; }
+
+        /* ── Cards ── */
+        .card { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; }
+        .card-title { font-weight: 600; font-size: 14px; color: var(--text); }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; gap: 12px; }
+        .card:last-child { margin-bottom: 0; }
+
+        /* ── Stats ── */
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+        .stat { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; }
+        .stat-value { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; color: var(--text); }
+        .stat-label { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+
+        /* ── Table ── */
         .table { width: 100%; border-collapse: collapse; }
-        .table th { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
-        .table td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .table th { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text-3); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
         .table tr:last-child td { border-bottom: none; }
-        .table tr:hover td { background: var(--bg-hover); }
+        .table tbody tr { cursor: pointer; transition: background 0.1s; }
+        .table tbody tr:hover td { background: var(--bg-2); }
+
+        /* ── Forms ── */
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         .form-group { margin-bottom: 14px; }
-        .form-label { display: block; margin-bottom: 5px; font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
-        .form-input, .form-textarea, .form-select { width: 100%; padding: 9px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 14px; font-family: inherit; }
+        .form-group:last-child { margin-bottom: 0; }
+        .form-label { display: block; margin-bottom: 5px; font-size: 11px; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+        .form-input, .form-textarea, .form-select { width: 100%; padding: 8px 11px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 13.5px; font-family: inherit; transition: border-color 0.12s; }
         .form-input:focus, .form-textarea:focus, .form-select:focus { outline: none; border-color: var(--primary); }
-        .form-textarea { min-height: 90px; resize: vertical; }
-        .badge { display: inline-flex; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-        .badge-success { background: rgba(34,197,94,0.15); color: var(--success); }
-        .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
-        .badge-default { background: var(--bg-hover); color: var(--text-muted); }
-        .badge-primary { background: rgba(99,102,241,0.2); color: var(--primary); }
-        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
-        .stat { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
-        .stat-value { font-size: 28px; font-weight: 700; }
-        .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 100; }
-        .modal-overlay.active { display: flex; }
-        .modal { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
-        .modal-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .modal-title { font-size: 16px; font-weight: 600; }
-        .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 22px; line-height: 1; }
-        .modal-body { padding: 20px; }
-        .modal-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
-        .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
-        .tab { padding: 10px 14px; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 14px; }
+        .form-textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
+        .form-select { appearance: none; cursor: pointer; }
+
+        /* ── Badges ── */
+        .badge { display: inline-flex; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+        .badge-success { background: var(--success-dim); color: var(--success); }
+        .badge-warn { background: var(--warn-dim); color: var(--warn); }
+        .badge-danger { background: var(--danger-dim); color: var(--danger); }
+        .badge-default { background: var(--bg-3); color: var(--text-2); }
+        .badge-primary { background: var(--primary-dim); color: var(--primary); }
+
+        /* ── Tabs ── */
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+        .tab { padding: 9px 16px; cursor: pointer; color: var(--text-2); border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13.5px; font-weight: 500; transition: all 0.12s; user-select: none; }
         .tab:hover { color: var(--text); }
-        .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .tab.active { color: var(--text) !important; border-bottom-color: var(--primary); font-weight: 600; }
+
+        /* ── Sections / Views ── */
         .section { display: none; }
         .section.active { display: block; }
-        .detail-header { margin-bottom: 20px; }
-        .detail-header h2 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
-        .message-item { padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; }
-        .message-meta { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-        .message-content { font-size: 14px; line-height: 1.55; color: var(--text); }
-        .empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
-        .empty svg { width: 44px; height: 44px; margin: 0 auto 14px; display: block; opacity: 0.4; }
-        .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px; text-align: center; cursor: pointer; transition: all 0.15s; }
-        .upload-zone:hover { border-color: var(--primary); background: rgba(99,102,241,0.04); }
-        .upload-zone.dragover { border-color: var(--primary); background: rgba(99,102,241,0.08); }
-        .skill-card { cursor: pointer; transition: all 0.15s; }
-        .skill-card:hover { border-color: var(--primary); }
-        .skill-card.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
-        .markdown-preview { background: var(--bg); border-radius: var(--radius); padding: 16px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; max-height: 420px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace; }
-        .error-msg { color: var(--danger); font-size: 13px; padding: 8px 12px; background: rgba(239,68,68,0.08); border-radius: var(--radius); margin-top: 8px; }
-        .framework-card { cursor: pointer; transition: all 0.15s; position: relative; }
-        .framework-card:hover { border-color: var(--primary); background: var(--bg-hover); }
-        .section-pill { display: inline-flex; gap: 4px; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: rgba(99,102,241,0.1); color: var(--primary); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ── Grid ── */
+        .grid-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+
+        /* ── Framework cards ── */
+        .fw-card { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; cursor: pointer; transition: all 0.12s; }
+        .fw-card:hover { border-color: var(--primary); background: var(--bg-2); }
+        .fw-card-name { font-weight: 600; font-size: 14px; margin-bottom: 6px; color: var(--text); }
+        .fw-card-summary { color: var(--text-2); font-size: 12.5px; line-height: 1.5; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .fw-card-meta { display: flex; gap: 10px; font-size: 12px; color: var(--text-3); margin-bottom: 12px; }
+        .fw-card-actions { display: flex; gap: 6px; }
+
+        /* ── Message item ── */
+        .msg-item { padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; }
+        .msg-meta { display: flex; gap: 5px; margin-bottom: 6px; flex-wrap: wrap; align-items: center; }
+        .msg-content { font-size: 13.5px; line-height: 1.55; color: var(--text); }
+
+        /* ── Upload ── */
+        .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 40px; text-align: center; cursor: pointer; transition: all 0.15s; }
+        .upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: var(--primary-dim); }
+        .upload-zone-icon { opacity: 0.3; margin: 0 auto 14px; display: block; }
+
+        /* ── Artifact preview ── */
+        .artifact-layout { display: grid; grid-template-columns: 240px 1fr; gap: 20px; align-items: start; }
         .artifact-sidebar { display: flex; flex-direction: column; gap: 14px; }
-        .skill-option { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: all 0.15s; }
-        .skill-option:hover { border-color: var(--primary); background: var(--bg-hover); }
-        .skill-option.active { border-color: var(--primary); background: rgba(99,102,241,0.08); }
-        .artifact-preview-frame { background: white; border-radius: var(--radius); min-height: 360px; overflow: auto; }
-        .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
+        .skill-opt { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: all 0.12s; }
+        .skill-opt:hover { border-color: var(--border-light); background: var(--bg-2); }
+        .skill-opt.active { border-color: var(--primary); background: var(--primary-dim); }
+        .skill-opt-name { font-weight: 600; font-size: 13px; color: var(--text); margin-bottom: 2px; }
+        .skill-opt-desc { font-size: 11.5px; color: var(--text-2); }
+        .preview-pane { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+        .preview-pane-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .preview-pane-body { padding: 20px; }
+        .raw-content { font-size: 13px; line-height: 1.7; color: var(--text); white-space: pre-wrap; max-height: 480px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace; }
+        .section-blocks { display: grid; grid-template-columns: 1fr; gap: 12px; }
+        .section-block { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+        .section-block-label { padding: 7px 12px; background: var(--bg-2); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); border-bottom: 1px solid var(--border); }
+        .section-block-content { padding: 12px; font-size: 13.5px; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
+        .visual-link { display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: var(--primary-dim); border: 1px solid rgba(124,106,247,0.3); border-radius: var(--radius); color: var(--primary); font-size: 13px; font-weight: 500; text-decoration: none; margin-bottom: 14px; transition: all 0.12s; }
+        .visual-link:hover { background: rgba(124,106,247,0.2); }
+
+        /* ── Skills ── */
+        .skill-card { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; transition: all 0.12s; }
+        .skill-card:hover { border-color: var(--border-light); }
+        .skill-card-name { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+        .skill-card-desc { font-size: 12.5px; color: var(--text-2); margin-bottom: 10px; line-height: 1.5; }
+        .skill-card-actions { display: flex; gap: 6px; }
+        .skill-channels { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+
+        /* ── Missing sections ── */
+        .completeness-bar { height: 4px; background: var(--bg-3); border-radius: 99px; margin: 8px 0; overflow: hidden; }
+        .completeness-fill { height: 100%; border-radius: 99px; background: var(--success); transition: width 0.3s; }
+        .missing-section { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; }
+        .missing-section-name { font-size: 13px; color: var(--text-2); }
+        .generated-content { margin-top: 8px; padding: 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; line-height: 1.6; white-space: pre-wrap; display: none; }
+
+        /* ── Modal ── */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 64px rgba(0,0,0,0.6); }
+        .modal-lg { max-width: 680px; }
+        .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--bg-1); z-index: 1; }
+        .modal-title { font-size: 15px; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--text-3); cursor: pointer; font-size: 20px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+        .modal-close:hover { color: var(--text); background: var(--bg-2); }
+        .modal-body { padding: 20px; }
+        .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+        /* ── Misc ── */
+        .empty { text-align: center; padding: 52px 20px; color: var(--text-3); }
+        .empty svg { display: block; margin: 0 auto 12px; opacity: 0.25; }
+        .empty-title { font-size: 14px; font-weight: 500; color: var(--text-2); margin-bottom: 8px; }
+        .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,0.25); border-top-color: white; border-radius: 50%; animation: spin 0.65s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; font-size: 14px; z-index: 200; box-shadow: 0 4px 20px rgba(0,0,0,0.4); transform: translateY(8px); opacity: 0; transition: all 0.2s; }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 16px; font-size: 13px; z-index: 200; box-shadow: 0 8px 32px rgba(0,0,0,0.5); transform: translateY(8px); opacity: 0; transition: all 0.2s; max-width: 320px; }
         .toast.show { transform: translateY(0); opacity: 1; }
-        .toast.success { border-color: var(--success); color: var(--success); }
-        .toast.error { border-color: var(--danger); color: var(--danger); }
+        .toast.success { border-color: rgba(52,211,153,0.4); color: var(--success); }
+        .toast.error { border-color: rgba(248,113,113,0.4); color: var(--danger); }
+        .divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+        .detail-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+        .search-row { display: flex; gap: 8px; margin-bottom: 18px; align-items: center; }
+        .search-row .form-input { max-width: 280px; }
+        .markdown-preview { background: var(--bg); border-radius: var(--radius); padding: 14px; font-size: 12.5px; line-height: 1.65; white-space: pre-wrap; max-height: 400px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text-2); border: 1px solid var(--border); }
+        .inline-code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; background: var(--bg-3); padding: 1px 5px; border-radius: 4px; color: var(--primary); }
     </style>
 </head>
 <body>
 <div class="app">
+    <!-- Sidebar -->
     <aside class="sidebar">
         <div class="logo">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            <div class="logo-icon">M</div>
             MsgStack
         </div>
         <nav>
+            <div class="nav-section">Workspace</div>
             <div class="nav-item active" data-view="dashboard">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
                 Dashboard
             </div>
             <div class="nav-item" data-view="houses">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                 Frameworks
             </div>
+            <div class="nav-item" data-view="artifacts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                Artifacts
+            </div>
+            <div class="nav-section">Setup</div>
             <div class="nav-item" data-view="upload">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Upload Source
             </div>
             <div class="nav-item" data-view="skills">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
                 Skills
             </div>
-            <div class="nav-item" data-view="artifacts">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                Artifacts
-            </div>
             <div class="nav-item" data-view="seed">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v8M8 12h8"/></svg>
                 Seed & Index
             </div>
         </nav>
+        <div class="sidebar-footer">v0.1 · msgstack MCP</div>
     </aside>
 
+    <!-- Main -->
     <main class="main">
 
-        <!-- Dashboard -->
+        <!-- ── Dashboard ── -->
         <section id="dashboard" class="section active">
-            <div class="header"><h1>Dashboard</h1></div>
-            <div class="stats">
-                <div class="stat"><div class="stat-value" id="stat-houses">-</div><div class="stat-label">Frameworks</div></div>
-                <div class="stat"><div class="stat-value" id="stat-messages">-</div><div class="stat-label">Key Messages</div></div>
-                <div class="stat"><div class="stat-value" id="stat-personas">-</div><div class="stat-label">Personas</div></div>
-                <div class="stat"><div class="stat-value" id="stat-skills">-</div><div class="stat-label">Skills</div></div>
-            </div>
-            <div class="card">
-                <div class="card-header"><span class="card-title">Quick Actions</span></div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn btn-secondary" onclick="runSeed()">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                        Seed Sample Data
-                    </button>
-                    <button class="btn btn-secondary" onclick="runIndexAll()">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                        Index All to Pinecone
-                    </button>
-                    <button class="btn btn-primary" onclick="showView('upload')">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                        Upload Source Doc
-                    </button>
-                </div>
-                <div id="dash-action-result" style="margin-top: 10px; font-size: 13px; display: none;"></div>
-            </div>
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">Recent Frameworks</span>
-                    <button class="btn btn-secondary btn-sm" onclick="showView('houses')">View All</button>
-                </div>
-                <table class="table" id="recent-houses-table">
-                    <thead><tr><th>Name</th><th>Source</th><th>Messages</th><th>Personas</th><th>Last Synced</th></tr></thead>
-                    <tbody id="recent-tbody"></tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- Seed & Index -->
-        <section id="seed" class="section">
-            <div class="header"><h1>Seed & Index</h1></div>
-            <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 14px;">Populate the database with sample frameworks and index them to Pinecone for semantic search.</p>
-            <div class="card">
-                <div class="card-title" style="margin-bottom: 14px;">Database Seeding</div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
-                    <button class="btn btn-primary" onclick="runSeed()">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                        Seed Sample Frameworks
-                    </button>
-                    <button class="btn btn-secondary" onclick="runIndexAll()">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                        Index All to Pinecone
-                    </button>
-                </div>
-                <div id="seed-result" style="font-size: 13px; display: none;"></div>
-            </div>
-        </section>
-
-        <!-- Frameworks List -->
-        <section id="houses" class="section">
-            <div class="header">
-                <h1>Frameworks</h1>
-                <button class="btn btn-primary" onclick="openHouseModal()">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    New Framework
-                </button>
-            </div>
-            <div id="houses-list"></div>
-        </section>
-
-        <!-- Framework Detail -->
-        <section id="house-detail" class="section">
-            <div class="detail-header">
-                <button class="btn btn-secondary btn-sm" onclick="showView('houses')" style="margin-bottom: 14px;">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-                    Back
-                </button>
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="page">
+                <div class="page-header">
                     <div>
-                        <h2 id="detail-name">Framework</h2>
-                        <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">
+                        <div class="page-title">Dashboard</div>
+                        <div class="page-subtitle">Overview of your messaging library</div>
+                    </div>
+                    <button class="btn btn-primary" onclick="showView('upload')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Upload Source
+                    </button>
+                </div>
+                <div class="stats">
+                    <div class="stat"><div class="stat-value" id="stat-houses">—</div><div class="stat-label">Frameworks</div></div>
+                    <div class="stat"><div class="stat-value" id="stat-messages">—</div><div class="stat-label">Key Messages</div></div>
+                    <div class="stat"><div class="stat-value" id="stat-personas">—</div><div class="stat-label">Personas</div></div>
+                    <div class="stat"><div class="stat-value" id="stat-skills">—</div><div class="stat-label">Skills</div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Recent Frameworks</span>
+                        <button class="btn btn-ghost btn-sm" onclick="showView('houses')">View all</button>
+                    </div>
+                    <table class="table">
+                        <thead><tr><th>Name</th><th>Source</th><th>Messages</th><th>Personas</th><th>Synced</th></tr></thead>
+                        <tbody id="recent-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Quick Actions</span></div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="btn btn-ghost" onclick="runSeed()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                            Seed Sample Data
+                        </button>
+                        <button class="btn btn-ghost" onclick="runIndexAll()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                            Index All to Pinecone
+                        </button>
+                    </div>
+                    <div id="dash-action-result" style="margin-top:10px;font-size:13px;display:none;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Frameworks List ── -->
+        <section id="houses" class="section">
+            <div class="page">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">Frameworks</div>
+                        <div class="page-subtitle">Your messaging libraries</div>
+                    </div>
+                    <button class="btn btn-primary" onclick="openHouseModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        New Framework
+                    </button>
+                </div>
+                <div class="search-row">
+                    <input type="text" class="form-input" id="houses-search" placeholder="Search frameworks…" oninput="filterHouses()">
+                </div>
+                <div id="houses-list"></div>
+            </div>
+        </section>
+
+        <!-- ── Framework Detail ── -->
+        <section id="house-detail" class="section">
+            <div class="page">
+                <button class="btn btn-ghost btn-sm" onclick="showView('houses')" style="margin-bottom:18px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="15 18 9 12 15 6"/></svg>
+                    All Frameworks
+                </button>
+                <div class="page-header">
+                    <div>
+                        <div class="page-title" id="detail-name">Framework</div>
+                        <div class="detail-meta">
                             <span class="badge badge-default" id="detail-source"></span>
                             <span class="badge badge-success" id="detail-status"></span>
-                            <span style="color: var(--text-muted); font-size: 12px;" id="detail-synced"></span>
+                            <span style="font-size:12px;color:var(--text-3);" id="detail-synced"></span>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-secondary btn-sm" onclick="editCurrentHouse()">Edit</button>
-                        <button class="btn btn-primary btn-sm" onclick="goToArtifacts()">Generate Artifact</button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-ghost btn-sm" onclick="editCurrentHouse()">Edit</button>
+                        <button class="btn btn-primary btn-sm" onclick="goToArtifacts()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            Generate Artifact
+                        </button>
                     </div>
                 </div>
-            </div>
 
-            <div class="tabs">
-                <div class="tab active" data-tab="detail-overview">Overview</div>
-                <div class="tab" data-tab="detail-messages">Key Messages</div>
-                <div class="tab" data-tab="detail-personas">Personas</div>
-                <div class="tab" data-tab="detail-markdown">Source Doc</div>
-            </div>
-
-            <div id="detail-overview" class="tab-content">
-                <div class="card">
-                    <div class="form-group"><label class="form-label">Summary</label><div id="detail-summary" style="font-size: 14px; line-height: 1.6;"></div></div>
-                    <div class="form-group"><label class="form-label">Audience</label><div id="detail-audience" style="font-size: 14px;"></div></div>
-                    <div class="form-group"><label class="form-label">Positioning</label><div id="detail-positioning" style="font-size: 14px; line-height: 1.55;"></div></div>
-                    <div class="form-group"><label class="form-label">Tagline</label><div id="detail-tagline" style="font-size: 14px;"></div></div>
-                    <div class="form-group"><label class="form-label">Differentiation</label><div id="detail-differentiation" style="font-size: 14px;"></div></div>
-                    <div class="form-group"><label class="form-label">Brand Personality</label><div id="detail-brand-personality" style="font-size: 14px;"></div></div>
+                <div class="tabs" id="detail-tabs">
+                    <div class="tab active" data-tab="detail-overview">Overview</div>
+                    <div class="tab" data-tab="detail-messages">Key Messages</div>
+                    <div class="tab" data-tab="detail-personas">Personas</div>
+                    <div class="tab" data-tab="detail-markdown">Source Doc</div>
                 </div>
-            </div>
 
-            <div id="detail-messages" class="tab-content" style="display: none;">
-                <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: var(--text-muted); font-size: 13px;" id="messages-count"></span>
-                    <button class="btn btn-primary btn-sm" onclick="openMessageModal()">Add Message</button>
+                <div id="detail-overview" class="tab-content active">
+                    <div class="card">
+                        <div class="form-row">
+                            <div class="form-group"><div class="form-label">Audience</div><div id="detail-audience" style="font-size:13.5px;color:var(--text)"></div></div>
+                            <div class="form-group"><div class="form-label">Tagline</div><div id="detail-tagline" style="font-size:13.5px;color:var(--text)"></div></div>
+                        </div>
+                        <div class="form-group"><div class="form-label">Positioning</div><div id="detail-positioning" style="font-size:13.5px;line-height:1.6;color:var(--text)"></div></div>
+                        <div class="form-group"><div class="form-label">Differentiation</div><div id="detail-differentiation" style="font-size:13.5px;line-height:1.6;color:var(--text)"></div></div>
+                        <div class="form-group"><div class="form-label">Brand Personality</div><div id="detail-brand-personality" style="font-size:13.5px;line-height:1.6;color:var(--text)"></div></div>
+                        <div class="form-group"><div class="form-label">Summary</div><div id="detail-summary" style="font-size:13.5px;line-height:1.6;color:var(--text)"></div></div>
+                    </div>
                 </div>
-                <div id="detail-messages-list"></div>
-            </div>
 
-            <div id="detail-personas" class="tab-content" style="display: none;">
-                <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: var(--text-muted); font-size: 13px;" id="personas-count"></span>
-                    <button class="btn btn-primary btn-sm" onclick="openPersonaModal()">Add Persona</button>
+                <div id="detail-messages" class="tab-content">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                        <span style="color:var(--text-2);font-size:13px;" id="messages-count"></span>
+                        <button class="btn btn-ghost btn-sm" onclick="openMessageModal()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add Message
+                        </button>
+                    </div>
+                    <div id="detail-messages-list"></div>
                 </div>
-                <div id="detail-personas-list"></div>
-            </div>
 
-            <div id="detail-markdown" class="tab-content" style="display: none;">
-                <div class="markdown-preview" id="detail-markdown-content" style="white-space: pre-wrap;"></div>
+                <div id="detail-personas" class="tab-content">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                        <span style="color:var(--text-2);font-size:13px;" id="personas-count"></span>
+                        <button class="btn btn-ghost btn-sm" onclick="openPersonaModal()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add Persona
+                        </button>
+                    </div>
+                    <div id="detail-personas-list"></div>
+                </div>
+
+                <div id="detail-markdown" class="tab-content">
+                    <div class="markdown-preview" id="detail-markdown-content"></div>
+                </div>
             </div>
         </section>
 
-        <!-- Upload -->
+        <!-- ── Upload ── -->
         <section id="upload" class="section">
-            <div class="header"><h1>Upload Source</h1></div>
-            <div class="card">
-                <div class="form-group">
-                    <label class="form-label">Source File (PDF, DOCX, TXT)</label>
-                    <div class="upload-zone" id="upload-zone">
-                        <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 14px; display: block; opacity: 0.4;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                        <div style="font-size: 15px; margin-bottom: 6px;">Drop a file or click to upload</div>
-                        <div style="font-size: 12px; color: var(--text-muted);">PDF, DOCX, TXT supported</div>
-                        <input type="file" id="file-input" accept=".pdf,.docx,.doc,.txt,.md" style="display: none;">
+            <div class="page">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">Upload Source</div>
+                        <div class="page-subtitle">Extract a message house from a PDF, DOCX, or TXT document</div>
                     </div>
                 </div>
-                <div id="upload-result" style="display: none;">
-                    <div style="display: flex; gap: 10px; margin-bottom: 14px; align-items: center;">
-                        <span class="badge badge-success">Extracted</span>
-                        <span style="color: var(--text-muted); font-size: 13px;" id="upload-stats"></span>
+                <div class="card">
+                    <div class="upload-zone" id="upload-zone">
+                        <svg class="upload-zone-icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <div style="font-size:15px;font-weight:500;margin-bottom:4px;">Drop a file or click to upload</div>
+                        <div style="font-size:12px;color:var(--text-2);">PDF, DOCX, TXT · up to 10MB</div>
+                        <input type="file" id="file-input" accept=".pdf,.docx,.doc,.txt,.md" style="display:none;">
                     </div>
-                    <div id="upload-preview" class="markdown-preview" style="max-height: 180px; margin-bottom: 14px;"></div>
-                    <button class="btn btn-primary" id="process-btn" onclick="processUploadedFile()">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                        Create MessageHouse with LLM
-                    </button>
+                </div>
+
+                <!-- Upload preview (pre-process) -->
+                <div id="upload-preview-card" style="display:none;" class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title" id="upload-filename"></div>
+                            <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="upload-stats"></div>
+                        </div>
+                        <button class="btn btn-primary" id="process-btn" onclick="processUploadedFile()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                            Extract with AI
+                        </button>
+                    </div>
+                    <div class="markdown-preview" id="upload-preview-text" style="max-height:150px;"></div>
+                </div>
+
+                <!-- Extraction result + completeness -->
+                <div id="extraction-result" style="display:none;">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title" id="extraction-name"></div>
+                                <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="extraction-meta"></div>
+                            </div>
+                            <button class="btn btn-success btn-sm" onclick="viewExtractedHouse()">View Framework →</button>
+                        </div>
+                        <div class="completeness-bar"><div class="completeness-fill" id="completeness-fill" style="width:0%"></div></div>
+                        <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;" id="completeness-label"></div>
+                    </div>
+                    <div id="missing-sections-card" style="display:none;" class="card">
+                        <div class="card-header" style="margin-bottom:10px;">
+                            <div class="card-title">Missing Sections</div>
+                            <div style="font-size:12px;color:var(--text-2);">Generate placeholder content for sections not found in the document</div>
+                        </div>
+                        <div id="missing-sections-list"></div>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Skills -->
+        <!-- ── Skills ── -->
         <section id="skills" class="section">
-            <div class="header"><h1>Skills</h1></div>
-            <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 14px;">Skills define how artifacts are generated — prompt templates, required sections, and output structure.</p>
-            <div class="grid" id="skills-grid"></div>
+            <div class="page">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">Skills</div>
+                        <div class="page-subtitle">Prompt templates for artifact generation</div>
+                    </div>
+                    <button class="btn btn-primary" onclick="openNewSkillModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        New Skill
+                    </button>
+                </div>
+                <div class="search-row">
+                    <input type="text" class="form-input" id="skills-search" placeholder="Search skills…" oninput="filterSkills()">
+                </div>
+                <div id="skills-grid" class="grid-2"></div>
+            </div>
         </section>
 
-        <!-- Artifacts -->
+        <!-- ── Artifacts ── -->
         <section id="artifacts" class="section">
-            <div class="header"><h1>Artifact Generator</h1></div>
-            <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 14px;">Generate grounded marketing artifacts from your messaging frameworks.</p>
-            <div style="display: grid; grid-template-columns: 260px 1fr; gap: 20px; align-items: start;">
-                <div class="artifact-sidebar">
-                    <div class="card" style="margin-bottom: 0;">
-                        <div class="card-title" style="margin-bottom: 12px;">Framework</div>
-                        <select class="form-select" id="artifact-house" onchange="onArtifactHouseChange()">
-                            <option value="">Select a framework...</option>
-                        </select>
+            <div class="page">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">Artifact Generator</div>
+                        <div class="page-subtitle">Generate grounded marketing content from a framework</div>
                     </div>
-                    <div class="card" style="margin-bottom: 0;">
-                        <div class="card-title" style="margin-bottom: 12px;">Artifact Type</div>
-                        <div id="artifact-skills-list">
-                            <div style="color: var(--text-muted); font-size: 13px;">Select a framework first</div>
-                        </div>
-                    </div>
-                    <button class="btn btn-primary" id="generate-btn" onclick="generateArtifact()" style="width: 100%;" disabled>
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                        Generate
-                    </button>
-                    <div id="artifact-error" class="error-msg" style="display: none;"></div>
                 </div>
-
-                <div>
-                    <div id="artifacts-empty" class="empty" style="border: 1px solid var(--border); border-radius: var(--radius);">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                        <div>Select a framework and skill to generate</div>
+                <div class="artifact-layout">
+                    <div class="artifact-sidebar">
+                        <div class="card" style="margin-bottom:0">
+                            <div class="card-title" style="margin-bottom:10px">Framework</div>
+                            <select class="form-select" id="artifact-house" onchange="onArtifactHouseChange()">
+                                <option value="">Select…</option>
+                            </select>
+                        </div>
+                        <div class="card" style="margin-bottom:0">
+                            <div class="card-title" style="margin-bottom:10px">Artifact Type</div>
+                            <div id="artifact-skills-list">
+                                <div style="color:var(--text-3);font-size:13px;">Select a framework first</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="generate-btn" onclick="generateArtifact()" style="width:100%;" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                            Generate
+                        </button>
+                        <div id="artifact-error" style="display:none;padding:8px 10px;background:var(--danger-dim);border:1px solid rgba(248,113,113,0.25);border-radius:var(--radius);font-size:12.5px;color:var(--danger);"></div>
                     </div>
 
-                    <div id="artifact-result" style="display: none;">
-                        <div class="card" style="margin-bottom: 14px;">
-                            <div class="card-header">
-                                <span class="card-title" id="artifact-result-title">Preview</span>
-                                <div style="display: flex; gap: 8px;">
-                                    <button class="btn btn-secondary btn-sm" onclick="openPreviewInNewTab()">Open Full</button>
-                                    <button class="btn btn-secondary btn-sm" onclick="copyRawContent()">Copy Text</button>
+                    <div id="artifact-area">
+                        <div id="artifacts-empty" class="empty" style="border:1px solid var(--border);border-radius:var(--radius-lg);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            <div class="empty-title">Select a framework and skill to generate</div>
+                        </div>
+                        <div id="artifact-result" style="display:none;">
+                            <div class="preview-pane">
+                                <div class="preview-pane-header">
+                                    <span style="font-weight:600;font-size:13.5px;" id="artifact-result-title">Preview</span>
+                                    <div style="display:flex;gap:6px;">
+                                        <button class="btn btn-ghost btn-xs" onclick="copyRawContent()">Copy</button>
+                                    </div>
+                                </div>
+                                <div class="preview-pane-body">
+                                    <a id="visual-link" href="#" target="_blank" class="visual-link" style="display:none;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                        Open visual one-pager →
+                                    </a>
+                                    <div id="artifact-sections" class="section-blocks"></div>
+                                    <hr class="divider">
+                                    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin-bottom:8px;">Raw Output</div>
+                                    <div class="raw-content" id="artifact-raw"></div>
                                 </div>
                             </div>
-                            <div class="artifact-preview-frame" id="artifact-preview"></div>
-                        </div>
-                        <div class="card">
-                            <div class="card-title" style="margin-bottom: 10px;">Raw Content</div>
-                            <div class="markdown-preview" id="artifact-raw" style="max-height: 240px;"></div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Seed ── -->
+        <section id="seed" class="section">
+            <div class="page">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">Seed & Index</div>
+                        <div class="page-subtitle">Populate sample data and push to Pinecone for semantic search</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title" style="margin-bottom:12px;">Actions</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+                        <button class="btn btn-primary" onclick="runSeed()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                            Seed Sample Frameworks
+                        </button>
+                        <button class="btn btn-ghost" onclick="runIndexAll()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                            Index All to Pinecone
+                        </button>
+                    </div>
+                    <div id="seed-result" style="font-size:13px;display:none;"></div>
                 </div>
             </div>
         </section>
@@ -366,7 +548,7 @@
     </main>
 </div>
 
-<!-- Modals -->
+<!-- ── Modals ── -->
 <div class="modal-overlay" id="house-modal">
     <div class="modal">
         <div class="modal-header">
@@ -375,17 +557,19 @@
         </div>
         <div class="modal-body">
             <input type="hidden" id="house-id">
-            <div class="form-group"><label class="form-label">Name *</label><input type="text" class="form-input" id="house-name" placeholder="e.g., Acme Q2 2026"></div>
+            <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="house-name" placeholder="e.g. Acme Q2 2026"></div>
+            <div class="form-row">
+                <div class="form-group"><label class="form-label">Tagline</label><input class="form-input" id="house-tagline" placeholder="7 words or fewer"></div>
+                <div class="form-group"><label class="form-label">Audience</label><input class="form-input" id="house-audience" placeholder="Who this is for"></div>
+            </div>
             <div class="form-group"><label class="form-label">Summary</label><textarea class="form-textarea" id="house-summary" placeholder="2-3 sentence overview"></textarea></div>
-            <div class="form-group"><label class="form-label">Target Audience</label><input type="text" class="form-input" id="house-audience" placeholder="Who this is for"></div>
-            <div class="form-group"><label class="form-label">Brand Personality</label><textarea class="form-textarea" id="house-personality" placeholder="Tone, voice, word choices"></textarea></div>
-            <div class="form-group"><label class="form-label">Positioning Statement</label><textarea class="form-textarea" id="house-positioning" placeholder="Core positioning statement"></textarea></div>
-            <div class="form-group"><label class="form-label">Tagline</label><input type="text" class="form-input" id="house-tagline" placeholder="7 words or fewer"></div>
+            <div class="form-group"><label class="form-label">Positioning</label><textarea class="form-textarea" id="house-positioning" placeholder="Core positioning statement"></textarea></div>
             <div class="form-group"><label class="form-label">Differentiation</label><textarea class="form-textarea" id="house-differentiation" placeholder="What sets this apart"></textarea></div>
+            <div class="form-group"><label class="form-label">Brand Personality</label><textarea class="form-textarea" id="house-personality" placeholder="Tone, voice, word choices"></textarea></div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('house-modal')">Cancel</button>
-            <button class="btn btn-primary" onclick="saveHouse()">Save Framework</button>
+            <button class="btn btn-ghost" onclick="closeModal('house-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveHouse()">Save</button>
         </div>
     </div>
 </div>
@@ -398,45 +582,38 @@
         </div>
         <div class="modal-body">
             <input type="hidden" id="message-id">
-            <div class="form-group">
-                <label class="form-label">Section Type</label>
-                <select class="form-select" id="message-section">
-                    <option value="headline">Headline</option>
-                    <option value="subhead">Subhead</option>
-                    <option value="benefit">Benefit</option>
-                    <option value="proof_point">Proof Point</option>
-                    <option value="objection">Objection Handler</option>
-                    <option value="social_proof">Social Proof</option>
-                    <option value="positioning">Positioning</option>
-                </select>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Section Type</label>
+                    <select class="form-select" id="message-section">
+                        <option value="headline">Headline</option><option value="subhead">Subhead</option>
+                        <option value="benefit">Benefit</option><option value="proof_point">Proof Point</option>
+                        <option value="objection">Objection</option><option value="social_proof">Social Proof</option>
+                        <option value="positioning">Positioning</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Priority</label>
+                    <select class="form-select" id="message-priority">
+                        <option value="1">1 — Critical</option><option value="2">2 — High</option>
+                        <option value="3" selected>3 — Medium</option><option value="4">4 — Low</option>
+                    </select>
+                </div>
             </div>
-            <div class="form-group">
-                <label class="form-label">Priority (1 = highest)</label>
-                <select class="form-select" id="message-priority">
-                    <option value="1">1 — Critical</option>
-                    <option value="2">2 — High</option>
-                    <option value="3" selected>3 — Medium</option>
-                    <option value="4">4 — Low</option>
-                    <option value="5">5 — Nice to have</option>
-                </select>
-            </div>
-            <div class="form-group"><label class="form-label">Content *</label><textarea class="form-textarea" id="message-content" placeholder="The message text..." style="min-height: 110px;"></textarea></div>
+            <div class="form-group"><label class="form-label">Content *</label><textarea class="form-textarea" id="message-content" style="min-height:100px;" placeholder="Message text…"></textarea></div>
             <div class="form-group">
                 <label class="form-label">Channels</label>
-                <select class="form-select" id="message-channels" multiple style="min-height: 80px;">
-                    <option value="all" selected>All Channels</option>
-                    <option value="linkedin">LinkedIn</option>
-                    <option value="email">Email</option>
-                    <option value="landing">Landing Page</option>
-                    <option value="paid">Paid Ads</option>
-                    <option value="twitter">Twitter / X</option>
+                <select class="form-select" id="message-channels" multiple style="min-height:70px;">
+                    <option value="all" selected>All</option><option value="linkedin">LinkedIn</option>
+                    <option value="email">Email</option><option value="landing">Landing Page</option>
+                    <option value="paid">Paid Ads</option><option value="twitter">Twitter/X</option>
                     <option value="blog">Blog</option>
                 </select>
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('message-modal')">Cancel</button>
-            <button class="btn btn-primary" onclick="saveMessage()">Save Message</button>
+            <button class="btn btn-ghost" onclick="closeModal('message-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveMessage()">Save</button>
         </div>
     </div>
 </div>
@@ -449,34 +626,40 @@
         </div>
         <div class="modal-body">
             <input type="hidden" id="persona-id">
-            <div class="form-group"><label class="form-label">Name *</label><input type="text" class="form-input" id="persona-name" placeholder="e.g., SMB CTO"></div>
-            <div class="form-group"><label class="form-label">Description / Role</label><textarea class="form-textarea" id="persona-description" placeholder="Their role and context"></textarea></div>
-            <div class="form-group"><label class="form-label">Pain Points (comma-separated)</label><input type="text" class="form-input" id="persona-pain" placeholder="Cost, complexity, time..."></div>
-            <div class="form-group"><label class="form-label">Buying Triggers (comma-separated)</label><input type="text" class="form-input" id="persona-triggers" placeholder="Budget approval, board mandate..."></div>
-            <div class="form-group"><label class="form-label">Objections (comma-separated)</label><input type="text" class="form-input" id="persona-objections" placeholder="Too complex, too expensive..."></div>
+            <div class="form-row">
+                <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="persona-name" placeholder="e.g. SMB CTO"></div>
+                <div class="form-group"><label class="form-label">Role / Description</label><input class="form-input" id="persona-description" placeholder="Job title and context"></div>
+            </div>
+            <div class="form-group"><label class="form-label">Pain Points (comma-separated)</label><input class="form-input" id="persona-pain" placeholder="Cost, complexity, time…"></div>
+            <div class="form-group"><label class="form-label">Buying Triggers (comma-separated)</label><input class="form-input" id="persona-triggers" placeholder="Budget approval, board mandate…"></div>
+            <div class="form-group"><label class="form-label">Objections (comma-separated)</label><input class="form-input" id="persona-objections" placeholder="Too expensive, too complex…"></div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('persona-modal')">Cancel</button>
-            <button class="btn btn-primary" onclick="savePersona()">Save Persona</button>
+            <button class="btn btn-ghost" onclick="closeModal('persona-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="savePersona()">Save</button>
         </div>
     </div>
 </div>
 
 <div class="modal-overlay" id="skill-modal">
-    <div class="modal" style="max-width: 680px;">
+    <div class="modal modal-lg">
         <div class="modal-header">
             <span class="modal-title" id="skill-modal-title">Skill</span>
             <button class="modal-close" onclick="closeModal('skill-modal')">&times;</button>
         </div>
         <div class="modal-body">
             <input type="hidden" id="skill-id">
-            <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-input" id="skill-name"></div>
-            <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="skill-description"></textarea></div>
-            <div class="form-group"><label class="form-label">Prompt Template</label><textarea class="form-textarea" id="skill-prompt" style="min-height: 200px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px;"></textarea></div>
+            <div class="form-row">
+                <div class="form-group"><label class="form-label">ID (slug)</label><input class="form-input" id="skill-id-input" placeholder="e.g. linkedin_post"></div>
+                <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="skill-name" placeholder="e.g. LinkedIn Post"></div>
+            </div>
+            <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="skill-description" style="min-height:60px;"></textarea></div>
+            <div class="form-group"><label class="form-label">Prompt Template</label><textarea class="form-textarea" id="skill-prompt" style="min-height:220px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;"></textarea></div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('skill-modal')" style="margin-right: auto;">Cancel</button>
-            <button class="btn btn-primary" onclick="saveSkill()">Save Skill</button>
+            <button class="btn btn-danger btn-sm" id="skill-delete-btn" onclick="deleteSkill()" style="margin-right:auto;display:none;">Delete Skill</button>
+            <button class="btn btn-ghost" onclick="closeModal('skill-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveSkill()">Save</button>
         </div>
     </div>
 </div>
@@ -484,568 +667,638 @@
 <div class="toast" id="toast"></div>
 
 <script>
-    const API = '/api';
-    let currentHouseId = null;
-    let uploadedFileData = null;
-    let currentArtifactHtml = '';
-    let currentRawContent = '';
+const API = '/api';
+let currentHouseId = null;
+let uploadedFileData = null;
+let uploadedFile = null;
+let extractedHouseId = null;
+let allHouses = [];
+let allSkills = [];
+let selectedSkillId = null;
+let currentRawContent = '';
 
-    // ── Nav ──────────────────────────────────────────────────────────────────
-    document.querySelectorAll('.nav-item').forEach(el => {
-        el.addEventListener('click', () => showView(el.dataset.view));
-    });
+// ── Nav ─────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(el => {
+    el.addEventListener('click', () => showView(el.dataset.view));
+});
 
-    function showView(viewId) {
-        document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        const section = document.getElementById(viewId);
-        if (section) section.classList.add('active');
-        const navEl = document.querySelector(`.nav-item[data-view="${viewId}"]`);
-        if (navEl) navEl.classList.add('active');
+function showView(viewId) {
+    document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    const section = document.getElementById(viewId);
+    if (section) section.classList.add('active');
+    const nav = document.querySelector(`.nav-item[data-view="${viewId}"]`);
+    if (nav) nav.classList.add('active');
+    if (viewId === 'dashboard') loadDashboard();
+    if (viewId === 'houses') loadHouses();
+    if (viewId === 'upload') resetUpload();
+    if (viewId === 'skills') loadSkills();
+    if (viewId === 'artifacts') loadArtifactHouses();
+}
 
-        if (viewId === 'dashboard') loadDashboard();
-        if (viewId === 'houses') loadHouses();
-        if (viewId === 'upload') resetUpload();
-        if (viewId === 'skills') loadSkills();
-        if (viewId === 'artifacts') loadArtifactHouses();
+// ── Toast ────────────────────────────────────────────────────────────────────
+function toast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `toast ${type} show`;
+    setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+async function loadStats() {
+    const data = await fetch(`${API}/stats`).then(r => r.json());
+    document.getElementById('stat-houses').textContent = data.house_count;
+    document.getElementById('stat-messages').textContent = data.message_count;
+    document.getElementById('stat-personas').textContent = data.persona_count;
+    document.getElementById('stat-skills').textContent = data.skill_count;
+    return data;
+}
+
+// ── Seed / Index ─────────────────────────────────────────────────────────────
+async function runSeed() {
+    const el = document.getElementById('dash-action-result') || document.getElementById('seed-result');
+    if (el) { el.textContent = 'Seeding…'; el.style.display = 'block'; el.style.color = 'var(--text-2)'; }
+    try {
+        const data = await fetch(`${API}/seed`, { method: 'POST' }).then(r => r.json());
+        const msg = `Seeded ${data.seeded} frameworks · ${data.total_messages} messages · ${data.total_personas} personas`;
+        if (el) { el.textContent = msg; el.style.color = 'var(--success)'; }
+        toast(msg, 'success');
+        if (document.getElementById('dashboard').classList.contains('active')) loadDashboard();
+    } catch (e) { toast('Seeding failed: ' + e.message, 'error'); }
+}
+
+async function runIndexAll() {
+    const el = document.getElementById('dash-action-result') || document.getElementById('seed-result');
+    if (el) { el.textContent = 'Indexing…'; el.style.display = 'block'; el.style.color = 'var(--text-2)'; }
+    try {
+        const data = await fetch(`${API}/index-all`, { method: 'POST' }).then(r => r.json());
+        const msg = `Indexed ${data.indexed_houses} houses · ${data.total_vectors} vectors`;
+        if (el) { el.textContent = msg; el.style.color = 'var(--success)'; }
+        toast(msg, 'success');
+    } catch (e) { toast('Indexing failed: ' + e.message, 'error'); }
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+    await loadStats();
+    allHouses = await fetch(`${API}/houses`).then(r => r.json());
+    const tbody = document.getElementById('recent-tbody');
+    if (!allHouses.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:24px;">No frameworks yet</td></tr>';
+        return;
     }
+    tbody.innerHTML = allHouses.slice(0, 6).map(h => `
+        <tr onclick="viewHouse('${h.id}')">
+            <td><strong>${esc(h.name)}</strong></td>
+            <td><span class="badge badge-default">${esc(h.source)}</span></td>
+            <td>${h.message_count}</td>
+            <td>${h.persona_count}</td>
+            <td style="color:var(--text-3);font-size:12px;">${h.last_synced ? new Date(h.last_synced).toLocaleDateString() : '—'}</td>
+        </tr>`).join('');
+}
 
-    // ── Toast ────────────────────────────────────────────────────────────────
-    function toast(msg, type = 'default') {
-        const el = document.getElementById('toast');
-        el.textContent = msg;
-        el.className = `toast ${type} show`;
-        setTimeout(() => el.classList.remove('show'), 3000);
+// ── Houses ───────────────────────────────────────────────────────────────────
+async function loadHouses() {
+    const container = document.getElementById('houses-list');
+    container.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:20px;">Loading…</div>';
+    allHouses = await fetch(`${API}/houses`).then(r => r.json());
+    renderHouses(allHouses);
+}
+
+function filterHouses() {
+    const q = document.getElementById('houses-search').value.toLowerCase();
+    renderHouses(q ? allHouses.filter(h => h.name.toLowerCase().includes(q) || (h.summary||'').toLowerCase().includes(q)) : allHouses);
+}
+
+function renderHouses(houses) {
+    const container = document.getElementById('houses-list');
+    if (!houses.length) {
+        container.innerHTML = `<div class="empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            <div class="empty-title">No frameworks yet</div>
+            <button class="btn btn-primary btn-sm" onclick="showView('upload')">Upload a source doc</button>
+        </div>`;
+        return;
     }
-
-    // ── Stats ────────────────────────────────────────────────────────────────
-    async function loadStats() {
-        const res = await fetch(`${API}/stats`);
-        const data = await res.json();
-        document.getElementById('stat-houses').textContent = data.house_count;
-        document.getElementById('stat-messages').textContent = data.message_count;
-        document.getElementById('stat-personas').textContent = data.persona_count;
-        document.getElementById('stat-skills').textContent = data.skill_count;
-        return data;
-    }
-
-    // ── Seed / Index ─────────────────────────────────────────────────────────
-    async function runSeed() {
-        const resultEl = document.getElementById('dash-action-result') || document.getElementById('seed-result');
-        if (resultEl) { resultEl.textContent = 'Seeding…'; resultEl.style.display = 'block'; resultEl.style.color = 'var(--text-muted)'; }
-        try {
-            const res = await fetch(`${API}/seed`, { method: 'POST' });
-            const data = await res.json();
-            const msg = `Seeded ${data.seeded} frameworks · indexed ${data.indexed} · ${data.total_messages} messages · ${data.total_personas} personas`;
-            if (resultEl) { resultEl.textContent = msg; resultEl.style.color = 'var(--success)'; }
-            toast(msg, 'success');
-            loadDashboard();
-        } catch (e) {
-            toast('Seeding failed: ' + e.message, 'error');
-        }
-    }
-
-    async function runIndexAll() {
-        const resultEl = document.getElementById('dash-action-result') || document.getElementById('seed-result');
-        if (resultEl) { resultEl.textContent = 'Indexing…'; resultEl.style.display = 'block'; resultEl.style.color = 'var(--text-muted)'; }
-        try {
-            const res = await fetch(`${API}/index-all`, { method: 'POST' });
-            const data = await res.json();
-            const msg = `Indexed ${data.indexed_houses} houses · ${data.total_vectors} vectors`;
-            if (resultEl) { resultEl.textContent = msg; resultEl.style.color = 'var(--success)'; }
-            toast(msg, 'success');
-        } catch (e) {
-            toast('Indexing failed: ' + e.message, 'error');
-        }
-    }
-
-    // ── Dashboard ────────────────────────────────────────────────────────────
-    async function loadDashboard() {
-        await loadStats();
-        const res = await fetch(`${API}/houses`);
-        const houses = await res.json();
-        const tbody = document.getElementById('recent-tbody');
-        if (!houses.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">No frameworks yet — upload a source or seed sample data.</td></tr>';
-            return;
-        }
-        tbody.innerHTML = houses.slice(0, 6).map(h => `
-            <tr onclick="viewHouse('${h.id}')" style="cursor:pointer;">
-                <td><strong>${escHtml(h.name)}</strong></td>
-                <td><span class="badge badge-default">${h.source}</span></td>
-                <td>${h.message_count}</td>
-                <td>${h.persona_count}</td>
-                <td style="color:var(--text-muted);font-size:12px;">${h.last_synced ? new Date(h.last_synced).toLocaleDateString() : 'Never'}</td>
-            </tr>
-        `).join('');
-    }
-
-    // ── Houses List ───────────────────────────────────────────────────────────
-    async function loadHouses() {
-        const container = document.getElementById('houses-list');
-        container.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Loading…</div>';
-        const res = await fetch(`${API}/houses`);
-        const houses = await res.json();
-        if (!houses.length) {
-            container.innerHTML = `
-                <div class="empty">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-                    <div style="margin-bottom:14px;">No frameworks yet</div>
-                    <button class="btn btn-primary" onclick="showView('upload')">Upload a Source Doc</button>
-                </div>`;
-            return;
-        }
-        container.innerHTML = `<div class="grid">${houses.map(h => `
-            <div class="card framework-card" onclick="viewHouse('${h.id}')">
-                <div class="card-header">
-                    <span class="card-title">${escHtml(h.name)}</span>
-                    <span class="badge ${h.status === 'active' ? 'badge-success' : 'badge-warning'}">${h.status}</span>
-                </div>
-                <p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;line-height:1.5;">${escHtml(h.summary)}</p>
-                <div style="display:flex;gap:10px;font-size:12px;color:var(--text-muted);margin-bottom:12px;">
-                    <span>${h.message_count} messages</span>
-                    <span>·</span>
-                    <span>${h.persona_count} personas</span>
-                </div>
-                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();indexHouse('${h.id}', this)">Index to Pinecone</button>
+    container.innerHTML = `<div class="grid-2">${houses.map(h => `
+        <div class="fw-card" onclick="viewHouse('${h.id}')">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                <div class="fw-card-name">${esc(h.name)}</div>
+                <span class="badge ${h.status === 'active' ? 'badge-success' : 'badge-warn'}">${esc(h.status)}</span>
             </div>
-        `).join('')}</div>`;
-    }
+            <div class="fw-card-summary">${esc(h.summary)}</div>
+            <div class="fw-card-meta">
+                <span>${h.message_count} messages</span>
+                <span>·</span>
+                <span>${h.persona_count} personas</span>
+                <span>·</span>
+                <span>${h.last_synced ? new Date(h.last_synced).toLocaleDateString() : 'never synced'}</span>
+            </div>
+            <div class="fw-card-actions" onclick="event.stopPropagation()">
+                <button class="btn btn-ghost btn-xs" onclick="indexHouse('${h.id}', this)">Index</button>
+                <button class="btn btn-ghost btn-xs" onclick="viewHouse('${h.id}')">Open →</button>
+            </div>
+        </div>`).join('')}</div>`;
+}
 
-    async function viewHouse(id) {
-        currentHouseId = id;
-        // Reset tabs
-        document.querySelectorAll('#house-detail .tab').forEach((t, i) => t.classList.toggle('active', i === 0));
-        document.querySelectorAll('#house-detail .tab-content').forEach((c, i) => c.style.display = i === 0 ? 'block' : 'none');
-
-        try {
-            const res = await fetch(`${API}/houses/${id}`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const house = await res.json();
-
-            document.getElementById('detail-name').textContent = house.name;
-            document.getElementById('detail-source').textContent = house.source;
-            document.getElementById('detail-status').textContent = house.status;
-            document.getElementById('detail-synced').textContent = house.last_synced ? `Synced ${new Date(house.last_synced).toLocaleDateString()}` : '';
-
-            document.getElementById('detail-summary').textContent = house.summary || '—';
-            document.getElementById('detail-audience').textContent = house.audience || '—';
-            document.getElementById('detail-positioning').textContent = house.positioning || '—';
-            document.getElementById('detail-tagline').textContent = house.tagline || '—';
-            document.getElementById('detail-differentiation').textContent = house.differentiation || '—';
-            document.getElementById('detail-brand-personality').textContent = house.brand_personality || '—';
-
-            document.getElementById('messages-count').textContent = `${house.key_messages.length} key messages`;
-            document.getElementById('personas-count').textContent = `${house.personas.length} personas`;
-
-            // Messages grouped by section type
-            const sectionLabels = {headline:'Headline',subhead:'Subhead',benefit:'Benefit',proof_point:'Proof Point',objection:'Objection Handler',social_proof:'Social Proof',positioning:'Positioning'};
-            const grouped = {};
-            house.key_messages.forEach(m => { (grouped[m.section_type] = grouped[m.section_type] || []).push(m); });
-            const ml = document.getElementById('detail-messages-list');
-            if (!house.key_messages.length) {
-                ml.innerHTML = '<div class="empty"><div>No key messages yet</div></div>';
-            } else {
-                ml.innerHTML = Object.entries(grouped).map(([st, msgs]) => `
-                    <div style="margin-bottom:16px;">
-                        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px;">${sectionLabels[st] || st}</div>
-                        ${msgs.sort((a,b) => a.priority - b.priority).map(m => `
-                            <div class="message-item">
-                                <div class="message-meta">
-                                    <span class="badge badge-default">P${m.priority}</span>
-                                    ${m.channels.map(c => `<span class="badge badge-primary">${c}</span>`).join('')}
-                                </div>
-                                <div class="message-content">${escHtml(m.content)}</div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `).join('');
-            }
-
-            // Personas
-            const pl = document.getElementById('detail-personas-list');
-            if (!house.personas.length) {
-                pl.innerHTML = '<div class="empty"><div>No personas yet</div></div>';
-            } else {
-                pl.innerHTML = `<div class="grid">${house.personas.map(p => `
-                    <div class="card">
-                        <div class="card-title" style="margin-bottom:8px;">${escHtml(p.name)}</div>
-                        <p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;line-height:1.5;">${escHtml(p.description || '')}</p>
-                        ${p.pain_points.length ? `<div style="margin-bottom:8px;"><span style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Pain Points</span><div style="margin-top:4px;font-size:13px;">${p.pain_points.map(t => `<div>• ${escHtml(t)}</div>`).join('')}</div></div>` : ''}
-                        ${p.buying_triggers.length ? `<div style="margin-bottom:8px;"><span style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Buying Triggers</span><div style="margin-top:4px;font-size:13px;">${p.buying_triggers.map(t => `<div>• ${escHtml(t)}</div>`).join('')}</div></div>` : ''}
-                        ${p.objections.length ? `<div><span style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Objections</span><div style="margin-top:4px;font-size:13px;">${p.objections.map(t => `<div>• ${escHtml(t)}</div>`).join('')}</div></div>` : ''}
-                    </div>
-                `).join('')}</div>`;
-            }
-
-            // Markdown
-            try {
-                const mdRes = await fetch(`${API}/frames/${id}/markdown`);
-                document.getElementById('detail-markdown-content').textContent = mdRes.ok ? (await mdRes.json()).markdown : '(No saved markdown for this framework)';
-            } catch {
-                document.getElementById('detail-markdown-content').textContent = '(No saved markdown)';
-            }
-
-            showView('house-detail');
-        } catch (e) {
-            toast('Failed to load framework: ' + e.message, 'error');
-        }
-    }
-
-    function editCurrentHouse() {
-        if (currentHouseId) openHouseModal(currentHouseId);
-    }
-
-    function goToArtifacts() {
-        showView('artifacts');
-        if (currentHouseId) {
-            setTimeout(() => {
-                const sel = document.getElementById('artifact-house');
-                if (sel) { sel.value = currentHouseId; onArtifactHouseChange(); }
-            }, 100);
-        }
-    }
-
-    async function indexHouse(houseId, btn) {
-        const orig = btn.textContent;
-        btn.disabled = true; btn.textContent = 'Indexing…';
-        try {
-            const res = await fetch(`${API}/houses/${houseId}/index`, { method: 'POST' });
-            const data = await res.json();
-            btn.textContent = `✓ ${data.vectors_indexed} vectors`;
-            btn.style.color = 'var(--success)';
-            setTimeout(() => { btn.disabled = false; btn.textContent = orig; btn.style.color = ''; }, 2500);
-        } catch (e) {
-            btn.textContent = 'Error'; btn.style.color = 'var(--danger)';
-            setTimeout(() => { btn.disabled = false; btn.textContent = orig; btn.style.color = ''; }, 2500);
-        }
-    }
-
-    // ── Tabs (detail view) ───────────────────────────────────────────────────
-    document.querySelectorAll('#house-detail .tab').forEach(el => {
-        el.addEventListener('click', () => {
-            document.querySelectorAll('#house-detail .tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('#house-detail .tab-content').forEach(c => c.style.display = 'none');
-            el.classList.add('active');
-            document.getElementById(el.dataset.tab).style.display = 'block';
-        });
+async function viewHouse(id) {
+    currentHouseId = id;
+    // Reset tabs
+    document.querySelectorAll('#detail-tabs .tab').forEach((t, i) => {
+        t.classList.toggle('active', i === 0);
+    });
+    document.querySelectorAll('#house-detail .tab-content').forEach((c, i) => {
+        c.classList.toggle('active', i === 0);
     });
 
-    // ── House CRUD ───────────────────────────────────────────────────────────
-    function openHouseModal(id = null) {
-        document.getElementById('house-id').value = id || '';
-        document.getElementById('house-modal-title').textContent = id ? 'Edit Framework' : 'New Framework';
-        const fields = ['house-name','house-summary','house-audience','house-personality','house-positioning','house-tagline','house-differentiation'];
-        if (id) {
-            fetch(`${API}/houses/${id}`).then(r => r.json()).then(h => {
-                document.getElementById('house-name').value = h.name;
-                document.getElementById('house-summary').value = h.summary;
-                document.getElementById('house-audience').value = h.audience;
-                document.getElementById('house-personality').value = h.brand_personality;
-                document.getElementById('house-positioning').value = h.positioning;
-                document.getElementById('house-tagline').value = h.tagline;
-                document.getElementById('house-differentiation').value = h.differentiation;
-            });
-        } else {
-            fields.forEach(f => document.getElementById(f).value = '');
-        }
-        openModal('house-modal');
-    }
+    try {
+        const house = await fetch(`${API}/houses/${id}`).then(r => r.json());
+        document.getElementById('detail-name').textContent = house.name;
+        document.getElementById('detail-source').textContent = house.source;
+        document.getElementById('detail-status').textContent = house.status;
+        document.getElementById('detail-synced').textContent = house.last_synced ? `Synced ${new Date(house.last_synced).toLocaleDateString()}` : '';
+        document.getElementById('detail-summary').textContent = house.summary || '—';
+        document.getElementById('detail-audience').textContent = house.audience || '—';
+        document.getElementById('detail-positioning').textContent = house.positioning || '—';
+        document.getElementById('detail-tagline').textContent = house.tagline || '—';
+        document.getElementById('detail-differentiation').textContent = house.differentiation || '—';
+        document.getElementById('detail-brand-personality').textContent = house.brand_personality || '—';
+        document.getElementById('messages-count').textContent = `${house.key_messages.length} messages`;
+        document.getElementById('personas-count').textContent = `${house.personas.length} personas`;
 
-    async function saveHouse() {
-        const id = document.getElementById('house-id').value;
-        const data = {
-            name: document.getElementById('house-name').value.trim(),
-            summary: document.getElementById('house-summary').value,
-            audience: document.getElementById('house-audience').value,
-            brand_personality: document.getElementById('house-personality').value,
-            positioning: document.getElementById('house-positioning').value,
-            tagline: document.getElementById('house-tagline').value,
-            differentiation: document.getElementById('house-differentiation').value,
-        };
-        if (!data.name) { toast('Name is required', 'error'); return; }
-        const url = id ? `${API}/houses/${id}` : `${API}/houses`;
-        const method = id ? 'PATCH' : 'POST';
-        await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-        closeModal('house-modal');
-        if (id) viewHouse(id);
-        else showView('houses');
-    }
+        const sectionLabels = {headline:'Headline',subhead:'Subhead',benefit:'Benefit',proof_point:'Proof Point',objection:'Objection',social_proof:'Social Proof',positioning:'Positioning'};
+        const grouped = {};
+        house.key_messages.forEach(m => { (grouped[m.section_type] = grouped[m.section_type] || []).push(m); });
+        const ml = document.getElementById('detail-messages-list');
+        ml.innerHTML = !house.key_messages.length
+            ? '<div class="empty"><div class="empty-title">No messages yet</div></div>'
+            : Object.entries(grouped).map(([st, msgs]) => `
+                <div style="margin-bottom:18px;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:8px;">${sectionLabels[st]||st}</div>
+                    ${msgs.sort((a,b)=>a.priority-b.priority).map(m=>`
+                        <div class="msg-item">
+                            <div class="msg-meta">
+                                <span class="badge badge-default">P${m.priority}</span>
+                                ${m.channels.map(c=>`<span class="badge badge-primary">${c}</span>`).join('')}
+                            </div>
+                            <div class="msg-content">${esc(m.content)}</div>
+                        </div>`).join('')}
+                </div>`).join('');
 
-    // ── Message CRUD ─────────────────────────────────────────────────────────
-    function openMessageModal() {
-        document.getElementById('message-id').value = '';
-        document.getElementById('message-content').value = '';
-        document.getElementById('message-section').value = 'benefit';
-        document.getElementById('message-priority').value = '3';
-        openModal('message-modal');
-    }
+        const pl = document.getElementById('detail-personas-list');
+        pl.innerHTML = !house.personas.length
+            ? '<div class="empty"><div class="empty-title">No personas yet</div></div>'
+            : `<div class="grid-2">${house.personas.map(p=>`
+                <div class="card">
+                    <div class="card-title" style="margin-bottom:8px;">${esc(p.name)}</div>
+                    <p style="color:var(--text-2);font-size:13px;margin-bottom:10px;line-height:1.5;">${esc(p.description||'')}</p>
+                    ${p.pain_points.length?`<div style="margin-bottom:8px;"><div class="form-label">Pain Points</div>${p.pain_points.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
+                    ${p.buying_triggers.length?`<div style="margin-bottom:8px;"><div class="form-label">Buying Triggers</div>${p.buying_triggers.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
+                    ${p.objections.length?`<div><div class="form-label">Objections</div>${p.objections.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
+                </div>`).join('')}</div>`;
 
-    async function saveMessage() {
-        const content = document.getElementById('message-content').value.trim();
-        if (!content) { toast('Content is required', 'error'); return; }
-        const data = {
+        try {
+            const mdRes = await fetch(`${API}/frames/${id}/markdown`);
+            document.getElementById('detail-markdown-content').textContent = mdRes.ok ? (await mdRes.json()).markdown : '(No saved markdown)';
+        } catch { document.getElementById('detail-markdown-content').textContent = '(No saved markdown)'; }
+
+        showView('house-detail');
+    } catch (e) { toast('Failed to load framework: ' + e.message, 'error'); }
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+document.querySelectorAll('#detail-tabs .tab').forEach(el => {
+    el.addEventListener('click', () => {
+        document.querySelectorAll('#detail-tabs .tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#house-detail .tab-content').forEach(c => c.classList.remove('active'));
+        el.classList.add('active');
+        const target = document.getElementById(el.dataset.tab);
+        if (target) target.classList.add('active');
+    });
+});
+
+function editCurrentHouse() { if (currentHouseId) openHouseModal(currentHouseId); }
+function goToArtifacts() {
+    showView('artifacts');
+    if (currentHouseId) setTimeout(() => {
+        const sel = document.getElementById('artifact-house');
+        if (sel) { sel.value = currentHouseId; onArtifactHouseChange(); }
+    }, 50);
+}
+
+async function indexHouse(id, btn) {
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = '…';
+    try {
+        const data = await fetch(`${API}/houses/${id}/index`, {method:'POST'}).then(r=>r.json());
+        btn.textContent = `✓ ${data.vectors_indexed}`;
+        btn.style.color = 'var(--success)';
+        setTimeout(() => { btn.disabled=false; btn.textContent=orig; btn.style.color=''; }, 2500);
+    } catch { btn.textContent='Err'; setTimeout(()=>{btn.disabled=false;btn.textContent=orig;},2000); }
+}
+
+// ── House CRUD ────────────────────────────────────────────────────────────────
+function openHouseModal(id = null) {
+    document.getElementById('house-id').value = id || '';
+    document.getElementById('house-modal-title').textContent = id ? 'Edit Framework' : 'New Framework';
+    ['house-name','house-summary','house-audience','house-personality','house-positioning','house-tagline','house-differentiation']
+        .forEach(f => document.getElementById(f).value = '');
+    if (id) fetch(`${API}/houses/${id}`).then(r=>r.json()).then(h => {
+        document.getElementById('house-name').value = h.name;
+        document.getElementById('house-summary').value = h.summary;
+        document.getElementById('house-audience').value = h.audience;
+        document.getElementById('house-personality').value = h.brand_personality;
+        document.getElementById('house-positioning').value = h.positioning;
+        document.getElementById('house-tagline').value = h.tagline;
+        document.getElementById('house-differentiation').value = h.differentiation;
+    });
+    openModal('house-modal');
+}
+
+async function saveHouse() {
+    const id = document.getElementById('house-id').value;
+    const data = {
+        name: document.getElementById('house-name').value.trim(),
+        summary: document.getElementById('house-summary').value,
+        audience: document.getElementById('house-audience').value,
+        brand_personality: document.getElementById('house-personality').value,
+        positioning: document.getElementById('house-positioning').value,
+        tagline: document.getElementById('house-tagline').value,
+        differentiation: document.getElementById('house-differentiation').value,
+    };
+    if (!data.name) { toast('Name is required', 'error'); return; }
+    await fetch(id ? `${API}/houses/${id}` : `${API}/houses`, {
+        method: id ? 'PATCH' : 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data),
+    });
+    closeModal('house-modal');
+    if (id) viewHouse(id); else showView('houses');
+    toast('Framework saved', 'success');
+}
+
+// ── Message CRUD ──────────────────────────────────────────────────────────────
+function openMessageModal() {
+    document.getElementById('message-id').value = '';
+    document.getElementById('message-content').value = '';
+    document.getElementById('message-section').value = 'benefit';
+    document.getElementById('message-priority').value = '3';
+    openModal('message-modal');
+}
+async function saveMessage() {
+    const content = document.getElementById('message-content').value.trim();
+    if (!content) { toast('Content is required', 'error'); return; }
+    await fetch(`${API}/messages`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
             message_house_id: currentHouseId,
             section_type: document.getElementById('message-section').value,
             priority: parseInt(document.getElementById('message-priority').value),
             content,
-            channels: Array.from(document.getElementById('message-channels').selectedOptions).map(o => o.value),
-        };
-        await fetch(`${API}/messages`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-        closeModal('message-modal');
-        viewHouse(currentHouseId);
-    }
+            channels: Array.from(document.getElementById('message-channels').selectedOptions).map(o=>o.value),
+        }),
+    });
+    closeModal('message-modal');
+    viewHouse(currentHouseId);
+    toast('Message saved', 'success');
+}
 
-    // ── Persona CRUD ─────────────────────────────────────────────────────────
-    function openPersonaModal() {
-        document.getElementById('persona-id').value = '';
-        ['persona-name','persona-description','persona-pain','persona-triggers','persona-objections'].forEach(f => document.getElementById(f).value = '');
-        openModal('persona-modal');
-    }
-
-    async function savePersona() {
-        const name = document.getElementById('persona-name').value.trim();
-        if (!name) { toast('Name is required', 'error'); return; }
-        const data = {
-            message_house_id: currentHouseId,
-            name,
+// ── Persona CRUD ──────────────────────────────────────────────────────────────
+function openPersonaModal() {
+    ['persona-name','persona-description','persona-pain','persona-triggers','persona-objections'].forEach(f => document.getElementById(f).value = '');
+    openModal('persona-modal');
+}
+async function savePersona() {
+    const name = document.getElementById('persona-name').value.trim();
+    if (!name) { toast('Name is required', 'error'); return; }
+    await fetch(`${API}/personas`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            message_house_id: currentHouseId, name,
             description: document.getElementById('persona-description').value,
             pain_points: splitComma('persona-pain'),
             buying_triggers: splitComma('persona-triggers'),
             objections: splitComma('persona-objections'),
-        };
-        await fetch(`${API}/personas`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-        closeModal('persona-modal');
-        viewHouse(currentHouseId);
-    }
-
-    function splitComma(id) {
-        return document.getElementById(id).value.split(',').map(s => s.trim()).filter(Boolean);
-    }
-
-    // ── Upload ───────────────────────────────────────────────────────────────
-    const uploadZone = document.getElementById('upload-zone');
-    const fileInput = document.getElementById('file-input');
-    uploadZone.addEventListener('click', () => fileInput.click());
-    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
-    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-    uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
-    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
-
-    async function handleFile(file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        uploadZone.innerHTML = '<div style="padding:32px;color:var(--text-muted);">Extracting text…</div>';
-        const res = await fetch(`${API}/upload`, { method: 'POST', body: formData });
-        const data = await res.json();
-        uploadedFileData = data;
-        document.getElementById('upload-result').style.display = 'block';
-        document.getElementById('upload-stats').textContent = `${data.word_count} words · ${data.chunk_count} chunks`;
-        document.getElementById('upload-preview').textContent = data.preview;
-        uploadZone.style.display = 'none';
-    }
-
-    async function processUploadedFile() {
-        if (!uploadedFileData) return;
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-        formData.append('source_name', uploadedFileData.filename.split('.')[0]);
-        const btn = document.getElementById('process-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Structuring with LLM…';
-        try {
-            const res = await fetch(`${API}/extract`, { method: 'POST', body: formData });
-            const data = await res.json();
-            toast(`"${data.name}" created — ${data.message_count} messages`, 'success');
-            showView('houses');
-        } catch (e) {
-            toast('Error: ' + e.message, 'error');
-        }
-        btn.disabled = false;
-        btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Create MessageHouse with LLM';
-    }
-
-    function resetUpload() {
-        uploadedFileData = null;
-        document.getElementById('upload-result').style.display = 'none';
-        uploadZone.style.display = 'block';
-        uploadZone.innerHTML = `
-            <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 14px;display:block;opacity:.4;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <div style="font-size:15px;margin-bottom:6px;">Drop a file or click to upload</div>
-            <div style="font-size:12px;color:var(--text-muted);">PDF, DOCX, TXT supported</div>
-            <input type="file" id="file-input" accept=".pdf,.docx,.doc,.txt,.md" style="display:none;">`;
-        document.getElementById('upload-zone').querySelector('input')?.addEventListener('change', () => {
-            if (fileInput.files.length) handleFile(fileInput.files[0]);
-        });
-    }
-
-    // ── Skills ───────────────────────────────────────────────────────────────
-    async function loadSkills() {
-        const res = await fetch(`${API}/skills`);
-        const skillList = await res.json();
-        document.getElementById('skills-grid').innerHTML = skillList.map(s => `
-            <div class="card skill-card" onclick="openSkillModal('${s.id}')">
-                <div class="card-title" style="margin-bottom:6px;">${escHtml(s.name)}</div>
-                <p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;line-height:1.5;">${escHtml(s.description)}</p>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                    ${(s.sections || []).slice(0,4).map(sec => `<span class="badge badge-default">${escHtml(sec.label)}</span>`).join('')}
-                </div>
-            </div>
-        `).join('');
-    }
-
-    async function openSkillModal(id) {
-        const res = await fetch(`${API}/skills/${id}`);
-        const skill = await res.json();
-        document.getElementById('skill-id').value = skill.id;
-        document.getElementById('skill-modal-title').textContent = skill.name;
-        document.getElementById('skill-name').value = skill.name;
-        document.getElementById('skill-description').value = skill.description;
-        document.getElementById('skill-prompt').value = skill.prompt_template;
-        openModal('skill-modal');
-    }
-
-    async function saveSkill() {
-        const id = document.getElementById('skill-id').value;
-        const data = {
-            id,
-            name: document.getElementById('skill-name').value,
-            description: document.getElementById('skill-description').value,
-            prompt_template: document.getElementById('skill-prompt').value,
-        };
-        await fetch(`${API}/skills/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-        closeModal('skill-modal');
-        toast('Skill saved', 'success');
-        loadSkills();
-    }
-
-    // ── Artifacts ────────────────────────────────────────────────────────────
-    let selectedSkillId = null;
-
-    async function loadArtifactHouses() {
-        const res = await fetch(`${API}/houses`);
-        const houses = await res.json();
-        const sel = document.getElementById('artifact-house');
-        const cur = sel.value;
-        sel.innerHTML = '<option value="">Select a framework...</option>' +
-            houses.map(h => `<option value="${h.id}">${escHtml(h.name)}</option>`).join('');
-        if (cur) sel.value = cur;
-    }
-
-    async function onArtifactHouseChange() {
-        const houseId = document.getElementById('artifact-house').value;
-        selectedSkillId = null;
-        document.getElementById('generate-btn').disabled = true;
-        document.getElementById('artifact-error').style.display = 'none';
-
-        if (!houseId) {
-            document.getElementById('artifact-skills-list').innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Select a framework first</div>';
-            return;
-        }
-
-        const res = await fetch(`${API}/skills`);
-        const skillList = await res.json();
-        document.getElementById('artifact-skills-list').innerHTML = skillList.map(s => `
-            <div class="skill-option" id="skill-opt-${s.id}" onclick="selectSkill('${s.id}')">
-                <div style="font-weight:600;font-size:13px;">${escHtml(s.name)}</div>
-                <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${escHtml(s.description)}</div>
-            </div>
-        `).join('');
-    }
-
-    function selectSkill(skillId) {
-        selectedSkillId = skillId;
-        document.querySelectorAll('.skill-option').forEach(el => el.classList.remove('active'));
-        const el = document.getElementById(`skill-opt-${skillId}`);
-        if (el) el.classList.add('active');
-        document.getElementById('generate-btn').disabled = false;
-    }
-
-    async function generateArtifact() {
-        const houseId = document.getElementById('artifact-house').value;
-        if (!houseId || !selectedSkillId) {
-            toast('Select a framework and skill type first', 'error');
-            return;
-        }
-
-        const btn = document.getElementById('generate-btn');
-        const errEl = document.getElementById('artifact-error');
-        errEl.style.display = 'none';
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Generating…';
-
-        document.getElementById('artifacts-empty').style.display = 'none';
-        document.getElementById('artifact-result').style.display = 'none';
-
-        try {
-            const formData = new FormData();
-            formData.append('skill_id', selectedSkillId);
-            formData.append('house_id', houseId);
-
-            const res = await fetch(`${API}/generate`, { method: 'POST', body: formData });
-            const data = await res.json();
-
-            if (!res.ok || data.detail) {
-                throw new Error(data.detail || 'Generation failed');
-            }
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            currentRawContent = data.raw_content || '';
-            document.getElementById('artifact-result-title').textContent = `${data.house_name} — ${selectedSkillId.replace(/_/g, ' ')}`;
-
-            if (data.preview_html) {
-                currentArtifactHtml = data.preview_html;
-                document.getElementById('artifact-preview').innerHTML = data.preview_html;
-            } else {
-                document.getElementById('artifact-preview').innerHTML = `<div style="padding:20px;color:#333;font-size:14px;white-space:pre-wrap;">${escHtml(currentRawContent)}</div>`;
-            }
-
-            document.getElementById('artifact-raw').textContent = currentRawContent;
-            document.getElementById('artifact-result').style.display = 'block';
-            toast('Artifact generated', 'success');
-        } catch (e) {
-            errEl.textContent = e.message;
-            errEl.style.display = 'block';
-            document.getElementById('artifacts-empty').style.display = 'block';
-            toast('Generation failed: ' + e.message, 'error');
-        }
-
-        btn.disabled = false;
-        btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Generate';
-    }
-
-    function openPreviewInNewTab() {
-        if (currentArtifactHtml) {
-            const w = window.open('', '_blank');
-            w.document.write(currentArtifactHtml);
-            w.document.close();
-        }
-    }
-
-    function copyRawContent() {
-        if (currentRawContent) {
-            navigator.clipboard.writeText(currentRawContent).then(() => toast('Copied to clipboard', 'success'));
-        }
-    }
-
-    // ── Modals ───────────────────────────────────────────────────────────────
-    function openModal(id) { document.getElementById(id).classList.add('active'); }
-    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-    document.querySelectorAll('.modal-overlay').forEach(el => {
-        el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
+        }),
     });
+    closeModal('persona-modal');
+    viewHouse(currentHouseId);
+    toast('Persona saved', 'success');
+}
+function splitComma(id) { return document.getElementById(id).value.split(',').map(s=>s.trim()).filter(Boolean); }
 
-    // ── Utils ────────────────────────────────────────────────────────────────
-    function escHtml(str) {
-        if (!str) return '';
-        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// ── Upload ────────────────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+async function handleFile(file) {
+    uploadedFile = file;
+    uploadZone.innerHTML = `<div style="padding:24px;color:var(--text-2);">Extracting text from <strong>${esc(file.name)}</strong>…</div>`;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const data = await fetch(`${API}/upload`, {method:'POST', body:formData}).then(r=>r.json());
+        uploadedFileData = data;
+        document.getElementById('upload-filename').textContent = file.name;
+        document.getElementById('upload-stats').textContent = `${data.word_count.toLocaleString()} words · ${data.chunk_count} chunks`;
+        document.getElementById('upload-preview-text').textContent = data.preview;
+        document.getElementById('upload-preview-card').style.display = 'block';
+        uploadZone.innerHTML = `<div style="padding:16px;color:var(--success);font-size:13px;">✓ Extracted ${data.word_count.toLocaleString()} words from ${esc(file.name)}</div>`;
+    } catch (e) {
+        uploadZone.innerHTML = `<div style="padding:16px;color:var(--danger);">Error: ${esc(e.message)}</div>`;
     }
+}
 
-    // ── Init ─────────────────────────────────────────────────────────────────
-    loadDashboard();
+async function processUploadedFile() {
+    if (!uploadedFile) return;
+    const btn = document.getElementById('process-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Structuring with AI…';
+    const formData = new FormData();
+    formData.append('file', uploadedFile);
+    formData.append('source_name', uploadedFile.name.replace(/\.[^.]+$/, ''));
+    try {
+        const data = await fetch(`${API}/extract`, {method:'POST', body:formData}).then(r=>r.json());
+        extractedHouseId = data.id;
+        document.getElementById('extraction-name').textContent = data.name;
+        document.getElementById('extraction-meta').textContent = `${data.message_count} messages · ${data.persona_count} personas · ${data.indexed ? 'indexed to Pinecone' : 'not indexed'}`;
+        const score = data.completeness_score ?? 100;
+        document.getElementById('completeness-fill').style.width = score + '%';
+        document.getElementById('completeness-label').textContent = `Completeness: ${score}% · ${(data.missing_sections||[]).length} sections missing`;
+        document.getElementById('extraction-result').style.display = 'block';
+        renderMissingSections(data.missing_sections || [], data.id);
+        toast(`"${data.name}" created successfully`, 'success');
+    } catch (e) {
+        toast('Extraction failed: ' + e.message, 'error');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Extract with AI';
+}
+
+function renderMissingSections(missing, houseId) {
+    const card = document.getElementById('missing-sections-card');
+    const list = document.getElementById('missing-sections-list');
+    if (!missing.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    const labels = {
+        summary:'Summary', audience:'Target Audience', brand_personality:'Brand Personality',
+        positioning:'Positioning', tagline:'Tagline', differentiation:'Differentiation',
+        'messages:headline':'Headlines', 'messages:benefit':'Benefits',
+        'messages:proof_point':'Proof Points', 'messages:objection':'Objections', personas:'Personas',
+    };
+    list.innerHTML = missing.map(s => `
+        <div class="missing-section" id="miss-${s.replace(':','-')}">
+            <div>
+                <div class="missing-section-name">${labels[s]||s}</div>
+                <div id="gen-content-${s.replace(':','-')}" class="generated-content"></div>
+            </div>
+            <button class="btn btn-ghost btn-xs" onclick="generateMissingSection('${houseId}','${s}',this)">
+                ✦ Generate with AI
+            </button>
+        </div>`).join('');
+}
+
+async function generateMissingSection(houseId, section, btn) {
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="border-top-color:var(--primary)"></span>';
+    const contentEl = document.getElementById(`gen-content-${section.replace(':','-')}`);
+    try {
+        const formData = new FormData();
+        formData.append('house_id', houseId);
+        formData.append('section', section);
+        const data = await fetch(`${API}/generate-section`, {method:'POST', body:formData}).then(r=>r.json());
+        contentEl.textContent = data.content;
+        contentEl.style.display = 'block';
+        btn.innerHTML = '✓ Generated';
+        btn.classList.remove('btn-ghost');
+        btn.classList.add('btn-success');
+    } catch (e) {
+        toast('Generation failed: ' + e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+function viewExtractedHouse() {
+    if (extractedHouseId) viewHouse(extractedHouseId);
+}
+
+function resetUpload() {
+    uploadedFileData = null;
+    uploadedFile = null;
+    extractedHouseId = null;
+    document.getElementById('upload-preview-card').style.display = 'none';
+    document.getElementById('extraction-result').style.display = 'none';
+    uploadZone.innerHTML = `
+        <svg class="upload-zone-icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div style="font-size:15px;font-weight:500;margin-bottom:4px;">Drop a file or click to upload</div>
+        <div style="font-size:12px;color:var(--text-2);">PDF, DOCX, TXT · up to 10MB</div>
+        <input type="file" id="file-input" accept=".pdf,.docx,.doc,.txt,.md" style="display:none;">`;
+    const newInput = uploadZone.querySelector('#file-input');
+    newInput.addEventListener('change', () => { if (newInput.files.length) handleFile(newInput.files[0]); });
+    uploadZone.onclick = () => newInput.click();
+}
+
+// ── Skills ────────────────────────────────────────────────────────────────────
+async function loadSkills() {
+    allSkills = await fetch(`${API}/skills`).then(r => r.json());
+    renderSkills(allSkills);
+}
+
+function filterSkills() {
+    const q = document.getElementById('skills-search').value.toLowerCase();
+    renderSkills(q ? allSkills.filter(s => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)) : allSkills);
+}
+
+function renderSkills(skills) {
+    const grid = document.getElementById('skills-grid');
+    grid.innerHTML = skills.map(s => `
+        <div class="skill-card">
+            <div class="skill-card-name">${esc(s.name)}</div>
+            <div class="skill-card-desc">${esc(s.description)}</div>
+            <div class="skill-channels">${(s.channels||[]).map(c=>`<span class="badge badge-default">${c}</span>`).join('')}</div>
+            <div class="skill-card-actions">
+                <button class="btn btn-ghost btn-xs" onclick="openSkillModal('${s.id}')">Edit</button>
+                <button class="btn btn-danger btn-xs" onclick="confirmDeleteSkill('${s.id}','${esc(s.name)}')">Delete</button>
+            </div>
+        </div>`).join('');
+}
+
+function openNewSkillModal() {
+    document.getElementById('skill-id').value = '';
+    document.getElementById('skill-id-input').value = '';
+    document.getElementById('skill-name').value = '';
+    document.getElementById('skill-description').value = '';
+    document.getElementById('skill-prompt').value = '';
+    document.getElementById('skill-modal-title').textContent = 'New Skill';
+    document.getElementById('skill-delete-btn').style.display = 'none';
+    document.getElementById('skill-id-input').readOnly = false;
+    openModal('skill-modal');
+}
+
+async function openSkillModal(id) {
+    const skill = await fetch(`${API}/skills/${id}`).then(r => r.json());
+    document.getElementById('skill-id').value = skill.id;
+    document.getElementById('skill-id-input').value = skill.id;
+    document.getElementById('skill-id-input').readOnly = true;
+    document.getElementById('skill-modal-title').textContent = skill.name;
+    document.getElementById('skill-name').value = skill.name;
+    document.getElementById('skill-description').value = skill.description;
+    document.getElementById('skill-prompt').value = skill.prompt_template;
+    document.getElementById('skill-delete-btn').style.display = 'inline-flex';
+    openModal('skill-modal');
+}
+
+async function saveSkill() {
+    const existingId = document.getElementById('skill-id').value;
+    const id = existingId || document.getElementById('skill-id-input').value.trim().replace(/\s+/g, '_').toLowerCase();
+    if (!id) { toast('ID is required', 'error'); return; }
+    const data = {
+        id,
+        name: document.getElementById('skill-name').value,
+        description: document.getElementById('skill-description').value,
+        prompt_template: document.getElementById('skill-prompt').value,
+        channels: ['all'],
+        sections: [],
+    };
+    await fetch(existingId ? `${API}/skills/${id}` : `${API}/skills`, {
+        method: existingId ? 'PUT' : 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data),
+    });
+    closeModal('skill-modal');
+    toast('Skill saved', 'success');
+    loadSkills();
+}
+
+function confirmDeleteSkill(id, name) {
+    if (!confirm(`Delete skill "${name}"? This cannot be undone.`)) return;
+    deleteSkill(id);
+}
+
+async function deleteSkill(id) {
+    id = id || document.getElementById('skill-id').value;
+    await fetch(`${API}/skills/${id}`, {method:'DELETE'});
+    closeModal('skill-modal');
+    toast('Skill deleted', 'success');
+    loadSkills();
+}
+
+// ── Artifacts ─────────────────────────────────────────────────────────────────
+async function loadArtifactHouses() {
+    const houses = await fetch(`${API}/houses`).then(r => r.json());
+    const sel = document.getElementById('artifact-house');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select a framework…</option>' +
+        houses.map(h => `<option value="${h.id}">${esc(h.name)}</option>`).join('');
+    if (cur) sel.value = cur;
+}
+
+async function onArtifactHouseChange() {
+    selectedSkillId = null;
+    document.getElementById('generate-btn').disabled = true;
+    document.getElementById('artifact-error').style.display = 'none';
+    const houseId = document.getElementById('artifact-house').value;
+    if (!houseId) {
+        document.getElementById('artifact-skills-list').innerHTML = '<div style="color:var(--text-3);font-size:13px;">Select a framework first</div>';
+        return;
+    }
+    allSkills = await fetch(`${API}/skills`).then(r => r.json());
+    document.getElementById('artifact-skills-list').innerHTML = allSkills.map(s => `
+        <div class="skill-opt" id="skill-opt-${s.id}" onclick="selectSkill('${s.id}')">
+            <div class="skill-opt-name">${esc(s.name)}</div>
+            <div class="skill-opt-desc">${esc(s.description)}</div>
+        </div>`).join('');
+}
+
+function selectSkill(id) {
+    selectedSkillId = id;
+    document.querySelectorAll('.skill-opt').forEach(el => el.classList.remove('active'));
+    const el = document.getElementById(`skill-opt-${id}`);
+    if (el) el.classList.add('active');
+    document.getElementById('generate-btn').disabled = false;
+}
+
+async function generateArtifact() {
+    const houseId = document.getElementById('artifact-house').value;
+    if (!houseId || !selectedSkillId) { toast('Select a framework and skill first', 'error'); return; }
+    const btn = document.getElementById('generate-btn');
+    const errEl = document.getElementById('artifact-error');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Generating…';
+    document.getElementById('artifacts-empty').style.display = 'none';
+    document.getElementById('artifact-result').style.display = 'none';
+    try {
+        const formData = new FormData();
+        formData.append('skill_id', selectedSkillId);
+        formData.append('house_id', houseId);
+        const res = await fetch(`${API}/generate`, {method:'POST', body:formData});
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Generation failed');
+
+        currentRawContent = data.raw_content || '';
+        document.getElementById('artifact-result-title').textContent = `${data.house_name} — ${(selectedSkillId||'').replace(/_/g,' ')}`;
+
+        // Visual link for supported types
+        const visualLink = document.getElementById('visual-link');
+        if (data.visual_url) {
+            visualLink.href = data.visual_url;
+            visualLink.textContent = `Open visual ${selectedSkillId.replace(/_/g,' ')} →`;
+            visualLink.style.display = 'flex';
+        } else {
+            visualLink.style.display = 'none';
+        }
+
+        // Render sections
+        const sectionsEl = document.getElementById('artifact-sections');
+        if (data.sections && Object.keys(data.sections).length) {
+            sectionsEl.innerHTML = Object.entries(data.sections).map(([k, v]) => `
+                <div class="section-block">
+                    <div class="section-block-label">${k.replace(/_/g,' ')}</div>
+                    <div class="section-block-content">${esc(v)}</div>
+                </div>`).join('');
+        } else {
+            sectionsEl.innerHTML = '';
+        }
+        document.getElementById('artifact-raw').textContent = currentRawContent;
+        document.getElementById('artifact-result').style.display = 'block';
+        toast('Generated', 'success');
+    } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+        document.getElementById('artifacts-empty').style.display = 'flex';
+        toast('Generation failed: ' + e.message, 'error');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Generate';
+}
+
+function copyRawContent() {
+    if (currentRawContent) navigator.clipboard.writeText(currentRawContent).then(() => toast('Copied', 'success'));
+}
+
+// ── Modals ────────────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
+});
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function esc(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadDashboard();
 </script>
 </body>
 </html>
