@@ -387,7 +387,7 @@ async def extract_upload(
     markdown = structurer.to_markdown(structured)
     save_path = DATA_DIR / "frames" / f"{house.id}.md"
     save_path.parent.mkdir(exist_ok=True)
-    save_path.write_text(markdown)
+    save_path.write_text(markdown, encoding="utf-8")
 
     from src.grounding.search import GroundingEngine
     engine = GroundingEngine(
@@ -410,6 +410,7 @@ async def extract_upload(
         "persona_count": len(structured.personas),
         "indexed": indexed,
         "markdown": markdown,
+        "know_your_market": structured.know_your_market,
         "missing_sections": structured.missing_sections,
         "completeness_score": max(0, 100 - len(structured.missing_sections) * 10),
     }
@@ -971,7 +972,7 @@ def get_artifact_preview(skill_id: str, house_id: str):
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return HTMLResponse(open("src/web/index.html").read())
+    return HTMLResponse(open("src/web/index.html", encoding="utf-8").read(), media_type="text/html; charset=utf-8")
 
 
 if __name__ == "__main__":

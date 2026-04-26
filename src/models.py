@@ -12,6 +12,7 @@ class SectionType(str, Enum):
     HEADLINE = "headline"
     SUBHEAD = "subhead"
     BENEFIT = "benefit"
+    USE_CASE = "use_case"
     PROOF_POINT = "proof_point"
     OBJECTION = "objection"
     SOCIAL_PROOF = "social_proof"

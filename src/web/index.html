@@ -428,6 +428,13 @@
                         <div class="completeness-bar"><div class="completeness-fill" id="completeness-fill" style="width:0%"></div></div>
                         <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;" id="completeness-label"></div>
                     </div>
+                    <div id="kym-card" style="display:none;" class="card">
+                        <div class="card-header" style="margin-bottom:10px;">
+                            <div class="card-title">Know Your Market</div>
+                            <div style="font-size:12px;color:var(--text-2);">Pre-section research extracted from the document</div>
+                        </div>
+                        <div id="kym-content" class="markdown-preview"></div>
+                    </div>
                     <div id="missing-sections-card" style="display:none;" class="card">
                         <div class="card-header" style="margin-bottom:10px;">
                             <div class="card-title">Missing Sections</div>
@@ -826,7 +833,7 @@ async function viewHouse(id) {
         document.getElementById('messages-count').textContent = `${house.key_messages.length} messages`;
         document.getElementById('personas-count').textContent = `${house.personas.length} personas`;
 
-        const sectionLabels = {headline:'Headline',subhead:'Subhead',benefit:'Benefit',proof_point:'Proof Point',objection:'Objection',social_proof:'Social Proof',positioning:'Positioning'};
+        const sectionLabels = {headline:'Headline',subhead:'Subhead',benefit:'Benefit',use_case:'Use Case',proof_point:'Proof Point',objection:'Objection',social_proof:'Social Proof',positioning:'Positioning'};
         const grouped = {};
         house.key_messages.forEach(m => { (grouped[m.section_type] = grouped[m.section_type] || []).push(m); });
         const ml = document.getElementById('detail-messages-list');
@@ -1031,6 +1038,10 @@ async function processUploadedFile() {
         document.getElementById('completeness-fill').style.width = score + '%';
         document.getElementById('completeness-label').textContent = `Completeness: ${score}% · ${(data.missing_sections||[]).length} sections missing`;
         document.getElementById('extraction-result').style.display = 'block';
+        if (data.know_your_market) {
+            document.getElementById('kym-card').style.display = 'block';
+            document.getElementById('kym-content').textContent = data.know_your_market;
+        }
         renderMissingSections(data.missing_sections || [], data.id);
         toast(`"${data.name}" created successfully`, 'success');
     } catch (e) {

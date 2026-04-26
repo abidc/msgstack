@@ -17,67 +17,95 @@ class StructuredHouse(BaseModel):
     differentiation: str
     key_messages: list[dict]
     personas: list[dict]
+    know_your_market: str = Field(default="")
     missing_sections: list[str] = Field(default_factory=list)
 
-REQUIRED_SECTIONS = ["summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"]
-REQUIRED_MESSAGE_TYPES = ["headline", "benefit", "proof_point", "objection"]
+REQUIRED_SECTIONS = ["summary", "audience", "positioning", "tagline", "differentiation"]
+REQUIRED_MESSAGE_TYPES = ["headline", "benefit", "proof_point"]
 
 
 STRUCTURER_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete MessageHouse in markdown format.
 
-Follow this EXACT structure:
+The document may use a variety of section names and structures. Common patterns include:
+- "Know Your Market" or "Know Your Customer" — pre-section research (Vision, Audience, Before/After, Problem, Solution, Credibility, FOMO, Competition, CTA)
+- "Umbrella Message Headline" → tagline
+- "Top 3 Value Pillars" or "Value Pillars" → benefits
+- "What It Does", "Elevator Pitch", "One-Paragraph Product Description" → summary/positioning
+- "Key Use Cases", "Top Use Cases" → use cases
+- "Customer Proof Points" → proof points
+- Explicit messaging house sections (Summary, Audience, Positioning, Differentiation, etc.)
+
+Follow this EXACT output structure:
 
 ```markdown
-# {Name}
+# PRODUCT NAME
+
+## Know Your Market
+**Vision:** WHY WAS THIS BUILT
+**Audience:** BUYERS AND USERS
+**Before:** STATE WITHOUT THIS SOLUTION
+**After:** STATE WITH THIS SOLUTION
+**Key Problem:** THE ONE CORE PROBLEM
+**Solution:** HOW IT IS DIFFERENT
+**Credibility:** STATS AND PROOF
+**FOMO:** URGENCY IF THEY DONT BUY
+**Competition:** COMPETITORS
+**The Win:** THE BIG OUTCOME
+**Call to Action:** CTA 3 WORDS OR FEWER
 
 ## Summary
-{2-3 sentence overview of the product/solution}
+2-3 SENTENCE OVERVIEW FROM WHAT IT DOES / ELEVATOR PITCH / PRODUCT DESCRIPTION
 
 ## Target Audience
-{Who this is for — persona name, role, company size, key characteristics}
+WHO THIS IS FOR - BUYER TITLES USER ROLES CHARACTERISTICS
 
 ## Brand Personality
-{Tone, voice, word choices — what the brand sounds like}
+TONE VOICE WORD CHOICES
 
 ## Positioning
-{The core positioning statement — what it is, who it's for, why it's different}
+CORE POSITIONING STATEMENT
 
 ## Tagline
-{One punchy tagline (7 words or fewer)}
+ONE PUNCHY TAGLINE 7 WORDS OR FEWER
 
 ## Differentiation
-{What sets this apart from competitors in 2-3 key ways}
+WHAT SETS THIS APART FROM COMPETITORS
 
 ## Key Messages
 
 ### Headlines (Priority 1-2)
-- {Strong headline copy}
+- FROM UMBRELLA MESSAGE HEADLINE OR STRONGEST HEADLINE
 
 ### Benefits (Priority 1-3)
-- {Benefit statement}
+- FROM TOP VALUE PILLARS ONE PER PILLAR
 
-### Proof Points (Priority 1-2)
-- {Social proof, stats, customer evidence}
+### Use Cases (Priority 1-3)
+- FROM KEY USE CASES TABLE CAPABILITY NAME PLUS CUSTOMER BENEFIT
+
+### Proof Points (Priority 1-3)
+- FROM CUSTOMER PROOF POINTS TABLE CUSTOMER PLUS RESULT WITH METRIC
 
 ### Objections (Priority 1-2)
-- {Common objections + rebuttal}
+- COMMON OBJECTIONS FROM FOMO OR COMPETITION SECTIONS WITH REBUTTAL
 
 ## Personas
 
-### {Persona Name}
-**Role:** {Their job title}
-**Pain Points:** {What frustrates them}
-**Buying Triggers:** {What makes them buy}
-**Objections:** {What stops them}
+### PERSONA NAME
+**Role:** JOB TITLE FROM AUDIENCE SECTION
+**Pain Points:** FROM BEFORE STATE OR PROBLEM SECTION
+**Buying Triggers:** FROM WIN OR CREDIBILITY SECTIONS
+**Objections:** FROM FOMO OR COMPETITION SECTIONS
 ```
 
 Rules:
-- Extract REAL content from the document. Do not invent messaging.
-- Headlines: benefit-led, specific, credible
-- Benefits: lead with outcomes, not features
-- Proof points: pull actual stats/quotes from the document when present
+- Extract REAL content from the document verbatim or very close. Do not invent messaging.
+- If a "Know Your Market" or similar pre-section exists, extract ALL its fields.
+- Map Umbrella Message Headline → Tagline (and also to Headlines key message)
+- Map each Value Pillar → one Benefit key message, include its proof point inline
+- Map each Use Case row → one Use Case key message
+- Map each Customer Proof Point row → one Proof Point key message
+- Infer Personas from the Audience section (create one persona per buyer/user role)
 - If information is missing, mark as "[Not found in source]" — do not fabricate
-- Prioritize the most compelling, high-signal content
 
 SOURCE DOCUMENT:
 {content}
@@ -150,6 +178,7 @@ class HouseStructurer:
             differentiation=sections.get("differentiation", ""),
             key_messages=key_messages,
             personas=personas,
+            know_your_market=sections.get("know_your_market", ""),
         )
         house.missing_sections = self._find_missing(house)
         return house
@@ -183,6 +212,7 @@ class HouseStructurer:
         section_map = {
             "headlines": ("headline", 1),
             "benefits": ("benefit", 1),
+            "use_cases": ("use_case", 2),
             "proof_points": ("proof_point", 1),
             "objections": ("objection", 1),
             "subheads": ("subhead", 2),
@@ -197,7 +227,12 @@ class HouseStructurer:
             if not stripped:
                 continue
             if stripped.startswith("### "):
-                section_name = stripped[4:].strip().lower().replace(" ", "_")
+                # Normalize: strip "(Priority X-Y)" suffixes, collapse to key word
+                raw_name = stripped[4:].strip().lower()
+                # Remove parenthetical qualifiers like "(Priority 1-2)"
+                import re as _re
+                raw_name = _re.sub(r'\s*\([^)]*\)', '', raw_name).strip()
+                section_name = raw_name.replace(" ", "_")
                 current_section, current_priority = section_map.get(
                     section_name, (section_name, 3)
                 )
@@ -268,6 +303,8 @@ class HouseStructurer:
     def to_markdown(self, house: StructuredHouse) -> str:
         """Render a StructuredHouse back to markdown."""
         lines = [f"# {house.name}", ""]
+        if house.know_your_market:
+            lines.append(f"## Know Your Market\n{house.know_your_market}")
         lines.append(f"## Summary\n{house.summary}")
         lines.append(f"\n## Target Audience\n{house.audience}")
         lines.append(f"\n## Brand Personality\n{house.brand_personality}")
@@ -277,7 +314,7 @@ class HouseStructurer:
 
         if house.key_messages:
             lines.append("\n## Key Messages")
-            section_order = ["headline", "subhead", "benefit", "proof_point", "objection", "social_proof"]
+            section_order = ["headline", "subhead", "benefit", "use_case", "proof_point", "objection", "social_proof"]
             from collections import defaultdict
             by_section = defaultdict(list)
             for m in house.key_messages:
