@@ -621,27 +621,194 @@ def generate_artifact(
 
 
 @app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)
-def serve_prefab_artifact(artifact_type: str, house_id: str, stage: str = "awareness", channels: str = "linkedin"):
-    """Serve a fully-rendered Prefab artifact as a standalone HTML page."""
-    from src.artifacts.generators import build_one_pager, build_social_posts, build_email_template
+def serve_artifact(artifact_type: str, house_id: str, stage: str = "awareness", channels: str = "linkedin"):
+    """Serve a standalone HTML artifact page for a message house."""
     try:
-        hid = str(UUID(house_id))
+        hid = UUID(house_id)
     except ValueError:
         raise HTTPException(400, "Invalid house_id UUID")
 
+    valid_types = ["one_pager", "social_posts", "email_template"]
+    if artifact_type not in valid_types:
+        raise HTTPException(400, f"Unknown artifact_type. Use: {', '.join(valid_types)}")
+
+    house = store.get_house(hid)
+    if not house:
+        raise HTTPException(404, "House not found")
+
+    messages = store.get_key_messages(hid)
+    personas = store.get_personas(hid)
+
+    # Group messages by section type
+    grouped: dict[str, list] = {}
+    for m in messages:
+        key = str(m.section_type).replace("_", " ").title()
+        grouped.setdefault(key, []).append(m.content)
+
     if artifact_type == "one_pager":
-        app_obj = build_one_pager(hid)
+        html = _render_one_pager(house, grouped, personas)
     elif artifact_type == "social_posts":
-        app_obj = build_social_posts(hid, channels.split(","))
-    elif artifact_type == "email_template":
-        app_obj = build_email_template(hid, stage)
+        target = channels.split(",")
+        html = _render_social_posts(house, messages, target)
     else:
-        raise HTTPException(400, f"Unknown artifact_type '{artifact_type}'. Use: one_pager, social_posts, email_template")
+        html = _render_email_template(house, messages, stage)
 
-    if isinstance(app_obj, dict) and "error" in app_obj:
-        raise HTTPException(404, app_obj["error"])
+    return HTMLResponse(content=html)
 
-    return HTMLResponse(content=app_obj.html(renderer_mode="bundled"))
+
+def _base_html(title: str, body: str) -> str:
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+  <div class="max-w-4xl mx-auto py-10 px-4 space-y-6">
+{body}
+  </div>
+</body>
+</html>"""
+
+
+def _card(content: str, cls: str = "") -> str:
+    return f'<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 {cls}">{content}</div>'
+
+
+def _render_one_pager(house, grouped: dict, personas: list) -> str:
+    last_synced = house.last_synced.strftime("%Y-%m-%d") if house.last_synced else "—"
+
+    header = f"""
+    <div class="flex items-start justify-between flex-wrap gap-2">
+      <div>
+        <h1 class="text-2xl font-bold">{house.name}</h1>
+        <p class="text-gray-500 mt-1">{house.audience or ""}</p>
+      </div>
+      <span class="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full uppercase tracking-wide">One Pager</span>
+    </div>"""
+
+    positioning = f"""
+    <h2 class="text-lg font-semibold mb-3">Positioning</h2>
+    <p class="text-gray-700 leading-relaxed">{house.positioning or "—"}</p>
+    {"<p class='mt-3 inline-block bg-blue-50 text-blue-700 text-sm px-3 py-1 rounded-full'>"+house.tagline+"</p>" if house.tagline else ""}
+    {"<p class='mt-3 text-sm text-gray-500'>"+house.differentiation+"</p>" if house.differentiation else ""}"""
+
+    sections_html = ""
+    section_order = ["Headline", "Subhead", "Benefit", "Proof Point", "Objection", "Social Proof", "Positioning"]
+    for sec in section_order:
+        msgs = grouped.get(sec, [])
+        if not msgs:
+            continue
+        items = "".join(
+            f'<li class="flex gap-2"><span class="text-gray-400 font-mono text-xs mt-1">{i+1}</span><span class="text-gray-700">{m}</span></li>'
+            for i, m in enumerate(msgs[:5])
+        )
+        sections_html += f"""
+      <div>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-2">{sec}</h3>
+        <ul class="space-y-2">{items}</ul>
+      </div>"""
+
+    key_messages = f'<h2 class="text-lg font-semibold mb-4">Key Messages</h2><div class="space-y-5">{sections_html}</div>'
+
+    persona_cards = ""
+    for p in personas:
+        pain = "".join(f'<li class="text-sm text-gray-600">• {pp}</li>' for pp in (p.pain_points or [])[:3])
+        persona_cards += f"""
+      <div class="border border-gray-200 rounded-lg p-4">
+        <h3 class="font-semibold">{p.name}</h3>
+        <p class="text-sm text-gray-500 mt-1">{(p.description or "")[:150]}</p>
+        {"<ul class='mt-2 space-y-1'>"+pain+"</ul>" if pain else ""}
+      </div>"""
+
+    personas_section = f'<h2 class="text-lg font-semibold mb-3">Personas</h2><div class="grid grid-cols-1 sm:grid-cols-2 gap-4">{persona_cards}</div>'
+
+    footer = f'<p class="text-xs text-gray-400 text-center">Last synced: {last_synced} · {len(house.positioning or "")} chars positioning · msgstack MCP</p>'
+
+    body = (
+        _card(header)
+        + "\n    " + _card(positioning)
+        + "\n    " + _card(key_messages)
+        + "\n    " + _card(personas_section)
+        + "\n    " + footer
+    )
+    return _base_html(f"{house.name} — One Pager", body)
+
+
+def _render_social_posts(house, messages: list, channels: list) -> str:
+    posts = []
+    for m in messages:
+        for ch in channels:
+            variant = (m.variants or {}).get(ch)
+            if variant:
+                posts.append((ch.title(), str(m.section_type).replace("_", " ").title(), variant))
+
+    if not posts:
+        posts_html = '<p class="text-gray-500">No channel variants found for these channels.</p>'
+    else:
+        posts_html = ""
+        for ch, sec, content in posts:
+            posts_html += f"""
+      <div class="border border-gray-200 rounded-lg p-4">
+        <div class="flex gap-2 mb-3">
+          <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{ch}</span>
+          <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{sec}</span>
+        </div>
+        <p class="text-gray-700 whitespace-pre-wrap text-sm">{content}</p>
+      </div>"""
+
+    header = f'<h1 class="text-2xl font-bold">{house.name}</h1><p class="text-gray-500 mt-1">Social posts for: {", ".join(channels)}</p>'
+    body_content = f'<h2 class="text-lg font-semibold mb-3">Posts</h2><div class="space-y-4">{posts_html}</div>'
+    body = _card(header) + "\n    " + _card(body_content)
+    return _base_html(f"{house.name} — Social Posts", body)
+
+
+def _render_email_template(house, messages: list, stage: str) -> str:
+    headlines = [m for m in messages if str(m.section_type) == "headline"]
+    benefits = [m for m in messages if str(m.section_type) == "benefit"]
+    proofs = [m for m in messages if str(m.section_type) == "proof_point"]
+
+    stage_map = {
+        "awareness": {
+            "subject": headlines[0].content[:70] if headlines else house.tagline or "",
+            "hook": benefits[0].content if benefits else house.positioning,
+            "body": house.differentiation or house.positioning,
+            "cta": "See how it works →",
+        },
+        "consideration": {
+            "subject": f"How teams like yours use {house.name}",
+            "hook": proofs[0].content if proofs else benefits[0].content if benefits else "",
+            "body": house.positioning,
+            "cta": "Book a 30-min demo →",
+        },
+        "decision": {
+            "subject": f"Ready to get started with {house.name}?",
+            "hook": benefits[0].variants.get("email", benefits[0].content) if benefits and benefits[0].variants else (benefits[0].content if benefits else ""),
+            "body": house.differentiation or house.positioning,
+            "cta": "Start your free trial →",
+        },
+    }
+    content = stage_map.get(stage, stage_map["awareness"])
+
+    def field(label: str, value: str) -> str:
+        return f"""
+      <div class="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+        <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">{label}</p>
+        <p class="text-gray-800">{value}</p>
+      </div>"""
+
+    email_content = (
+        field("Subject line", content["subject"])
+        + field("Opening hook", content["hook"])
+        + field("Body copy", content["body"])
+        + field("Call to action", content["cta"])
+    )
+    stage_label = stage.title()
+    header = f'<h1 class="text-2xl font-bold">{house.name}</h1><p class="text-gray-500 mt-1">Email template · {stage_label} stage</p>'
+    body = _card(header) + "\n    " + _card(f'<h2 class="text-lg font-semibold mb-4">Email Content</h2><div class="space-y-4">{email_content}</div>')
+    return _base_html(f"{house.name} — Email ({stage_label})", body)
 
 
 @app.get("/api/preview/{skill_id}/{house_id}")
