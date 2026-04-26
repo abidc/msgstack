@@ -287,18 +287,18 @@ def generate_artifact(
     return artifact.raw_content
 
 
-@mcp.tool()
+@mcp.tool(app=True)
 def build_ui_artifact(
     artifact_type: str,
     house_id: Optional[str] = None,
     house_name: Optional[str] = None,
     stage: Optional[str] = None,
     channels: Optional[list[str]] = None,
-) -> dict:
-    """Build a visual Prefab UI artifact and return a clickable URL to open it.
+):
+    """Build an interactive visual UI artifact for a message house.
 
-    Present the artifact_url as a clickable link to the user. The URL opens
-    a fully-rendered interactive UI in the browser.
+    Renders a full interactive Prefab UI in clients that support it (Claude Desktop).
+    For other clients, also returns a public URL to open in the browser.
 
     Args:
         artifact_type: one_pager | social_posts | email_template
@@ -307,35 +307,32 @@ def build_ui_artifact(
         stage: For email_template only: awareness | consideration | decision
         channels: For social_posts only: e.g. ["linkedin"]
     """
+    from src.artifacts.generators import build_one_pager, build_social_posts, build_email_template
+
     store = Store()
     store.init()
     house = _resolve_house(store, house_id, house_name)
     if not house:
         all_houses = store.list_houses()
-        return {
-            "error": "House not found. Specify house_name from the list below.",
-            "available_houses": [{"name": h.name, "id": str(h.id)} for h in all_houses],
-        }
+        names = ", ".join(h.name for h in all_houses)
+        return f"House not found. Available: {names}"
 
     valid_types = ["one_pager", "social_posts", "email_template"]
     if artifact_type not in valid_types:
-        return {"error": f"Unknown artifact_type '{artifact_type}'. Choose: {', '.join(valid_types)}"}
+        return f"Unknown artifact_type '{artifact_type}'. Choose: {', '.join(valid_types)}"
 
-    base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
-    params = ""
-    if artifact_type == "email_template" and stage:
-        params = f"?stage={stage}"
-    elif artifact_type == "social_posts" and channels:
-        params = f"?channels={','.join(channels)}"
+    hid = str(house.id)
+    if artifact_type == "one_pager":
+        app_obj = build_one_pager(hid)
+    elif artifact_type == "social_posts":
+        app_obj = build_social_posts(hid, channels or ["linkedin"])
+    else:
+        app_obj = build_email_template(hid, stage or "awareness")
 
-    artifact_url = f"{base_url}/artifact/{artifact_type}/{house.id}{params}"
+    if isinstance(app_obj, dict) and "error" in app_obj:
+        return app_obj["error"]
 
-    return {
-        "artifact_type": artifact_type,
-        "house_name": house.name,
-        "artifact_url": artifact_url,
-        "message": f"Open this URL to view the interactive {artifact_type.replace('_', ' ')} for {house.name}: {artifact_url}",
-    }
+    return app_obj
 
 
 @mcp.tool()
