@@ -721,6 +721,7 @@ _SECTION_META = {
     "Headline":    {"icon": "✦", "color": "#6366f1", "bg": "#eef2ff"},
     "Subhead":     {"icon": "◈", "color": "#8b5cf6", "bg": "#f5f3ff"},
     "Benefit":     {"icon": "◉", "color": "#059669", "bg": "#ecfdf5"},
+    "Use Case":    {"icon": "⬡", "color": "#0891b2", "bg": "#ecfeff"},
     "Proof Point": {"icon": "◆", "color": "#0284c7", "bg": "#e0f2fe"},
     "Objection":   {"icon": "◇", "color": "#dc2626", "bg": "#fef2f2"},
     "Social Proof":{"icon": "★", "color": "#d97706", "bg": "#fffbeb"},
@@ -812,7 +813,7 @@ def _render_one_pager(house, grouped: dict, personas: list) -> str:
     </div>"""
 
     # Key messages grid
-    section_order = ["Headline", "Subhead", "Benefit", "Proof Point", "Objection", "Social Proof", "Positioning"]
+    section_order = ["Headline", "Subhead", "Benefit", "Use Case", "Proof Point", "Objection", "Social Proof", "Positioning"]
     blocks = ""
     for sec in section_order:
         msgs = grouped.get(sec, [])
