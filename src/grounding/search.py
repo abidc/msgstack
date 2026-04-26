@@ -83,9 +83,10 @@ class GroundingEngine:
         section_map = {
             "headline": ["headline", "headlines"],
             "subhead": ["subhead", "subheadline", "sub-head"],
-            "benefit": ["benefit", "benefits", "value prop", "value proposition"],
-            "proof": ["proof", "proof point", "social proof", "testimonial"],
-            "objection": ["objection", "objections", "rebuttal", "克服"],
+            "benefit": ["benefit", "benefits", "value prop", "value proposition", "value pillar", "pillar"],
+            "use_case": ["use case", "use cases", "capability", "capabilities", "how it works", "top use"],
+            "proof_point": ["proof", "proof point", "social proof", "testimonial", "customer story", "case study", "evidence"],
+            "objection": ["objection", "objections", "rebuttal", "concern"],
             "positioning": ["positioning", "position", "frame"],
         }
         for section, keywords in section_map.items():
@@ -160,12 +161,17 @@ class GroundingEngine:
 
         for match in matches[:top_k]:
             meta = match.get("metadata", {})
+            raw_st = meta.get("section_type", "positioning")
+            try:
+                st = SectionType(raw_st)
+            except ValueError:
+                st = SectionType.POSITIONING
             chunk = GroundingChunk(
                 id=match["id"],
                 message_house_id=UUID(meta.get("message_house_id", "00000000-0000-0000-0000-000000000000")),
                 key_message_id=UUID(meta.get("key_message_id")) if meta.get("key_message_id") else None,
                 content=meta.get("content", ""),
-                section_type=SectionType(meta.get("section_type", "positioning")),
+                section_type=st,
                 priority=int(meta.get("priority", 3)),
                 persona=meta.get("persona"),
                 channel=Channel(meta.get("channel", "all")),
@@ -293,6 +299,13 @@ class GroundingEngine:
         if not house:
             raise ValueError(f"House {house_id} not found")
 
+        base_meta = {
+            "message_house_id": str(house_id),
+            "house_name": house.name,
+            "house_summary": house.summary,
+            "last_synced": house.last_synced.isoformat() if house.last_synced else None,
+        }
+
         messages = self.store.get_key_messages(house_id)
         vectors = []
         for msg in messages:
@@ -303,19 +316,65 @@ class GroundingEngine:
                     "id": f"chunk-{msg.id}",
                     "values": vec,
                     "metadata": {
+                        **base_meta,
                         "content": content,
                         "section_type": str(msg.section_type),
                         "priority": msg.priority,
                         "persona": msg.personas[0] if msg.personas else "general",
                         "channel": str(msg.channels[0]) if msg.channels else "all",
-                        "message_house_id": str(house_id),
                         "key_message_id": str(msg.id),
-                        "house_name": house.name,
-                        "house_summary": house.summary,
-                        "last_synced": house.last_synced.isoformat() if house.last_synced else None,
                     },
                 }
             )
+
+        # Index summary, audience, positioning, differentiation as searchable chunks
+        for field, st, priority in [
+            ("summary", "positioning", 1),
+            ("audience", "positioning", 1),
+            ("positioning", "positioning", 1),
+            ("differentiation", "positioning", 2),
+            ("tagline", "headline", 1),
+        ]:
+            text = getattr(house, field, "") or ""
+            if text and text != "[Not found in source]":
+                vec = self._embed(text)
+                vectors.append({
+                    "id": f"field-{house_id}-{field}",
+                    "values": vec,
+                    "metadata": {
+                        **base_meta,
+                        "content": text,
+                        "section_type": st,
+                        "priority": priority,
+                        "persona": "general",
+                        "channel": "all",
+                    },
+                })
+
+        # Index know_your_market from saved markdown file
+        kym_path = __import__("pathlib").Path("data/frames") / f"{house_id}.md"
+        if kym_path.exists():
+            md = kym_path.read_text(encoding="utf-8")
+            # Extract the Know Your Market block
+            if "## Know Your Market" in md:
+                kym_start = md.index("## Know Your Market") + len("## Know Your Market")
+                next_section = md.find("\n## ", kym_start)
+                kym_text = md[kym_start: next_section if next_section != -1 else kym_start + 2000].strip()
+                if kym_text:
+                    vec = self._embed(kym_text[:1500])
+                    vectors.append({
+                        "id": f"kym-{house_id}",
+                        "values": vec,
+                        "metadata": {
+                            **base_meta,
+                            "content": kym_text[:1500],
+                            "section_type": "positioning",
+                            "priority": 1,
+                            "persona": "general",
+                            "channel": "all",
+                        },
+                    })
+
         if vectors:
             self.index.upsert(vectors=vectors, namespace=self.namespace)
         return len(vectors)
