@@ -89,15 +89,27 @@ class ArtifactGenerator:
         personas: list[Persona],
         custom: dict,
     ) -> dict:
+        key_messages_str = "\n".join(
+            f"- {str(m.section_type)}: {m.content}" for m in messages[:10]
+        )
+        persona_names = ", ".join(p.name for p in personas[:3])
+        context_block = (
+            f"Positioning: {house.positioning}\n"
+            f"Tagline: {house.tagline}\n"
+            f"Differentiation: {house.differentiation}\n"
+            f"Audience: {house.audience}\n"
+            f"Brand personality: {house.brand_personality}\n"
+            f"Personas: {persona_names}\n"
+            f"Key messages:\n{key_messages_str}"
+        )
         context = {
             "house_name": house.name,
             "positioning": house.positioning,
             "tagline": house.tagline,
             "differentiation": house.differentiation,
             "audience": house.audience,
-            "key_messages": "\n".join(
-                f"- {str(m.section_type)}: {m.content}" for m in messages[:10]
-            ),
+            "key_messages": key_messages_str,
+            "context": context_block,
             "primary_message": messages[0].content if messages else "",
             "persona": personas[0].name if personas else "",
             "objections": ", ".join(personas[0].objections[:3]) if personas and personas[0].objections else "",
