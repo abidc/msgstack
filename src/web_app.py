@@ -656,85 +656,145 @@ def serve_artifact(artifact_type: str, house_id: str, stage: str = "awareness", 
     return HTMLResponse(content=html)
 
 
-def _base_html(title: str, body: str) -> str:
+_SECTION_META = {
+    "Headline":    {"icon": "✦", "color": "#6366f1", "bg": "#eef2ff"},
+    "Subhead":     {"icon": "◈", "color": "#8b5cf6", "bg": "#f5f3ff"},
+    "Benefit":     {"icon": "◉", "color": "#059669", "bg": "#ecfdf5"},
+    "Proof Point": {"icon": "◆", "color": "#0284c7", "bg": "#e0f2fe"},
+    "Objection":   {"icon": "◇", "color": "#dc2626", "bg": "#fef2f2"},
+    "Social Proof":{"icon": "★", "color": "#d97706", "bg": "#fffbeb"},
+    "Positioning": {"icon": "◎", "color": "#475569", "bg": "#f8fafc"},
+}
+
+_BASE_STYLES = """
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #f1f5f9; color: #0f172a; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+  .hero { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%); border-radius: 20px; padding: 52px 48px; margin-bottom: 24px; position: relative; overflow: hidden; }
+  .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 70% 50%, rgba(99,102,241,0.25) 0%, transparent 60%); }
+  .hero-label { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 12px; border-radius: 100px; margin-bottom: 20px; }
+  .hero h1 { font-size: 42px; font-weight: 800; color: #fff; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 12px; position: relative; }
+  .hero-tagline { font-size: 18px; color: rgba(255,255,255,0.65); font-weight: 400; line-height: 1.5; margin-bottom: 24px; position: relative; max-width: 580px; }
+  .hero-audience { display: inline-block; background: rgba(99,102,241,0.25); border: 1px solid rgba(99,102,241,0.4); color: #a5b4fc; font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 100px; position: relative; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04); }
+  .card-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card-label::after { content: ''; flex: 1; height: 1px; background: #f1f5f9; }
+  .positioning-text { font-size: 17px; color: #334155; line-height: 1.7; font-weight: 400; }
+  .diff-text { margin-top: 16px; font-size: 14px; color: #64748b; line-height: 1.6; padding-left: 16px; border-left: 3px solid #e2e8f0; }
+  .messages-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 640px) { .messages-grid { grid-template-columns: 1fr; } }
+  .section-block { border-radius: 12px; padding: 20px; }
+  .section-icon { font-size: 14px; margin-right: 6px; }
+  .section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; }
+  .msg-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
+  .msg-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .msg-num { min-width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; margin-top: 1px; flex-shrink: 0; }
+  .msg-text { font-size: 13.5px; color: #334155; line-height: 1.5; }
+  .personas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  .persona-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; background: #fafafa; }
+  .persona-avatar { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+  .persona-name { font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 4px; }
+  .persona-desc { font-size: 12.5px; color: #64748b; line-height: 1.5; margin-bottom: 12px; }
+  .pain-tag { display: inline-block; background: #fef2f2; color: #dc2626; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 6px; margin: 2px 2px 0 0; }
+  .footer { text-align: center; margin-top: 32px; }
+  .footer-badge { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e2e8f0; color: #94a3b8; font-size: 11px; font-weight: 500; padding: 6px 14px; border-radius: 100px; }
+  .post-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px; margin-bottom: 16px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .post-badge { display: inline-flex; align-items: center; gap-4px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; margin-right: 6px; margin-bottom: 14px; }
+  .post-text { font-size: 15px; color: #1e293b; line-height: 1.7; white-space: pre-wrap; }
+  .email-field { padding: 20px 0; border-bottom: 1px solid #f1f5f9; }
+  .email-field:last-child { border-bottom: none; }
+  .email-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; }
+  .email-value { font-size: 15px; color: #1e293b; line-height: 1.6; }
+  .email-value.subject { font-size: 18px; font-weight: 600; }
+  .email-value.cta { font-size: 16px; font-weight: 600; color: #6366f1; }
+  .stage-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .stage-tab { padding: 6px 16px; border-radius: 100px; font-size: 12px; font-weight: 600; border: 1.5px solid #e2e8f0; color: #64748b; text-decoration: none; }
+  .stage-tab.active { background: #0f172a; color: #fff; border-color: #0f172a; }
+"""
+
+
+def _base_html(title: str, body: str, extra_styles: str = "") -> str:
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <style>{_BASE_STYLES}{extra_styles}</style>
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen">
-  <div class="max-w-4xl mx-auto py-10 px-4 space-y-6">
+<body>
+  <div class="page">
 {body}
   </div>
 </body>
 </html>"""
 
 
-def _card(content: str, cls: str = "") -> str:
-    return f'<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 {cls}">{content}</div>'
-
-
 def _render_one_pager(house, grouped: dict, personas: list) -> str:
     last_synced = house.last_synced.strftime("%Y-%m-%d") if house.last_synced else "—"
+    msg_count = sum(len(v) for v in grouped.values())
 
-    header = f"""
-    <div class="flex items-start justify-between flex-wrap gap-2">
-      <div>
-        <h1 class="text-2xl font-bold">{house.name}</h1>
-        <p class="text-gray-500 mt-1">{house.audience or ""}</p>
-      </div>
-      <span class="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full uppercase tracking-wide">One Pager</span>
+    # Hero
+    hero = f"""<div class="hero">
+      <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Message House</div>
+      <h1>{house.name}</h1>
+      <p class="hero-tagline">{house.tagline or house.positioning[:100] if house.positioning else ""}</p>
+      {"<span class='hero-audience'>"+house.audience+"</span>" if house.audience else ""}
     </div>"""
 
-    positioning = f"""
-    <h2 class="text-lg font-semibold mb-3">Positioning</h2>
-    <p class="text-gray-700 leading-relaxed">{house.positioning or "—"}</p>
-    {"<p class='mt-3 inline-block bg-blue-50 text-blue-700 text-sm px-3 py-1 rounded-full'>"+house.tagline+"</p>" if house.tagline else ""}
-    {"<p class='mt-3 text-sm text-gray-500'>"+house.differentiation+"</p>" if house.differentiation else ""}"""
+    # Positioning card
+    pos_card = f"""<div class="card">
+      <div class="card-label">Positioning</div>
+      <p class="positioning-text">{house.positioning or "—"}</p>
+      {"<p class='diff-text'>"+house.differentiation+"</p>" if house.differentiation else ""}
+    </div>"""
 
-    sections_html = ""
+    # Key messages grid
     section_order = ["Headline", "Subhead", "Benefit", "Proof Point", "Objection", "Social Proof", "Positioning"]
+    blocks = ""
     for sec in section_order:
         msgs = grouped.get(sec, [])
         if not msgs:
             continue
+        meta = _SECTION_META.get(sec, {"icon": "◉", "color": "#475569", "bg": "#f8fafc"})
         items = "".join(
-            f'<li class="flex gap-2"><span class="text-gray-400 font-mono text-xs mt-1">{i+1}</span><span class="text-gray-700">{m}</span></li>'
-            for i, m in enumerate(msgs[:5])
+            f'<div class="msg-item"><span class="msg-num" style="background:{meta["bg"]};color:{meta["color"]}">{i+1}</span><span class="msg-text">{m}</span></div>'
+            for i, m in enumerate(msgs[:4])
         )
-        sections_html += f"""
-      <div>
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-2">{sec}</h3>
-        <ul class="space-y-2">{items}</ul>
+        blocks += f"""<div class="section-block" style="background:{meta["bg"]}">
+        <div class="section-title" style="color:{meta["color"]}"><span class="section-icon">{meta["icon"]}</span>{sec}</div>
+        {items}
       </div>"""
 
-    key_messages = f'<h2 class="text-lg font-semibold mb-4">Key Messages</h2><div class="space-y-5">{sections_html}</div>'
+    msgs_card = f"""<div class="card">
+      <div class="card-label">Key Messages &nbsp;·&nbsp; {msg_count} total</div>
+      <div class="messages-grid">{blocks}</div>
+    </div>"""
 
-    persona_cards = ""
+    # Personas
+    persona_items = ""
     for p in personas:
-        pain = "".join(f'<li class="text-sm text-gray-600">• {pp}</li>' for pp in (p.pain_points or [])[:3])
-        persona_cards += f"""
-      <div class="border border-gray-200 rounded-lg p-4">
-        <h3 class="font-semibold">{p.name}</h3>
-        <p class="text-sm text-gray-500 mt-1">{(p.description or "")[:150]}</p>
-        {"<ul class='mt-2 space-y-1'>"+pain+"</ul>" if pain else ""}
+        initials = "".join(w[0].upper() for w in p.name.split()[:2])
+        pain_tags = "".join(f'<span class="pain-tag">{pp[:40]}</span>' for pp in (p.pain_points or [])[:3])
+        persona_items += f"""<div class="persona-card">
+        <div class="persona-avatar">{initials}</div>
+        <div class="persona-name">{p.name}</div>
+        <div class="persona-desc">{(p.description or "")[:160]}</div>
+        {pain_tags}
       </div>"""
 
-    personas_section = f'<h2 class="text-lg font-semibold mb-3">Personas</h2><div class="grid grid-cols-1 sm:grid-cols-2 gap-4">{persona_cards}</div>'
+    personas_card = f"""<div class="card">
+      <div class="card-label">Target Personas &nbsp;·&nbsp; {len(personas)} defined</div>
+      <div class="personas-grid">{persona_items}</div>
+    </div>"""
 
-    footer = f'<p class="text-xs text-gray-400 text-center">Last synced: {last_synced} · {len(house.positioning or "")} chars positioning · msgstack MCP</p>'
+    footer = f"""<div class="footer">
+      <span class="footer-badge">⬡ msgstack MCP &nbsp;·&nbsp; {last_synced} &nbsp;·&nbsp; {msg_count} messages &nbsp;·&nbsp; {len(personas)} personas</span>
+    </div>"""
 
-    body = (
-        _card(header)
-        + "\n    " + _card(positioning)
-        + "\n    " + _card(key_messages)
-        + "\n    " + _card(personas_section)
-        + "\n    " + footer
-    )
-    return _base_html(f"{house.name} — One Pager", body)
+    body = hero + pos_card + msgs_card + personas_card + footer
+    return _base_html(f"{house.name} — Messaging One Pager", body)
 
 
 def _render_social_posts(house, messages: list, channels: list) -> str:
@@ -743,72 +803,92 @@ def _render_social_posts(house, messages: list, channels: list) -> str:
         for ch in channels:
             variant = (m.variants or {}).get(ch)
             if variant:
-                posts.append((ch.title(), str(m.section_type).replace("_", " ").title(), variant))
+                posts.append({
+                    "channel": ch.title(),
+                    "section": str(m.section_type).replace("_", " ").title(),
+                    "content": variant,
+                    "priority": m.priority,
+                })
+
+    ch_label = ", ".join(c.title() for c in channels)
+    hero = f"""<div class="hero">
+      <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Social Posts</div>
+      <h1>{house.name}</h1>
+      <p class="hero-tagline">{len(posts)} posts ready for {ch_label}</p>
+      {"<span class='hero-audience'>"+house.audience+"</span>" if house.audience else ""}
+    </div>"""
 
     if not posts:
-        posts_html = '<p class="text-gray-500">No channel variants found for these channels.</p>'
+        posts_html = '<div class="card"><p style="color:#64748b">No channel variants found. Add LinkedIn variants to your messages.</p></div>'
     else:
         posts_html = ""
-        for ch, sec, content in posts:
-            posts_html += f"""
-      <div class="border border-gray-200 rounded-lg p-4">
-        <div class="flex gap-2 mb-3">
-          <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{ch}</span>
-          <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{sec}</span>
+        ch_colors = {"linkedin": ("#0a66c2", "#e8f0fe"), "twitter": ("#000", "#f0f0f0"), "email": ("#6366f1", "#eef2ff")}
+        for post in posts:
+            meta = _SECTION_META.get(post["section"], {"icon": "◉", "color": "#475569", "bg": "#f8fafc"})
+            ch = post["channel"].lower()
+            ch_color, ch_bg = ch_colors.get(ch, ("#475569", "#f8fafc"))
+            posts_html += f"""<div class="post-card">
+        <div>
+          <span class="post-badge" style="background:{ch_bg};color:{ch_color}">{post['channel']}</span>
+          <span class="post-badge" style="background:{meta['bg']};color:{meta['color']}">{meta['icon']} {post['section']}</span>
         </div>
-        <p class="text-gray-700 whitespace-pre-wrap text-sm">{content}</p>
+        <p class="post-text">{post['content']}</p>
       </div>"""
 
-    header = f'<h1 class="text-2xl font-bold">{house.name}</h1><p class="text-gray-500 mt-1">Social posts for: {", ".join(channels)}</p>'
-    body_content = f'<h2 class="text-lg font-semibold mb-3">Posts</h2><div class="space-y-4">{posts_html}</div>'
-    body = _card(header) + "\n    " + _card(body_content)
-    return _base_html(f"{house.name} — Social Posts", body)
+    footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP</span></div>'
+    return _base_html(f"{house.name} — Social Posts", hero + posts_html + footer)
 
 
 def _render_email_template(house, messages: list, stage: str) -> str:
     headlines = [m for m in messages if str(m.section_type) == "headline"]
-    benefits = [m for m in messages if str(m.section_type) == "benefit"]
-    proofs = [m for m in messages if str(m.section_type) == "proof_point"]
+    benefits  = [m for m in messages if str(m.section_type) == "benefit"]
+    proofs    = [m for m in messages if str(m.section_type) == "proof_point"]
 
     stage_map = {
         "awareness": {
-            "subject": headlines[0].content[:70] if headlines else house.tagline or "",
+            "subject": headlines[0].content[:70] if headlines else (house.tagline or ""),
             "hook": benefits[0].content if benefits else house.positioning,
             "body": house.differentiation or house.positioning,
-            "cta": "See how it works →",
+            "cta": f"See how {house.name} works →",
         },
         "consideration": {
             "subject": f"How teams like yours use {house.name}",
-            "hook": proofs[0].content if proofs else benefits[0].content if benefits else "",
+            "hook": proofs[0].content if proofs else (benefits[0].content if benefits else house.positioning),
             "body": house.positioning,
             "cta": "Book a 30-min demo →",
         },
         "decision": {
             "subject": f"Ready to get started with {house.name}?",
-            "hook": benefits[0].variants.get("email", benefits[0].content) if benefits and benefits[0].variants else (benefits[0].content if benefits else ""),
+            "hook": (benefits[0].variants or {}).get("email", benefits[0].content) if benefits else house.positioning,
             "body": house.differentiation or house.positioning,
             "cta": "Start your free trial →",
         },
     }
     content = stage_map.get(stage, stage_map["awareness"])
-
-    def field(label: str, value: str) -> str:
-        return f"""
-      <div class="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
-        <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">{label}</p>
-        <p class="text-gray-800">{value}</p>
-      </div>"""
-
-    email_content = (
-        field("Subject line", content["subject"])
-        + field("Opening hook", content["hook"])
-        + field("Body copy", content["body"])
-        + field("Call to action", content["cta"])
+    stages = ["awareness", "consideration", "decision"]
+    tabs = "".join(
+        f'<span class="stage-tab {"active" if s == stage else ""}">{s.title()}</span>'
+        for s in stages
     )
-    stage_label = stage.title()
-    header = f'<h1 class="text-2xl font-bold">{house.name}</h1><p class="text-gray-500 mt-1">Email template · {stage_label} stage</p>'
-    body = _card(header) + "\n    " + _card(f'<h2 class="text-lg font-semibold mb-4">Email Content</h2><div class="space-y-4">{email_content}</div>')
-    return _base_html(f"{house.name} — Email ({stage_label})", body)
+
+    hero = f"""<div class="hero">
+      <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Email Template</div>
+      <h1>{house.name}</h1>
+      <p class="hero-tagline">{stage.title()} stage · outbound email</p>
+    </div>"""
+
+    email_card = f"""<div class="card">
+      <div class="card-label">Funnel Stage</div>
+      <div class="stage-tabs">{tabs}</div>
+      <div class="card-label" style="margin-top:8px">Email Content</div>
+      <div class="email-field"><div class="email-label">Subject Line</div><div class="email-value subject">{content['subject']}</div></div>
+      <div class="email-field"><div class="email-label">Opening Hook</div><div class="email-value">{content['hook']}</div></div>
+      <div class="email-field"><div class="email-label">Body Copy</div><div class="email-value">{content['body']}</div></div>
+      <div class="email-field"><div class="email-label">Call to Action</div><div class="email-value cta">{content['cta']}</div></div>
+    </div>"""
+
+    footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP</span></div>'
+    return _base_html(f"{house.name} — Email ({stage.title()})", hero + email_card + footer)
 
 
 @app.get("/api/preview/{skill_id}/{house_id}")
