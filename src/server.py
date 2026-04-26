@@ -85,7 +85,11 @@ def get_message_house(
 
 @mcp.tool()
 def list_message_houses(query: Optional[str] = None) -> dict:
-    """List all available messaging frameworks.
+    """List all available message houses with their IDs and summaries.
+
+    Call this FIRST whenever the user mentions a brand, product, or company
+    name — before calling any generate or search tool. Use the returned
+    house_id (UUID) for all subsequent tool calls.
 
     Args:
         query: Optional text search across house names and summaries.
@@ -247,20 +251,25 @@ def generate_artifact(
     house_name: Optional[str] = None,
     custom_context: Optional[dict] = None,
 ) -> str:
-    """Generate a marketing artifact grounded in a message house.
+    """Generate a marketing artifact grounded in a message house using the LLM.
 
-    Returns the complete artifact text. Display it in full to the user —
-    do not summarize or paraphrase it.
+    IMPORTANT: You MUST provide either house_id or house_name. If you don't
+    know the house ID or exact name, call list_message_houses first.
+
+    Returns the COMPLETE artifact text. You MUST display the full text verbatim
+    to the user — do NOT summarize, paraphrase, or describe it. Paste it all.
 
     Args:
-        skill_id: The artifact type: one_pager, linkedin_post, email_template,
-                  battlecard, press_release, blog_post, faq_document
-        house_id: UUID of the message house (from list_message_houses).
-        house_name: Name of the message house (alternative to house_id).
-        custom_context: Optional extra context for the prompt (e.g. event details).
+        skill_id: Artifact type — one of: one_pager, linkedin_post,
+                  email_template, battlecard, press_release, blog_post,
+                  faq_document
+        house_id: UUID from list_message_houses (preferred).
+        house_name: Exact house name as returned by list_message_houses.
+        custom_context: Optional extra context dict (e.g. {"stage": "decision"}).
     """
     from src.pipeline.generator import ArtifactGenerator
     from src.pipeline.skills import SkillManager
+    from src.grounding.session import get_session
 
     store = Store()
     store.init()
@@ -279,11 +288,21 @@ def generate_artifact(
     if house is None:
         all_houses = store.list_houses()
         names = ", ".join(h.name for h in all_houses)
-        return f"House not found. Available houses: {names}"
+        return f"House not found. Call list_message_houses to see valid options. Available: {names}"
 
     skills = SkillManager()
     generator = ArtifactGenerator(store, skills)
     artifact = generator.generate(skill_id, str(house.id), custom_context or {})
+
+    # Record in grounding session so get_grounding_context reflects this
+    session = get_session()
+    session.set_active_house(
+        house_id=house.id,
+        house_name=house.name,
+        house_summary=house.summary or "",
+        personas=[],
+    )
+
     return artifact.raw_content
 
 
