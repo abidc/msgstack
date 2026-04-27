@@ -1,107 +1,272 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>{{ artifact.house_name }} — {{ type.replace('_', ' ').title() }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/pagedjs/dist/paged.polyfill.js"></script>
-    <style>
-        @page {
-            size: A4;
-            margin: 20mm;
-            @top-right {
-                content: "msgstack MCP";
-                font-family: 'Inter', sans-serif;
-                font-size: 9pt;
-                color: #94a3b8;
-            }
-            @bottom-center {
-                content: counter(page);
-                font-family: 'Inter', sans-serif;
-                font-size: 9pt;
-                color: #94a3b8;
-            }
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ house.name }} — {{ artifact_type_label }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0c0c10;
+      --bg-1:    #131318;
+      --bg-2:    #1a1a21;
+      --bg-3:    #222230;
+      --border:  #2c2c3a;
+      --text:    #f0f0f5;
+      --text-2:  #a0a0b5;
+      --text-3:  #606075;
+      --primary: #7c6af7;
+      --primary-dim: rgba(124,106,247,.15);
+    }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      padding: 40px 24px 80px;
+    }
+    .page { max-width: 920px; margin: 0 auto; }
 
-        body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            color: #1e293b;
-            background: #f8fafc;
-        }
+    /* ── Controls ── */
+    .controls {
+      position: fixed; top: 20px; right: 20px;
+      display: flex; gap: 8px; z-index: 100;
+    }
+    .ctrl-btn {
+      padding: 6px 14px; border-radius: 8px; font-size: 12px;
+      font-weight: 600; cursor: pointer; border: 1px solid var(--border);
+      background: var(--bg-1); color: var(--text-2); font-family: inherit;
+      transition: all .12s; white-space: nowrap;
+    }
+    .ctrl-btn:hover { background: var(--bg-2); color: var(--text); }
+    .ctrl-btn-primary {
+      background: var(--primary); color: #fff;
+      border-color: transparent;
+    }
+    .ctrl-btn-primary:hover { opacity: .88; }
 
-        .pagedjs_page {
-            background: white;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #130b2e 100%);
+      border-radius: 18px; padding: 52px 48px; margin-bottom: 22px;
+      border: 1px solid #2d2060; position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 72% 50%, rgba(124,106,247,.22) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero-label {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+      color: rgba(255,255,255,.55); font-size: 10px; font-weight: 700;
+      letter-spacing: .12em; text-transform: uppercase;
+      padding: 4px 12px; border-radius: 100px; margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: 42px; font-weight: 800; color: #fff;
+      line-height: 1.08; letter-spacing: -.03em;
+      margin-bottom: 12px; position: relative;
+    }
+    .hero-tagline {
+      font-size: 17px; color: rgba(255,255,255,.6); font-weight: 400;
+      line-height: 1.55; margin-bottom: 22px; position: relative; max-width: 560px;
+    }
+    .hero-pills { display: flex; gap: 8px; flex-wrap: wrap; position: relative; }
+    .hero-pill {
+      background: rgba(124,106,247,.18); border: 1px solid rgba(124,106,247,.32);
+      color: #a89cf8; font-size: 12px; font-weight: 500;
+      padding: 5px 14px; border-radius: 100px;
+    }
 
-        @media print {
-            .pagedjs_page {
-                box-shadow: none;
-                margin-bottom: 0;
-            }
-            .no-print { display: none; }
-        }
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-1); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px; margin-bottom: 18px;
+    }
+    .card-label {
+      font-size: 10px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text-3);
+      margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+    }
+    .card-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .prose {
+      font-size: 15px; color: var(--text-2); line-height: 1.75; font-weight: 400;
+    }
+    .prose + .prose {
+      margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+    }
 
-        .artifact-header {
-            border-bottom: 2px solid #6366f1;
-            padding-bottom: 1rem;
-            margin-bottom: 2rem;
-        }
+    /* ── Messages grid ── */
+    .msg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 640px) { .msg-grid { grid-template-columns: 1fr; } }
+    .section-block { border-radius: 10px; padding: 16px 18px; }
+    .section-title {
+      font-size: 10px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; margin-bottom: 12px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .section-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .msg-item {
+      display: flex; gap: 9px; align-items: flex-start;
+      padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    .msg-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .msg-num {
+      min-width: 18px; height: 18px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; flex-shrink: 0; margin-top: 2px;
+    }
+    .msg-text { font-size: 13px; color: var(--text-2); line-height: 1.55; }
 
-        .section-title {
-            color: #4338ca;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-size: 0.875rem;
-            margin-bottom: 0.5rem;
-        }
+    /* ── Personas ── */
+    .persona-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+    .persona-card {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 18px;
+    }
+    .persona-avatar {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #7c6af7, #a89cf8);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 13px; margin-bottom: 10px;
+    }
+    .persona-name { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .persona-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; margin-bottom: 10px; }
+    .pain-tag {
+      display: inline-block; background: rgba(248,113,113,.12); color: #f87171;
+      font-size: 10px; font-weight: 500; padding: 2px 7px;
+      border-radius: 4px; margin: 2px 2px 0 0;
+    }
 
-        .content-block {
-            margin-bottom: 1.5rem;
-            page-break-inside: avoid;
-        }
-    </style>
+    /* ── Footer ── */
+    .footer {
+      text-align: center; margin-top: 32px;
+      padding-top: 24px; border-top: 1px solid var(--border);
+    }
+    .footer-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--text-3); font-size: 11px; font-weight: 500;
+    }
+
+    /* ── Print ── */
+    @media print {
+      .controls { display: none; }
+      body { background: #fff; color: #0f172a; padding: 0; }
+      .hero {
+        background: #0f172a !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        border-radius: 0; margin-bottom: 0;
+        border: none;
+      }
+      .card { background: #fff; border-color: #e2e8f0; page-break-inside: avoid; }
+      .prose { color: #334155; }
+      .msg-text { color: #334155; }
+      .persona-card { background: #f8fafc; border-color: #e2e8f0; }
+      .pain-tag { background: #fef2f2; color: #dc2626; }
+    }
+  </style>
 </head>
-<body class="p-8">
-    <div class="no-print fixed top-4 right-4 z-50">
-        <button onclick="window.print()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-indigo-700 transition-colors font-semibold flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-            Export PDF
-        </button>
+<body>
+
+<div class="controls">
+  <button class="ctrl-btn" onclick="history.back()">← Back</button>
+  <button class="ctrl-btn ctrl-btn-primary" onclick="window.print()">↓ Export PDF</button>
+</div>
+
+<div class="page">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; {{ artifact_type_label }}</div>
+    <h1>{{ house.name }}</h1>
+    {% if house.tagline %}
+    <p class="hero-tagline">{{ house.tagline }}</p>
+    {% endif %}
+    <div class="hero-pills">
+      {% if house.audience %}<span class="hero-pill">{{ house.audience[:60] }}</span>{% endif %}
+      <span class="hero-pill">{{ message_count }} messages</span>
+      {% if persona_count > 0 %}<span class="hero-pill">{{ persona_count }} personas</span>{% endif %}
     </div>
+  </div>
 
-    <div class="max-w-4xl mx-auto">
-        <header class="artifact-header">
-            <div class="text-indigo-600 font-bold text-sm mb-1 uppercase tracking-widest">Messaging Artifact</div>
-            <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight">{{ artifact.house_name }}</h1>
-            <p class="text-slate-500 text-lg mt-1">{{ type.replace('_', ' ').title() }} — Draft v1.0</p>
-        </header>
+  <!-- Positioning -->
+  {% if house.positioning or house.differentiation %}
+  <div class="card">
+    <div class="card-label">Positioning</div>
+    {% if house.positioning %}<p class="prose">{{ house.positioning }}</p>{% endif %}
+    {% if house.differentiation %}<p class="prose">{{ house.differentiation }}</p>{% endif %}
+  </div>
+  {% endif %}
 
-        <div class="grid grid-cols-1 gap-8">
-            {% for key, val in artifact.sections.items() %}
-            <section class="content-block">
-                <h2 class="section-title">{{ key.replace('_', ' ') }}</h2>
-                <div class="text-slate-700 leading-relaxed text-base">
-                    {% if val is iterable and val is not string %}
-                        <ul class="list-disc pl-5 space-y-2">
-                        {% for item in val %}
-                            <li>{{ item }}</li>
-                        {% endfor %}
-                        </ul>
-                    {% else %}
-                        {{ val | replace('\n', '<br>') | safe }}
-                    {% endif %}
-                </div>
-            </section>
+  <!-- Key Messages -->
+  {% if message_count > 0 %}
+  <div class="card">
+    <div class="card-label">Key Messages &nbsp;·&nbsp; {{ message_count }} total</div>
+    <div class="msg-grid">
+      {% for st in section_order %}
+        {% if st in grouped and grouped[st] %}
+          {% set meta = section_meta[st] %}
+          <div class="section-block" style="background:{{ meta.bg }};">
+            <div class="section-title" style="color:{{ meta.color }};">
+              <span class="section-dot" style="background:{{ meta.color }};"></span>
+              {{ meta.label }}
+              <span style="font-weight:400;color:var(--text-3);">({{ grouped[st]|length }})</span>
+            </div>
+            {% for content in grouped[st][:5] %}
+            <div class="msg-item">
+              <span class="msg-num" style="background:{{ meta.bg }};color:{{ meta.color }};">{{ loop.index }}</span>
+              <span class="msg-text">{{ content }}</span>
+            </div>
             {% endfor %}
-        </div>
-
-        <footer class="mt-12 pt-8 border-t border-slate-100 text-slate-400 text-xs flex justify-between">
-            <div>Generated by MsgStack MCP</div>
-            <div>&copy; 2026 {{ artifact.house_name }}</div>
-        </footer>
+          </div>
+        {% endif %}
+      {% endfor %}
+      {# Any section types not in the standard order #}
+      {% for st, msgs in grouped.items() %}
+        {% if st not in section_order and msgs %}
+          <div class="section-block" style="background:rgba(100,116,139,.1);">
+            <div class="section-title" style="color:#64748b;">
+              <span class="section-dot" style="background:#64748b;"></span>
+              {{ st.replace('_', ' ').title() }}
+              <span style="font-weight:400;color:var(--text-3);">({{ msgs|length }})</span>
+            </div>
+            {% for content in msgs[:5] %}
+            <div class="msg-item">
+              <span class="msg-num" style="background:rgba(100,116,139,.1);color:#64748b;">{{ loop.index }}</span>
+              <span class="msg-text">{{ content }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endfor %}
     </div>
+  </div>
+  {% endif %}
+
+  <!-- Personas -->
+  {% if personas %}
+  <div class="card">
+    <div class="card-label">Target Personas &nbsp;·&nbsp; {{ personas|length }} defined</div>
+    <div class="persona-grid">
+      {% for p in personas %}
+      <div class="persona-card">
+        <div class="persona-avatar">{{ p.name[:2]|upper }}</div>
+        <div class="persona-name">{{ p.name }}</div>
+        {% if p.description %}<div class="persona-desc">{{ p.description[:140] }}</div>{% endif %}
+        {% for pp in p.pain_points[:3] %}<span class="pain-tag">{{ pp[:50] }}</span>{% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    <span class="footer-badge">⬡ MsgStack MCP &nbsp;·&nbsp; {{ synced_date }}</span>
+  </div>
+
+</div>
 </body>
 </html>

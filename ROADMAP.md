@@ -6,9 +6,9 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ---
 
-## Current State — v0.5 (April 2026)
+## Current State — v0.6 (April 2026)
 
-**Shipped (Milestones v0.1 - v0.5):**
+**Shipped (Milestones v0.1 - v0.6):**
 - ✅ FastMCP server with 20+ grounding + artifact tools
 - ✅ FastAPI admin UI with full Frameworks/Skills/Workspaces management
 - ✅ **Advanced Upload Pipeline:** PDF/DOCX/TXT → Multi-chunk structuring → Vector index
@@ -23,11 +23,17 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - ✅ **Operations:** Structured logging, rate limiting, and workspace token budgets
 - ✅ **Infrastructure:** Full PostgreSQL support and Docker Compose deployment
 - ✅ **Test Suite:** Comprehensive unit and integration tests (extraction, structure, store)
+- ✅ **Jinja2 UI Architecture:** Admin UI migrated from single HTML to `base.html` + `dashboard.html` template system
+- ✅ **Dark Artifact Visual Page:** `/artifact/one_pager/{id}` renders with dashboard-matching dark theme, color-coded message sections, persona cards, and PDF export
+- ✅ **Tabbed House Detail:** Framework detail view with Overview (editable), Messages (color-coded by section type, drag-to-reorder), and Personas tabs
+- ✅ **Skill Context Inputs:** Skills that require pre-generation context (competitor name for battlecard, funnel stage for email, topic for blog post, etc.) surface input fields in the UI before generation; MCP tool proactively asks for missing required context
+- ✅ **SPA Routing:** Page refresh from any app section works correctly via FastAPI catch-all route + client-side `initRouting()`
+- ✅ **Logo Navigation:** MsgStack logo always returns to dashboard
 
 **Known gaps:**
 - OIDC/OAuth login not yet implemented (API key auth only)
 - Workspace "invites" still manual via API
-- Static visual artifacts (interactive React-based artifacts in backlog)
+- Paged.js / Satori visual pipeline not yet operational
 
 ---
 
@@ -142,7 +148,12 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 **Goal:** Bridge the gap between AI generation and marketing department workflows using a "High-Impact" architecture (HTMX + Paged.js + Satori).
 
 ### High-Impact Artifact Generation
-- [ ] **Interactive Interface (HTMX + Tailwind):** Refactor Admin UI to use Jinja2 + HTMX for instant, no-reload artifact previews and inline editing.
+- [x] **Jinja2 + HTMX UI Architecture:** Admin UI refactored to Jinja2 templates (`base.html`, `dashboard.html`) with HTMX for dynamic interactions.
+- [x] **Dark-Themed Visual Artifact Page:** `artifact_visual.html` template with dark dashboard aesthetic, color-coded message sections, persona cards, print/PDF export.
+- [x] **Skill Context Inputs:** Dynamic pre-generation context fields in the UI (competitor for battlecard, stage for email, topic for blog post); validation before generation runs.
+- [x] **MCP Context Validation:** `build_artifact` MCP tool proactively requests missing required context instead of returning a cryptic error.
+- [x] **SPA Routing Robustness:** Page refresh from any section works; catch-all FastAPI route + `initRouting()` client-side routing.
+- [x] **Logo Navigation:** Clicking the MsgStack logo returns to the dashboard from any section.
 - [ ] **Print-First Documents (Paged.js):** Professional typeset PDFs for One-Pagers and Battlecards with real margins, page numbers, and bleed.
 - [ ] **Design-as-Code Visuals (Satori):** Generate high-fidelity PNG social cards and email headers using the Satori WASM engine + `resvg-python`.
 - [ ] **Inline Polish Editor:** Rich-text editor (TinyMCE/Quill) in the UI to tweak AI drafts before final save.
@@ -165,7 +176,6 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 ### Last-Mile Design & Hand-off
 - [ ] **Editable Export Pro:** Export DOCX that preserves visual hierarchy and styling for easier design hand-off.
 - [ ] **Push to Tooling:** "Export to Slides" (via Google Slides API) or placeholder Figma JSON export.
-- [ ] **Inline Polish Editor:** TinyMCE/Quill editor in the UI to tweak AI drafts before final save.
 
 ---
 

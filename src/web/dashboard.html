@@ -185,6 +185,10 @@
                         <div style="color:var(--text-3);font-size:13px;">Select a framework first</div>
                     </div>
                 </div>
+                <div id="artifact-context-card" class="card" style="margin-bottom:0;display:none;">
+                    <div class="card-title" style="margin-bottom:10px">Context</div>
+                    <div id="artifact-context-fields"></div>
+                </div>
                 <button class="btn btn-primary" id="generate-btn" onclick="generateArtifact()" style="width:100%;" disabled>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                     Generate
@@ -244,6 +248,7 @@
     const API = '/api';
     let currentHouseId = null;
     let selectedSkillId = null;
+    let selectedSkillContextInputs = [];
     let _extractedHouseId = null;
     let _milestoneShown = new Set();
     let _dragSrcEl = null;
@@ -763,22 +768,67 @@
             </div>`).join('');
     }
 
-    function selectSkill(id) {
+    async function selectSkill(id) {
         selectedSkillId = id;
         document.querySelectorAll('.skill-opt').forEach(el => { el.style.borderColor=''; el.style.background=''; });
         const el = document.getElementById(`skill-opt-${id}`);
         if (el) { el.style.borderColor='var(--primary)'; el.style.background='var(--primary-dim)'; }
+
+        // Load context inputs for this skill
+        try {
+            const skill = await fetch(`${API}/skills/${id}`).then(r => r.json());
+            selectedSkillContextInputs = skill.context_inputs || [];
+        } catch(e) {
+            selectedSkillContextInputs = [];
+        }
+
+        const ctxCard = document.getElementById('artifact-context-card');
+        const ctxFields = document.getElementById('artifact-context-fields');
+        if (selectedSkillContextInputs.length > 0) {
+            ctxFields.innerHTML = selectedSkillContextInputs.map(inp => {
+                if (inp.options) {
+                    const opts = inp.options.map(o =>
+                        `<option value="${o}"${o === (inp.default || inp.options[0]) ? ' selected' : ''}>${o.charAt(0).toUpperCase() + o.slice(1)}</option>`
+                    ).join('');
+                    return `<div class="form-group"><label class="form-label">${esc(inp.label)}</label><select class="form-select" id="ctx-${inp.key}">${opts}</select></div>`;
+                }
+                return `<div class="form-group"><label class="form-label">${esc(inp.label)}${inp.required ? ' <span style="color:var(--danger)">*</span>' : ''}</label><input class="form-input" type="text" id="ctx-${inp.key}" placeholder="${esc(inp.placeholder || '')}"></div>`;
+            }).join('');
+            ctxCard.style.display = '';
+        } else {
+            ctxFields.innerHTML = '';
+            ctxCard.style.display = 'none';
+        }
+
         document.getElementById('generate-btn').disabled = false;
     }
 
     async function generateArtifact() {
         const houseId = document.getElementById('artifact-house').value;
         if (!houseId || !selectedSkillId) { toast('Select a framework and skill first','error'); return; }
+
+        // Collect required context inputs
+        const context = {};
+        for (const inp of selectedSkillContextInputs) {
+            const el = document.getElementById(`ctx-${inp.key}`);
+            if (!el) continue;
+            const val = el.value.trim();
+            if (!val && inp.required) {
+                toast(`"${inp.label}" is required`, 'error');
+                el.focus();
+                return;
+            }
+            if (val) context[inp.key] = val;
+        }
+
         const container = document.getElementById('artifact-preview-container');
         container.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span><span style="margin-left:12px;color:var(--text-2);">Generating with AI…</span></div>';
         const form = new FormData();
         form.append('skill_id', selectedSkillId);
         form.append('house_id', houseId);
+        if (Object.keys(context).length) {
+            form.append('extra_context', JSON.stringify(context));
+        }
         try {
             const res = await fetch(`${API}/generate`,{method:'POST',body:form});
             if (!res.ok) throw new Error(await res.text());

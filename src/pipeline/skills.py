@@ -354,6 +354,22 @@ Tone: partner-first. Focus on what the partner gains, not what we gain.""",
 }
 
 
+SKILL_CONTEXT_INPUTS: dict[str, list[dict]] = {
+    "battlecard": [
+        {"key": "competitor", "label": "Competitor Name", "placeholder": "e.g. Salesforce", "required": True},
+    ],
+    "email_template": [
+        {"key": "stage", "label": "Funnel Stage", "options": ["awareness", "consideration", "decision"], "required": False, "default": "awareness"},
+    ],
+    "blog_post": [
+        {"key": "topic", "label": "Blog Topic", "placeholder": "e.g. AI in enterprise software", "required": True},
+    ],
+    "press_release": [
+        {"key": "announcement", "label": "Announcement Summary", "placeholder": "e.g. Series B funding round", "required": True},
+    ],
+}
+
+
 class SkillManager:
     def __init__(self, skills_dir: str | Path = "skills"):
         self.skills_dir = Path(skills_dir)
@@ -416,3 +432,6 @@ class SkillManager:
         if not skill:
             return []
         return skill.get("sections", [])
+
+    def get_context_inputs(self, skill_id: str) -> list[dict]:
+        return SKILL_CONTEXT_INPUTS.get(skill_id, [])

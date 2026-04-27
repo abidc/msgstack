@@ -775,7 +775,10 @@ def get_frame_markdown(house_id: str):
 
 @app.get("/api/skills")
 def list_skills():
-    return skills.list_skills()
+    skill_list = skills.list_skills()
+    for s in skill_list:
+        s["context_inputs"] = skills.get_context_inputs(s["id"])
+    return skill_list
 
 
 @app.get("/api/skills/{skill_id}")
@@ -783,7 +786,9 @@ def get_skill(skill_id: str):
     skill = skills.get_skill(skill_id)
     if not skill:
         raise HTTPException(404, f"Skill {skill_id} not found")
-    return skill
+    result = dict(skill)
+    result["context_inputs"] = skills.get_context_inputs(skill_id)
+    return result
 
 
 @app.put("/api/skills/{skill_id}")
@@ -803,6 +808,62 @@ def delete_skill(skill_id: str):
     if not skills.delete_skill(skill_id):
         raise HTTPException(404, f"Skill {skill_id} not found")
     return {"ok": True}
+
+
+class ArtifactSectionsUpdate(BaseModel):
+    sections: dict
+
+
+@app.patch("/api/artifacts/{artifact_id}/sections")
+def update_artifact_sections(artifact_id: str, data: ArtifactSectionsUpdate):
+    """Save manually edited sections back to the artifact record."""
+    try:
+        aid = UUID(artifact_id)
+    except Exception:
+        raise HTTPException(400, "Invalid artifact ID")
+
+    with store.session() as s:
+        from src.store import ArtifactRecord
+        row = s.query(ArtifactRecord).filter(ArtifactRecord.id == aid).first()
+        if not row:
+            raise HTTPException(404, "Artifact not found")
+        
+        # Merge sections
+        new_sections = row.sections.copy() if row.sections else {}
+        new_sections.update(data.sections)
+        row.sections = new_sections
+        
+        # Rebuild raw_content if possible (optional)
+        row.raw_content = "\n\n".join([f"### {k}\n{v}" for k, v in new_sections.items()])
+        
+        s.commit()
+    return {"ok": True}
+
+
+class SectionRegenerate(BaseModel):
+    house_id: str
+    skill_id: str
+    section_key: str
+    context: Optional[dict] = {}
+
+
+@app.post("/api/generate-section-single")
+def regenerate_single_section(data: SectionRegenerate):
+    """Regenerate just one part of an artifact using the grounding engine."""
+    from src.pipeline.generator import ArtifactGenerator
+    generator = ArtifactGenerator(store, skills)
+    
+    # Custom context to tell the LLM to focus on ONE section
+    regen_context = data.context.copy()
+    regen_context["focus_section"] = data.section_key
+    
+    try:
+        artifact = generator.generate(data.skill_id, data.house_id, regen_context)
+        # Extract just the section we want
+        val = artifact.sections.get(data.section_key, "Regeneration failed to produce this section.")
+        return {"section_key": data.section_key, "content": val}
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 # --- Stats ---
@@ -1010,20 +1071,35 @@ def _find_persona(persona_id: str) -> Optional[Persona]:
 def generate_artifact(
     skill_id: str = Form(...),
     house_id: str = Form(...),
-    custom_context: Optional[dict] = Form(None),
+    extra_context: Optional[str] = Form(None),
     _rl: None = Depends(generate_limiter),
     auth: AuthContext = Depends(require_read),
 ):
     """Generate an artifact using a skill and return content for preview."""
+    import json as _json
     from src.pipeline.generator import ArtifactGenerator
+
+    context: dict = {}
+    if extra_context:
+        try:
+            context = _json.loads(extra_context)
+        except Exception:
+            pass
 
     generator = ArtifactGenerator(store, skills)
 
     try:
-        artifact = generator.generate(skill_id, house_id, custom_context or {})
+        artifact = generator.generate(skill_id, house_id, context)
         visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
         artifact_type = skill_id if skill_id in visual_types else None
-        visual_url = f"{settings.base_url}/artifact/{artifact_type}/{house_id}" if artifact_type else None
+        if artifact_type:
+            visual_url = f"{settings.base_url}/artifact/{artifact_type}/{house_id}"
+            if skill_id == "battlecard" and context.get("competitor"):
+                visual_url += f"?competitor={context['competitor']}"
+            elif skill_id == "email_template" and context.get("stage"):
+                visual_url += f"?stage={context['stage']}"
+        else:
+            visual_url = None
 
         # Record token usage
         if artifact.input_tokens or artifact.output_tokens:
@@ -1802,8 +1878,29 @@ def cost_estimate(model: str = "gpt-4o-mini", input_tokens: int = 0, output_toke
     }
 
 
+_ARTIFACT_SECTION_META = {
+    "headline":     {"label": "Headline",     "color": "#6366f1", "bg": "rgba(99,102,241,.12)"},
+    "subhead":      {"label": "Subhead",      "color": "#8b5cf6", "bg": "rgba(139,92,246,.12)"},
+    "benefit":      {"label": "Benefit",      "color": "#10b981", "bg": "rgba(16,185,129,.12)"},
+    "use_case":     {"label": "Use Case",     "color": "#06b6d4", "bg": "rgba(6,182,212,.12)"},
+    "proof_point":  {"label": "Proof Point",  "color": "#3b82f6", "bg": "rgba(59,130,246,.12)"},
+    "objection":    {"label": "Objection",    "color": "#ef4444", "bg": "rgba(239,68,68,.12)"},
+    "social_proof": {"label": "Social Proof", "color": "#f59e0b", "bg": "rgba(245,158,11,.12)"},
+    "positioning":  {"label": "Positioning",  "color": "#64748b", "bg": "rgba(100,116,139,.12)"},
+}
+_ARTIFACT_SECTION_ORDER = ["headline", "subhead", "benefit", "use_case", "proof_point", "objection", "social_proof", "positioning"]
+_ARTIFACT_TYPE_LABELS = {
+    "one_pager": "One Pager",
+    "social_posts": "Social Posts",
+    "email_template": "Email Template",
+    "battlecard": "Battlecard",
+    "email_sequence": "Email Sequence",
+}
+
+
 @app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)
 def serve_artifact(
+    request: Request,
     artifact_type: str,
     house_id: str,
     stage: str = "awareness",
@@ -1819,7 +1916,7 @@ def serve_artifact(
     except ValueError:
         raise HTTPException(400, "Invalid house_id UUID")
 
-    valid_types = ["one_pager", "social_posts", "email_template", "battlecard", "email_sequence"]
+    valid_types = list(_ARTIFACT_TYPE_LABELS.keys())
     if artifact_type not in valid_types:
         raise HTTPException(400, f"Unknown artifact_type. Use: {', '.join(valid_types)}")
 
@@ -1830,14 +1927,30 @@ def serve_artifact(
     messages = store.get_key_messages(hid)
     personas = store.get_personas(hid)
 
-    grouped: dict[str, list] = {}
+    if artifact_type == "one_pager":
+        grouped: dict[str, list] = {}
+        for m in messages:
+            st = str(m.section_type).split(".")[-1].lower().replace(" ", "_")
+            grouped.setdefault(st, []).append(m.content)
+        synced = house.last_synced.strftime("%Y-%m-%d") if house.last_synced else "—"
+        return templates.TemplateResponse(request, "artifact_visual.html", {
+            "house": house,
+            "grouped": grouped,
+            "personas": personas,
+            "section_meta": _ARTIFACT_SECTION_META,
+            "section_order": _ARTIFACT_SECTION_ORDER,
+            "message_count": len(messages),
+            "persona_count": len(personas),
+            "artifact_type_label": "One Pager",
+            "synced_date": synced,
+        })
+
+    grouped_legacy: dict[str, list] = {}
     for m in messages:
         key = str(m.section_type).replace("_", " ").title()
-        grouped.setdefault(key, []).append(m.content)
+        grouped_legacy.setdefault(key, []).append(m.content)
 
-    if artifact_type == "one_pager":
-        html = _render_one_pager(house, grouped, personas)
-    elif artifact_type == "social_posts":
+    if artifact_type == "social_posts":
         target = channels.split(",")
         html = _render_social_posts(house, messages, target)
     elif artifact_type == "battlecard":
@@ -2291,23 +2404,6 @@ def get_artifact_image(artifact_id: str):
     except Exception as e:
         log.error("Image generation failed: %s", e)
         raise HTTPException(500, f"Failed to generate image: {str(e)}")
-@app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)
-def view_artifact(artifact_type: str, house_id: str, request: Request):
-    """Visual view of an artifact with Paged.js support."""
-    from src.pipeline.generator import ArtifactGenerator
-    generator = ArtifactGenerator(store, skills)
-    
-    try:
-        artifact = generator.generate(artifact_type, house_id, {})
-        return templates.TemplateResponse(request, "artifact_visual.html", {
-            "artifact": artifact,
-            "type": artifact_type,
-            "house_name": artifact.house_name
-        })
-    except Exception as e:
-        log.error("Visual generation failed: %s", e)
-        raise HTTPException(500, str(e))
-
 
 # --- Frontend ---
 
@@ -2318,7 +2414,14 @@ def view_artifact(artifact_type: str, house_id: str, request: Request):
 @app.get("/artifacts", response_class=HTMLResponse)
 @app.get("/skills", response_class=HTMLResponse)
 @app.get("/settings", response_class=HTMLResponse)
+@app.get("/house-detail", response_class=HTMLResponse)
 def index(request: Request):
+    return templates.TemplateResponse(request, "dashboard.html")
+
+
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+def catch_all(request: Request, full_path: str):
+    """Serve the SPA for any unmatched path so page refreshes don't 404."""
     return templates.TemplateResponse(request, "dashboard.html")
 
 

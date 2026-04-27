@@ -213,8 +213,22 @@ def generate_artifact(
         return f"House not found. Call list_message_houses to see valid options. Available: {names}"
 
     skills = SkillManager()
+
+    # Check required context inputs before running the generator
+    from src.pipeline.skills import SKILL_CONTEXT_INPUTS
+    required_inputs = SKILL_CONTEXT_INPUTS.get(skill_id, [])
+    provided = custom_context or {}
+    missing = [inp for inp in required_inputs if inp.get("required") and inp["key"] not in provided]
+    if missing:
+        labels = " and ".join(f'"{inp["label"]}"' for inp in missing)
+        example = {inp["key"]: inp.get("placeholder", f"<{inp['label']}>") for inp in missing}
+        return (
+            f'To generate a {skill_id.replace("_", " ")}, I need {labels}. '
+            f'Please provide it via `custom_context`, e.g. `{{"custom_context": {example}}}`.'
+        )
+
     generator = ArtifactGenerator(store, skills)
-    artifact = generator.generate(skill_id, str(house.id), custom_context or {})
+    artifact = generator.generate(skill_id, str(house.id), provided)
 
     # Record in grounding session so get_grounding_context reflects this
     session = get_session()
