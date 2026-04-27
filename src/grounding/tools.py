@@ -31,6 +31,7 @@ def search_messaging(
     message_houses: Optional[list[str]] = None,
     include_variants: bool = True,
     min_priority: Optional[int] = None,
+    min_confidence: Optional[float] = None,
 ) -> GroundingResponse:
     """Search messaging frameworks for relevant content.
 
@@ -44,6 +45,7 @@ def search_messaging(
         message_houses: Restrict to specific message houses by ID.
         include_variants: Include channel-specific message variants in results.
         min_priority: Only return messages at or above this priority (1=highest).
+        min_confidence: Warn if average result confidence is below this threshold (0.0–1.0).
 
     Returns:
         GroundingResponse with matched chunks and confidence context.
@@ -55,6 +57,7 @@ def search_messaging(
         message_houses=message_houses,
         include_variants=include_variants,
         min_priority=min_priority,
+        min_confidence=min_confidence,
     )
 
     engine = _get_engine()

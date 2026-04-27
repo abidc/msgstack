@@ -24,6 +24,7 @@ def search_messaging(
     message_houses: Optional[list[str]] = None,
     include_variants: bool = True,
     min_priority: Optional[int] = None,
+    min_confidence: Optional[float] = None,
 ) -> dict:
     """Search marketing messaging frameworks for grounding content.
 
@@ -34,13 +35,14 @@ def search_messaging(
     Args:
         query: What messaging content are you looking for? Include section types,
                personas, and channels naturally (e.g., "headlines for CTOs on LinkedIn").
-        section_types: Filter by message type: headline, subhead, benefit, proof_point,
-                      objection, social_proof, positioning.
+        section_types: Filter by message type: headline, subhead, benefit, use_case,
+                      proof_point, objection, social_proof, positioning, know_your_market.
         personas: Filter by specific audience personas (e.g., SMB CTO, FinOps Manager).
         channels: Filter by channel: linkedin, email, landing, paid, twitter, blog.
         message_houses: Restrict to specific message houses by ID.
         include_variants: Include channel-specific message variants in results.
         min_priority: Only return messages at or above this priority (1=highest).
+        min_confidence: Warn if average result confidence is below this threshold (0.0–1.0).
 
     Returns:
         Matched messaging chunks with confidence scores and grounding context.
@@ -53,6 +55,7 @@ def search_messaging(
         message_houses=message_houses,
         include_variants=include_variants,
         min_priority=min_priority,
+        min_confidence=min_confidence,
     ).model_dump()
 
 

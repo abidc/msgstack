@@ -199,6 +199,26 @@
         .search-row .form-input { max-width: 280px; }
         .markdown-preview { background: var(--bg); border-radius: var(--radius); padding: 14px; font-size: 12.5px; line-height: 1.65; white-space: pre-wrap; max-height: 400px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text-2); border: 1px solid var(--border); }
         .inline-code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; background: var(--bg-3); padding: 1px 5px; border-radius: 4px; color: var(--primary); }
+        /* ── Upload preview panel ── */
+        .preview-section { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
+        .preview-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); margin-bottom: 6px; }
+        .preview-section-body { font-size: 13px; color: var(--text); line-height: 1.55; }
+        .preview-msg-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px; font-size: 12px; color: var(--text-2); margin: 2px 2px 2px 0; }
+        .preview-msg-pill .badge { margin: 0; }
+        /* ── Timer ── */
+        .structuring-timer { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+        /* ── Error box ── */
+        .error-box { background: var(--danger-dim); border: 1px solid rgba(248,113,113,0.3); border-radius: var(--radius); padding: 14px 16px; }
+        .error-box-stage { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--danger); margin-bottom: 4px; }
+        .error-box-msg { font-size: 13px; color: var(--text); margin-bottom: 6px; }
+        .error-box-detail { font-size: 11.5px; color: var(--text-3); font-family: 'SF Mono','Fira Code',monospace; white-space: pre-wrap; word-break: break-all; }
+        /* ── Index status dot ── */
+        .index-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .index-dot.indexed { background: var(--success); }
+        .index-dot.not_indexed { background: var(--text-3); }
+        .index-dot.stale { background: var(--warn); }
+        .index-dot.error, .index-dot.unavailable { background: var(--danger); }
+        .fw-card-index-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); }
     </style>
 </head>
 <body>
@@ -237,7 +257,7 @@
                 Seed & Index
             </div>
         </nav>
-        <div class="sidebar-footer">v0.1 · msgstack MCP</div>
+        <div class="sidebar-footer">v0.2 · msgstack MCP</div>
     </aside>
 
     <!-- Main -->
@@ -407,14 +427,55 @@
                             <div class="card-title" id="upload-filename"></div>
                             <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="upload-stats"></div>
                         </div>
-                        <div id="process-status" style="font-size:12px;color:var(--text-2);display:flex;align-items:center;gap:6px;">
-                            <span class="spinner"></span> Structuring with AI...
+                        <div id="process-status" style="font-size:12px;color:var(--text-2);display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+                            <div style="display:flex;align-items:center;gap:6px;"><span class="spinner"></span> Structuring with AI...</div>
+                            <div class="structuring-timer" id="structuring-timer"></div>
                         </div>
                     </div>
                     <div class="markdown-preview" id="upload-preview-text" style="max-height:150px;"></div>
                 </div>
 
-                <!-- Extraction result + completeness -->
+                <!-- Extraction error box -->
+                <div id="extraction-error" style="display:none;" class="card">
+                    <div class="error-box">
+                        <div class="error-box-stage" id="err-stage"></div>
+                        <div class="error-box-msg" id="err-msg"></div>
+                        <div class="error-box-detail" id="err-detail"></div>
+                    </div>
+                    <div style="margin-top:12px;">
+                        <button class="btn btn-ghost btn-sm" onclick="resetUpload()">Try again</button>
+                    </div>
+                </div>
+
+                <!-- Preview-before-save panel -->
+                <div id="structure-preview" style="display:none;">
+                    <div class="card">
+                        <div class="card-header" style="margin-bottom:14px;">
+                            <div>
+                                <div class="card-title" id="preview-name"></div>
+                                <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="preview-meta"></div>
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn btn-ghost btn-sm" onclick="resetUpload()">Discard</button>
+                                <button class="btn btn-primary btn-sm" id="confirm-save-btn" onclick="confirmSave()">
+                                    Save Framework →
+                                </button>
+                            </div>
+                        </div>
+                        <div class="completeness-bar"><div class="completeness-fill" id="preview-completeness-fill" style="width:0%"></div></div>
+                        <div style="font-size:12px;color:var(--text-2);margin-bottom:16px;" id="preview-completeness-label"></div>
+                        <div id="preview-sections"></div>
+                    </div>
+                    <div id="preview-kym-card" style="display:none;" class="card">
+                        <div class="card-header" style="margin-bottom:10px;">
+                            <div class="card-title">Know Your Market</div>
+                            <div style="font-size:12px;color:var(--text-2);">Pre-section research extracted from the document</div>
+                        </div>
+                        <div id="preview-kym-content" class="markdown-preview"></div>
+                    </div>
+                </div>
+
+                <!-- Saved result + completeness -->
                 <div id="extraction-result" style="display:none;">
                     <div class="card">
                         <div class="card-header">
@@ -801,10 +862,28 @@ function renderHouses(houses) {
                 <span>${h.last_synced ? new Date(h.last_synced).toLocaleDateString() : 'never synced'}</span>
             </div>
             <div class="fw-card-actions" onclick="event.stopPropagation()">
-                <button class="btn btn-ghost btn-xs" onclick="indexHouse('${h.id}', this)">Index</button>
+                <div class="fw-card-index-status" id="idx-status-${h.id}">
+                    <span class="index-dot not_indexed"></span><span>checking…</span>
+                </div>
+                <button class="btn btn-ghost btn-xs" id="idx-btn-${h.id}" onclick="indexHouse('${h.id}', this)">Re-index</button>
                 <button class="btn btn-ghost btn-xs" onclick="viewHouse('${h.id}')">Open →</button>
             </div>
         </div>`).join('')}</div>`;
+
+    // Load index status for each house asynchronously
+    houses.forEach(h => fetchIndexStatus(h.id));
+}
+
+async function fetchIndexStatus(houseId) {
+    const el = document.getElementById(`idx-status-${houseId}`);
+    if (!el) return;
+    try {
+        const data = await fetch(`${API}/houses/${houseId}/index-status`).then(r => r.json());
+        const statusLabels = {indexed:'indexed', not_indexed:'not indexed', stale:'stale', error:'error', unavailable:'unavailable'};
+        el.innerHTML = `<span class="index-dot ${data.status}"></span><span>${statusLabels[data.status] || data.status}</span>`;
+    } catch (_) {
+        el.innerHTML = `<span class="index-dot error"></span><span>unknown</span>`;
+    }
 }
 
 async function viewHouse(id) {
@@ -894,13 +973,22 @@ function goToArtifacts() {
 
 async function indexHouse(id, btn) {
     const orig = btn.textContent;
-    btn.disabled = true; btn.textContent = '…';
+    btn.disabled = true; btn.innerHTML = '<span class="spinner" style="border-top-color:var(--primary)"></span>';
+    const statusEl = document.getElementById(`idx-status-${id}`);
+    if (statusEl) statusEl.innerHTML = `<span class="index-dot not_indexed"></span><span>indexing…</span>`;
     try {
         const data = await fetch(`${API}/houses/${id}/index`, {method:'POST'}).then(r=>r.json());
-        btn.textContent = `✓ ${data.vectors_indexed}`;
+        btn.textContent = `✓ ${data.vectors_indexed}v`;
         btn.style.color = 'var(--success)';
-        setTimeout(() => { btn.disabled=false; btn.textContent=orig; btn.style.color=''; }, 2500);
-    } catch { btn.textContent='Err'; setTimeout(()=>{btn.disabled=false;btn.textContent=orig;},2000); }
+        if (statusEl) statusEl.innerHTML = `<span class="index-dot indexed"></span><span>indexed</span>`;
+        setTimeout(() => { btn.disabled=false; btn.textContent=orig; btn.style.color=''; }, 3000);
+        toast(`Indexed ${data.vectors_indexed} vectors`, 'success');
+    } catch (e) {
+        btn.textContent='Failed';
+        if (statusEl) statusEl.innerHTML = `<span class="index-dot error"></span><span>error</span>`;
+        setTimeout(()=>{btn.disabled=false;btn.textContent=orig;btn.style.color='';},2500);
+        toast('Indexing failed: ' + e.message, 'error');
+    }
 }
 
 // ── House CRUD ────────────────────────────────────────────────────────────────
@@ -1002,6 +1090,27 @@ uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag
 uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
 fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
 
+let _timerInterval = null;
+let _previewToken = null;
+let _previewData = null;
+
+function startStructuringTimer(estimatedSecs) {
+    const el = document.getElementById('structuring-timer');
+    if (!el) return;
+    let remaining = estimatedSecs;
+    el.textContent = `~${remaining}s estimated`;
+    _timerInterval = setInterval(() => {
+        remaining = Math.max(0, remaining - 1);
+        el.textContent = remaining > 0 ? `~${remaining}s remaining` : 'finishing up…';
+    }, 1000);
+}
+
+function stopStructuringTimer() {
+    if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+    const el = document.getElementById('structuring-timer');
+    if (el) el.textContent = '';
+}
+
 async function handleFile(file) {
     uploadedFile = file;
     uploadZone.innerHTML = `<div style="padding:24px;color:var(--text-2);"><span class="spinner"></span> Reading <strong>${esc(file.name)}</strong>…</div>`;
@@ -1015,25 +1124,137 @@ async function handleFile(file) {
         document.getElementById('upload-preview-text').textContent = data.preview;
         document.getElementById('upload-preview-card').style.display = 'block';
         uploadZone.innerHTML = `<div style="padding:16px;color:var(--success);font-size:13px;">&#10003; Read ${data.word_count.toLocaleString()} words from ${esc(file.name)} &mdash; running AI extraction...</div>`;
-        // Auto-trigger extraction immediately after text read
-        processUploadedFile();
+        processUploadedFile(data.word_count);
     } catch (e) {
         uploadZone.innerHTML = `<div style="padding:16px;color:var(--danger);">Error: ${esc(e.message)}</div>`;
     }
 }
 
-async function processUploadedFile() {
+function showExtractionError(errObj) {
+    const stageLabels = {
+        text_extraction: 'Text Extraction Failed',
+        llm_structuring: 'AI Structuring Failed',
+        database_save: 'Database Save Failed',
+    };
+    document.getElementById('err-stage').textContent = stageLabels[errObj.stage] || errObj.stage;
+    document.getElementById('err-msg').textContent = errObj.message || 'Unknown error';
+    document.getElementById('err-detail').textContent = errObj.detail || '';
+    document.getElementById('extraction-error').style.display = 'block';
+}
+
+async function processUploadedFile(wordCount) {
     if (!uploadedFile) return;
     const statusEl = document.getElementById('process-status');
-    if (statusEl) statusEl.innerHTML = '<span class="spinner"></span> Structuring with AI...';
+    // Estimate: ~5s per 1000 words + 15s base, cap at 120s
+    const estimated = Math.min(120, Math.ceil((wordCount || 1000) / 1000) * 5 + 15);
+    if (statusEl) statusEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span class="spinner"></span> Structuring with AI...</div><div class="structuring-timer" id="structuring-timer"></div>`;
+    startStructuringTimer(estimated);
+
     const formData = new FormData();
     formData.append('file', uploadedFile);
     formData.append('source_name', uploadedFile.name.replace(/\.[^.]+$/, ''));
     try {
-        const data = await fetch(`${API}/extract`, {method:'POST', body:formData}).then(r=>r.json());
-        if (data.detail) throw new Error(data.detail);
+        const resp = await fetch(`${API}/preview-structure`, {method:'POST', body:formData});
+        const data = await resp.json();
+        stopStructuringTimer();
+
+        if (data.status === 'failed' || data.error) {
+            if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger);">Extraction failed</span>';
+            showExtractionError(data.error || {stage:'unknown', message: data.detail || 'Unknown error'});
+            return;
+        }
+
+        _previewToken = data.preview_token;
+        _previewData = data;
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--success);">&#10003; Ready to review</span>';
+        renderStructurePreview(data);
+        toast('Review the extracted structure before saving', 'success');
+    } catch (e) {
+        stopStructuringTimer();
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger);">Extraction failed</span>';
+        showExtractionError({stage: 'llm_structuring', message: e.message, detail: ''});
+        toast('Extraction failed: ' + e.message, 'error');
+    }
+}
+
+function renderStructurePreview(data) {
+    document.getElementById('preview-name').textContent = data.name;
+    document.getElementById('preview-meta').textContent =
+        `${data.key_messages.length} messages · ${data.personas.length} personas · ${data.word_count.toLocaleString()} words`;
+
+    const score = data.completeness_score ?? 100;
+    document.getElementById('preview-completeness-fill').style.width = score + '%';
+    document.getElementById('preview-completeness-label').textContent =
+        `Completeness: ${score}% · ${(data.missing_sections||[]).length} sections missing`;
+
+    const fields = [
+        ['Summary', data.summary],
+        ['Audience', data.audience],
+        ['Positioning', data.positioning],
+        ['Tagline', data.tagline],
+        ['Differentiation', data.differentiation],
+        ['Brand Personality', data.brand_personality],
+    ];
+    const sectionsEl = document.getElementById('preview-sections');
+    sectionsEl.innerHTML = fields.map(([label, val]) => val ? `
+        <div class="preview-section">
+            <div class="preview-section-title">${label}</div>
+            <div class="preview-section-body">${esc(val)}</div>
+        </div>` : '').join('');
+
+    if (data.key_messages && data.key_messages.length) {
+        const sectionLabels = {headline:'Headline',subhead:'Subhead',benefit:'Benefit',use_case:'Use Case',proof_point:'Proof Point',objection:'Objection',social_proof:'Social Proof',positioning:'Positioning'};
+        const grouped = {};
+        data.key_messages.forEach(m => { (grouped[m.section_type] = grouped[m.section_type] || []).push(m); });
+        sectionsEl.innerHTML += `<div class="preview-section">
+            <div class="preview-section-title">Key Messages (${data.key_messages.length})</div>
+            <div class="preview-section-body">${
+                Object.entries(grouped).map(([st, msgs]) =>
+                    `<div style="margin-bottom:6px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-3);">${sectionLabels[st]||st}</strong><br>` +
+                    msgs.map(m => `<span class="preview-msg-pill">P${m.priority} ${esc(m.content.slice(0,60))}${m.content.length > 60 ? '…' : ''}</span>`).join('') +
+                    '</div>'
+                ).join('')
+            }</div>
+        </div>`;
+    }
+
+    if (data.personas && data.personas.length) {
+        sectionsEl.innerHTML += `<div class="preview-section">
+            <div class="preview-section-title">Personas (${data.personas.length})</div>
+            <div class="preview-section-body">${data.personas.map(p =>
+                `<span class="preview-msg-pill">${esc(p.name)}</span>`
+            ).join('')}</div>
+        </div>`;
+    }
+
+    if (data.know_your_market) {
+        document.getElementById('preview-kym-card').style.display = 'block';
+        document.getElementById('preview-kym-content').textContent = data.know_your_market;
+    }
+
+    document.getElementById('structure-preview').style.display = 'block';
+}
+
+async function confirmSave() {
+    if (!_previewToken) return;
+    const btn = document.getElementById('confirm-save-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving…';
+    try {
+        const resp = await fetch(`${API}/confirm-structure`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({preview_token: _previewToken}),
+        });
+        const data = await resp.json();
+        if (data.status === 'failed' || data.error) {
+            showExtractionError(data.error || {stage:'database_save', message: data.detail || 'Save failed'});
+            btn.disabled = false;
+            btn.innerHTML = 'Save Framework →';
+            return;
+        }
         extractedHouseId = data.id;
-        if (statusEl) statusEl.innerHTML = '<span style="color:var(--success);">&#10003; Extracted</span>';
+        document.getElementById('structure-preview').style.display = 'none';
         document.getElementById('extraction-name').textContent = data.name;
         document.getElementById('extraction-meta').textContent = `${data.message_count} messages · ${data.persona_count} personas · ${data.indexed ? 'indexed' : 'not indexed'}`;
         const score = data.completeness_score ?? 100;
@@ -1045,10 +1266,11 @@ async function processUploadedFile() {
             document.getElementById('kym-content').textContent = data.know_your_market;
         }
         renderMissingSections(data.missing_sections || [], data.id);
-        toast(`"${data.name}" extracted successfully`, 'success');
+        toast(`"${data.name}" saved successfully`, 'success');
     } catch (e) {
-        if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger);">Extraction failed</span>';
-        toast('Extraction failed: ' + e.message, 'error');
+        showExtractionError({stage:'database_save', message: e.message, detail: ''});
+        btn.disabled = false;
+        btn.innerHTML = 'Save Framework →';
     }
 }
 
@@ -1102,10 +1324,16 @@ function viewExtractedHouse() {
 }
 
 function resetUpload() {
+    stopStructuringTimer();
     uploadedFileData = null;
     uploadedFile = null;
     extractedHouseId = null;
+    _previewToken = null;
+    _previewData = null;
     document.getElementById('upload-preview-card').style.display = 'none';
+    document.getElementById('extraction-error').style.display = 'none';
+    document.getElementById('structure-preview').style.display = 'none';
+    document.getElementById('preview-kym-card').style.display = 'none';
     document.getElementById('extraction-result').style.display = 'none';
     uploadZone.innerHTML = `
         <svg class="upload-zone-icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>

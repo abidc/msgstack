@@ -1,18 +1,22 @@
 """FastAPI web app — admin UX for MsgStack MCP management."""
 
+import logging
 import os
-import shutil
-import tempfile
+import time
+import uuid as _uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
+
+log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
 from src.models import Channel, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
 from src.store import Store
@@ -42,6 +46,19 @@ store.init()
 
 skills = SkillManager(skills_dir=str(DATA_DIR / "skills"))
 structurer = HouseStructurer()
+
+# In-memory cache for preview-structure → confirm-structure flow
+# Maps preview_token → (StructuredHouse, source_name, original_file_path)
+_preview_cache: dict[str, tuple] = {}
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    log.info("%s %s → %d  (%.1fms)", request.method, request.url.path, response.status_code, elapsed_ms)
+    return response
 
 
 # --- Helpers ---
@@ -329,14 +346,20 @@ async def extract_upload(
     file: UploadFile = File(...),
     source_name: str = Form(""),
 ):
-    """Upload a file, extract text, and run the LLM structurer to create a MessageHouse."""
+    """Upload a file, extract text, structure it, and save as a MessageHouse.
+
+    Returns structured error JSON on failure with which stage failed.
+    """
     file_path = UPLOAD_DIR / file.filename
     save_upload(file.file, file_path)
 
     try:
         text = extract_text(file_path)
     except ExtractionError as e:
-        raise HTTPException(400, str(e))
+        return JSONResponse(status_code=400, content={
+            "status": "failed",
+            "error": {"stage": "text_extraction", "message": str(e), "detail": str(e)},
+        })
 
     if not source_name:
         source_name = Path(file.filename).stem
@@ -344,12 +367,142 @@ async def extract_upload(
     try:
         structured = structurer.structure(text, source_name=source_name)
     except Exception as e:
-        raise HTTPException(500, f"LLM structuring failed: {e}")
+        log.error("LLM structuring failed for %s: %s", file.filename, e)
+        return JSONResponse(status_code=500, content={
+            "status": "failed",
+            "error": {"stage": "llm_structuring", "message": "LLM structuring failed", "detail": str(e)},
+        })
 
+    try:
+        house, indexed, markdown = _commit_structured_house(structured, file.filename)
+    except Exception as e:
+        log.error("DB commit failed for %s: %s", file.filename, e)
+        return JSONResponse(status_code=500, content={
+            "status": "failed",
+            "error": {"stage": "database_save", "message": "Failed to save to database", "detail": str(e)},
+        })
+
+    return {
+        "id": str(house.id),
+        "name": house.name,
+        "status": "created",
+        "message_count": len(structured.key_messages),
+        "persona_count": len(structured.personas),
+        "indexed": indexed,
+        "markdown": markdown,
+        "know_your_market": structured.know_your_market,
+        "missing_sections": structured.missing_sections,
+        "completeness_score": max(0, 100 - len(structured.missing_sections) * 10),
+    }
+
+
+@app.post("/api/preview-structure")
+async def preview_structure(
+    file: UploadFile = File(...),
+    source_name: str = Form(""),
+):
+    """Extract and structure a file but do NOT save to DB.
+
+    Returns the structured sections for user review. Call /api/confirm-structure
+    with the returned preview_token to persist.
+    """
+    file_path = UPLOAD_DIR / file.filename
+    save_upload(file.file, file_path)
+
+    try:
+        text = extract_text(file_path)
+    except ExtractionError as e:
+        return JSONResponse(status_code=400, content={
+            "status": "failed",
+            "error": {"stage": "text_extraction", "message": str(e), "detail": str(e)},
+        })
+
+    if not source_name:
+        source_name = Path(file.filename).stem
+
+    try:
+        structured = structurer.structure(text, source_name=source_name)
+    except Exception as e:
+        log.error("LLM structuring failed for %s: %s", file.filename, e)
+        return JSONResponse(status_code=500, content={
+            "status": "failed",
+            "error": {"stage": "llm_structuring", "message": "LLM structuring failed", "detail": str(e)},
+        })
+
+    token = str(_uuid.uuid4())
+    _preview_cache[token] = (structured, source_name, str(file_path))
+
+    return {
+        "status": "preview",
+        "preview_token": token,
+        "name": structured.name,
+        "char_count": len(text),
+        "word_count": len(text.split()),
+        "summary": structured.summary,
+        "audience": structured.audience,
+        "brand_personality": structured.brand_personality,
+        "positioning": structured.positioning,
+        "tagline": structured.tagline,
+        "differentiation": structured.differentiation,
+        "know_your_market": structured.know_your_market,
+        "key_messages": structured.key_messages,
+        "personas": structured.personas,
+        "missing_sections": structured.missing_sections,
+        "completeness_score": max(0, 100 - len(structured.missing_sections) * 10),
+    }
+
+
+@app.post("/api/confirm-structure")
+async def confirm_structure(data: dict):
+    """Persist a previewed structure to DB and index to Pinecone.
+
+    Body: {"preview_token": "...", "edits": {optional field overrides}}
+    """
+    token = data.get("preview_token")
+    if not token or token not in _preview_cache:
+        raise HTTPException(400, "Invalid or expired preview_token")
+
+    structured, source_name, file_path_str = _preview_cache.pop(token)
+
+    # Apply any user edits to top-level fields
+    edits = data.get("edits", {})
+    for field in ("name", "summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"):
+        if field in edits and edits[field]:
+            setattr(structured, field, edits[field])
+
+    try:
+        filename = Path(file_path_str).name
+        house, indexed, markdown = _commit_structured_house(structured, filename)
+    except Exception as e:
+        log.error("DB commit failed during confirm-structure: %s", e)
+        return JSONResponse(status_code=500, content={
+            "status": "failed",
+            "error": {"stage": "database_save", "message": "Failed to save to database", "detail": str(e)},
+        })
+
+    return {
+        "id": str(house.id),
+        "name": house.name,
+        "status": "created",
+        "message_count": len(structured.key_messages),
+        "persona_count": len(structured.personas),
+        "indexed": indexed,
+        "markdown": markdown,
+        "know_your_market": structured.know_your_market,
+        "missing_sections": structured.missing_sections,
+        "completeness_score": max(0, 100 - len(structured.missing_sections) * 10),
+    }
+
+
+def _commit_structured_house(structured: StructuredHouse, filename: str) -> tuple:
+    """Save a StructuredHouse to DB, write markdown, and index to Pinecone.
+
+    Returns (house, indexed_bool, markdown_str).
+    """
     house = MessageHouse(
         name=structured.name,
         source="upload",
-        source_id=file.filename,
+        source_id=filename,
         summary=structured.summary,
         audience=structured.audience,
         brand_personality=structured.brand_personality,
@@ -362,9 +515,13 @@ async def extract_upload(
     store.upsert_house(house)
 
     for km in structured.key_messages:
+        try:
+            section_type = SectionType(km["section_type"])
+        except ValueError:
+            section_type = SectionType.POSITIONING
         msg = KeyMessage(
             message_house_id=house.id,
-            section_type=SectionType(km["section_type"]),
+            section_type=section_type,
             priority=km.get("priority", 3),
             content=km["content"],
             variants=km.get("variants", {}),
@@ -399,21 +556,11 @@ async def extract_upload(
     try:
         engine.index_house(house.id)
         indexed = True
-    except Exception:
+    except Exception as exc:
+        log.warning("Pinecone indexing skipped for %s: %s", house.id, exc)
         indexed = False
 
-    return {
-        "id": str(house.id),
-        "name": house.name,
-        "status": "created",
-        "message_count": len(structured.key_messages),
-        "persona_count": len(structured.personas),
-        "indexed": indexed,
-        "markdown": markdown,
-        "know_your_market": structured.know_your_market,
-        "missing_sections": structured.missing_sections,
-        "completeness_score": max(0, 100 - len(structured.missing_sections) * 10),
-    }
+    return house, indexed, markdown
 
 
 @app.get("/api/frames/{house_id}/markdown")
@@ -561,13 +708,76 @@ def index_all_houses():
         try:
             vectors = engine.index_house(house.id)
             total_vectors += vectors
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("Pinecone index failed for %s: %s", house.id, exc)
 
     return {
         "indexed_houses": len(houses),
         "total_vectors": total_vectors,
     }
+
+
+@app.get("/api/houses/{house_id}/index-status")
+def get_house_index_status(house_id: str):
+    """Check Pinecone index status for a house: indexed / not_indexed / stale."""
+    from src.grounding.search import GroundingEngine
+    from pinecone import PineconeException
+
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+
+    engine = GroundingEngine(
+        store=store,
+        openai_api_key=os.environ.get("OPENAI_API_KEY"),
+        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+    )
+
+    if engine.index is None:
+        return {"status": "unavailable", "message": "Pinecone index not reachable"}
+
+    try:
+        # Query with a zero vector + house filter to check if any vectors exist
+        dummy = [0.0] * 1536
+        results = engine.index.query(
+            vector=dummy,
+            filter={"message_house_id": {"$eq": str(house_uuid)}},
+            top_k=1,
+            include_metadata=True,
+            namespace=engine.namespace,
+        )
+        matches = results.get("matches", [])
+        if not matches:
+            return {"status": "not_indexed", "house_id": house_id}
+
+        # Check staleness: compare last_synced in vector metadata vs house.last_synced
+        meta_synced_str = matches[0].get("metadata", {}).get("last_synced")
+        if meta_synced_str and house.last_synced:
+            from datetime import timezone
+            meta_dt = datetime.fromisoformat(meta_synced_str)
+            house_dt = house.last_synced
+            # Make both offset-naive for comparison
+            if meta_dt.tzinfo is not None:
+                meta_dt = meta_dt.replace(tzinfo=None)
+            stale = meta_dt < house_dt
+            return {
+                "status": "stale" if stale else "indexed",
+                "house_id": house_id,
+                "indexed_at": meta_synced_str,
+                "house_synced": house.last_synced.isoformat(),
+            }
+
+        return {"status": "indexed", "house_id": house_id}
+
+    except PineconeException as e:
+        log.error("Pinecone index-status query failed for %s: %s", house_id, e)
+        return {"status": "error", "message": str(e)}
 
 
 # --- Internal helpers ---

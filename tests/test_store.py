@@ -137,6 +137,7 @@ def test_grounding_response_model():
         channel="all",
         confidence=0.95,
         rerank_reason="high score",
+        source={"house_id": str(uuid4()), "house_name": "Test House"},
     )
     ctx = GroundingContext(
         active_house_id=uuid4(),

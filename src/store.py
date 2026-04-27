@@ -105,8 +105,9 @@ class Store:
         with self.session() as s:
             existing = s.get(HouseModel, str(house.id))
             if existing:
-                for k, v in house.model_dump().items():
-                    setattr(existing, k, v)
+                for k, v in _to_db(house.model_dump()).items():
+                    if k != "id":
+                        setattr(existing, k, v)
             else:
                 s.add(HouseModel(**_to_db(house.model_dump())))
             s.commit()
@@ -134,8 +135,9 @@ class Store:
         with self.session() as s:
             existing = s.get(KeyMessageModel, str(msg.id))
             if existing:
-                for k, v in msg.model_dump().items():
-                    setattr(existing, k, v)
+                for k, v in _to_db(msg.model_dump()).items():
+                    if k != "id":
+                        setattr(existing, k, v)
             else:
                 s.add(KeyMessageModel(**_to_db(msg.model_dump())))
             s.commit()
@@ -154,8 +156,9 @@ class Store:
         with self.session() as s:
             existing = s.get(PersonaModel, str(persona.id))
             if existing:
-                for k, v in persona.model_dump().items():
-                    setattr(existing, k, v)
+                for k, v in _to_db(persona.model_dump()).items():
+                    if k != "id":
+                        setattr(existing, k, v)
             else:
                 s.add(PersonaModel(**_to_db(persona.model_dump())))
             s.commit()

@@ -1,9 +1,12 @@
 """LLM-based MessageHouse structuring: raw text → structured markdown."""
 
+import json
 import os
+import re
+import time
 from typing import Optional
 
-from openai import OpenAI
+from openai import OpenAI, APITimeoutError, RateLimitError, APIError
 from pydantic import BaseModel, Field
 
 
@@ -22,7 +25,6 @@ class StructuredHouse(BaseModel):
 
 REQUIRED_SECTIONS = ["summary", "audience", "positioning", "tagline", "differentiation"]
 REQUIRED_MESSAGE_TYPES = ["headline", "benefit", "proof_point"]
-
 
 STRUCTURER_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete MessageHouse in markdown format.
 
@@ -111,31 +113,151 @@ SOURCE DOCUMENT:
 {content}
 """
 
+PERSONAS_JSON_PROMPT = """Extract all buyer personas from the markdown text below.
+Return ONLY a valid JSON object with a "personas" array using this schema:
+{{
+  "personas": [
+    {{
+      "name": "persona name or role title",
+      "description": "job title / who they are",
+      "pain_points": ["specific pain point 1", "specific pain point 2"],
+      "buying_triggers": ["trigger 1", "trigger 2"],
+      "objections": ["objection 1", "objection 2"]
+    }}
+  ]
+}}
+
+If a field is empty return an empty array []. If there are no personas, return {{"personas": []}}.
+Do not fabricate — only extract what is stated.
+
+Markdown text:
+{text}"""
+
 
 class HouseStructurer:
+    MAX_SINGLE_CHUNK = 24000
+    CHUNK_SIZE = 20000
+    CHUNK_OVERLAP = 1000
+
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
         self.client = OpenAI(api_key=openai_api_key or os.environ.get("OPENAI_API_KEY"))
         self.model = model
 
     def structure(self, text: str, source_name: str = "Untitled Source") -> StructuredHouse:
-        """Run the structurer LLM on raw text and return a StructuredHouse."""
-        prompt = STRUCTURER_PROMPT.format(content=text[:24000])
+        """Run the structurer LLM on raw text and return a StructuredHouse.
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a messaging strategist with deep B2B SaaS expertise. Extract real, high-signal messaging from source documents.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            max_tokens=4000,
-        )
+        For documents >24k chars, splits into overlapping chunks, structures each,
+        then merges results.
+        """
+        if len(text) <= self.MAX_SINGLE_CHUNK:
+            return self._structure_single_chunk(text, source_name)
 
-        raw = response.choices[0].message.content
+        chunks = self._split_text(text)
+        houses = [self._structure_single_chunk(chunk, source_name) for chunk in chunks]
+        return self._merge_structures(houses, source_name)
+
+    def _split_text(self, text: str) -> list[str]:
+        """Split text at paragraph boundaries into ~CHUNK_SIZE char chunks."""
+        chunks: list[str] = []
+        start = 0
+        while start < len(text):
+            end = start + self.CHUNK_SIZE
+            if end >= len(text):
+                chunks.append(text[start:])
+                break
+            # Walk back to nearest paragraph break
+            split_at = text.rfind("\n\n", start, end)
+            if split_at == -1 or split_at <= start:
+                split_at = text.rfind("\n", start, end)
+            if split_at == -1 or split_at <= start:
+                split_at = end
+            chunks.append(text[start:split_at])
+            start = max(split_at - self.CHUNK_OVERLAP, split_at)
+        return [c for c in chunks if c.strip()]
+
+    def _structure_single_chunk(self, text: str, source_name: str) -> StructuredHouse:
+        """Structure one text chunk with retry on transient OpenAI errors."""
+        prompt = STRUCTURER_PROMPT.format(content=text)
+        raw = self._llm_call_with_retry(prompt)
         return self._parse_markdown(raw, source_name)
+
+    def _llm_call_with_retry(self, prompt: str, max_retries: int = 3) -> str:
+        """Call the structuring LLM with exponential backoff on timeout/rate-limit."""
+        delay = 2.0
+        last_exc: Exception = RuntimeError("unreachable")
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a messaging strategist with deep B2B SaaS expertise. Extract real, high-signal messaging from source documents.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=4000,
+                    timeout=90,
+                )
+                return response.choices[0].message.content
+            except (APITimeoutError, RateLimitError) as e:
+                last_exc = e
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    delay *= 2
+            except APIError as e:
+                # Non-retryable API errors (bad request, auth, etc.)
+                raise
+        raise last_exc
+
+    def _merge_structures(self, houses: list["StructuredHouse"], source_name: str) -> StructuredHouse:
+        """Merge multiple StructuredHouse objects from chunked structuring."""
+        if not houses:
+            return StructuredHouse(name=source_name, summary="", audience="", brand_personality="",
+                                   positioning="", tagline="", differentiation="", key_messages=[], personas=[])
+        if len(houses) == 1:
+            return houses[0]
+
+        def first_nonempty(attr: str) -> str:
+            for h in houses:
+                v = getattr(h, attr, "")
+                if v and v.strip() and v.strip() != "[Not found in source]":
+                    return v
+            return ""
+
+        merged_messages: list[dict] = []
+        seen_content: set[str] = set()
+        for h in houses:
+            for m in h.key_messages:
+                key = m["content"].strip().lower()[:80]
+                if key not in seen_content:
+                    seen_content.add(key)
+                    merged_messages.append(m)
+
+        merged_personas: list[dict] = []
+        seen_names: set[str] = set()
+        for h in houses:
+            for p in h.personas:
+                name_key = p.get("name", "").strip().lower()
+                if name_key not in seen_names:
+                    seen_names.add(name_key)
+                    merged_personas.append(p)
+
+        merged = StructuredHouse(
+            name=first_nonempty("name") or source_name,
+            summary=first_nonempty("summary"),
+            audience=first_nonempty("audience"),
+            brand_personality=first_nonempty("brand_personality"),
+            positioning=first_nonempty("positioning"),
+            tagline=first_nonempty("tagline"),
+            differentiation=first_nonempty("differentiation"),
+            key_messages=merged_messages,
+            personas=merged_personas,
+            know_your_market=first_nonempty("know_your_market"),
+        )
+        merged.missing_sections = self._find_missing(merged)
+        return merged
 
     def _parse_markdown(self, md: str, source_name: str) -> StructuredHouse:
         lines = md.split("\n")
@@ -146,14 +268,13 @@ class HouseStructurer:
         for line in lines:
             stripped = line.strip()
             # Only split on ## headers — preserve ### sub-headers as content
-            # so that _parse_key_messages receives the full block including subsections
             if stripped.startswith("## "):
                 if current_section and current_content:
                     sections[current_section] = "\n".join(current_content).strip()
                 current_section = stripped[3:].strip().lower().replace(" ", "_")
                 current_content = []
             elif current_section is not None:
-                current_content.append(line)  # preserve original line (including ###)
+                current_content.append(line)
 
         if current_section and current_content:
             sections[current_section] = "\n".join(current_content).strip()
@@ -227,11 +348,8 @@ class HouseStructurer:
             if not stripped:
                 continue
             if stripped.startswith("### "):
-                # Normalize: strip "(Priority X-Y)" suffixes, collapse to key word
                 raw_name = stripped[4:].strip().lower()
-                # Remove parenthetical qualifiers like "(Priority 1-2)"
-                import re as _re
-                raw_name = _re.sub(r'\s*\([^)]*\)', '', raw_name).strip()
+                raw_name = re.sub(r'\s*\([^)]*\)', '', raw_name).strip()
                 section_name = raw_name.replace(" ", "_")
                 current_section, current_priority = section_map.get(
                     section_name, (section_name, 3)
@@ -254,8 +372,49 @@ class HouseStructurer:
         return messages
 
     def _parse_personas(self, text: str) -> list[dict]:
+        """Extract personas using LLM JSON output, falling back to regex parser."""
+        if not text.strip():
+            return []
+        try:
+            return self._extract_personas_json(text)
+        except Exception:
+            return self._parse_personas_regex(text)
+
+    def _extract_personas_json(self, text: str) -> list[dict]:
+        """Ask the LLM to return personas as structured JSON — no regex fragility."""
+        prompt = PERSONAS_JSON_PROMPT.format(text=text)
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": "You extract structured data from markdown text. Return valid JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+            timeout=30,
+        )
+        raw = response.choices[0].message.content
+        data = json.loads(raw)
+        personas = data.get("personas", [])
+        # Normalise — ensure all required keys exist
+        result = []
+        for p in personas:
+            name = (p.get("name") or "").strip()
+            if not name:
+                continue
+            result.append({
+                "name": name,
+                "description": (p.get("description") or "").strip(),
+                "pain_points": [s for s in p.get("pain_points", []) if isinstance(s, str) and s.strip()],
+                "buying_triggers": [s for s in p.get("buying_triggers", []) if isinstance(s, str) and s.strip()],
+                "objections": [s for s in p.get("objections", []) if isinstance(s, str) and s.strip()],
+            })
+        return result
+
+    def _parse_personas_regex(self, text: str) -> list[dict]:
+        """Legacy regex-based persona parser — used as fallback only."""
         personas = []
-        current = {}
+        current: dict = {}
 
         for line in text.split("\n"):
             stripped = line.strip()

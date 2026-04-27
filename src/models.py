@@ -17,6 +17,7 @@ class SectionType(str, Enum):
     OBJECTION = "objection"
     SOCIAL_PROOF = "social_proof"
     POSITIONING = "positioning"
+    KNOW_YOUR_MARKET = "know_your_market"
 
 
 class Channel(str, Enum):
@@ -185,3 +186,4 @@ class SearchFilters(BaseModel):
     message_houses: list[str] | None = None
     include_variants: bool = True
     min_priority: int | None = None
+    min_confidence: float | None = None

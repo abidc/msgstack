@@ -1,5 +1,6 @@
 """Grounding search — hybrid vector + metadata search with Pinecone reranking."""
 
+import logging
 import os
 from datetime import datetime
 from typing import Optional
@@ -7,6 +8,8 @@ from uuid import UUID
 
 from openai import OpenAI
 from pinecone import Pinecone, PineconeException
+
+log = logging.getLogger(__name__)
 
 from src.models import (
     Channel,
@@ -88,6 +91,7 @@ class GroundingEngine:
             "proof_point": ["proof", "proof point", "social proof", "testimonial", "customer story", "case study", "evidence"],
             "objection": ["objection", "objections", "rebuttal", "concern"],
             "positioning": ["positioning", "position", "frame"],
+            "know_your_market": ["know your market", "know your customer", "kym", "kyc", "market research", "market context", "competitive context"],
         }
         for section, keywords in section_map.items():
             if any(kw in text for kw in keywords):
@@ -226,6 +230,15 @@ class GroundingEngine:
 
         active_personas = list({r.persona for r in grounding_results if r.persona})
 
+        warnings: list[str] = []
+        if filters.min_confidence is not None and grounding_results:
+            avg_conf = sum(r.confidence for r in grounding_results) / len(grounding_results)
+            if avg_conf < filters.min_confidence:
+                warnings.append(
+                    f"Average result confidence ({avg_conf:.2f}) is below requested threshold ({filters.min_confidence:.2f}). "
+                    "Results may not be strongly relevant — consider rephrasing the query."
+                )
+
         ctx = GroundingContext(
             active_house_id=UUID(top_house_id) if grounding_results else active_house_id,
             house_name=house_name,
@@ -235,13 +248,27 @@ class GroundingEngine:
             confidence=confidence,
             coverage=coverage,
             gaps=[],
-            warnings=[],
+            warnings=warnings,
         )
 
         return GroundingResponse(results=grounding_results, grounding_context=ctx)
 
     def _rerank(self, query: str, matches: list[dict], top_k: int) -> list[dict]:
-        return matches[:top_k]
+        """Rerank by blending vector score with keyword-overlap score."""
+        _STOPWORDS = {"a", "an", "the", "and", "or", "in", "of", "to", "for", "is", "are",
+                      "be", "with", "that", "this", "on", "at", "by", "from", "as", "it"}
+        query_tokens = {w for w in query.lower().split() if len(w) > 2 and w not in _STOPWORDS}
+
+        def _score(match: dict) -> float:
+            vec_score = match.get("score", 0.0)
+            if not query_tokens:
+                return vec_score
+            content = (match.get("metadata", {}).get("content", "")).lower()
+            content_tokens = set(content.split())
+            overlap = len(query_tokens & content_tokens) / len(query_tokens)
+            return 0.7 * vec_score + 0.3 * overlap
+
+        return sorted(matches, key=_score, reverse=True)[:top_k]
 
     def _fallback_search(self, query: str, filters: SearchFilters) -> GroundingResponse:
         all_houses = self.store.list_houses()
@@ -368,7 +395,7 @@ class GroundingEngine:
                         "metadata": {
                             **base_meta,
                             "content": kym_text[:1500],
-                            "section_type": "positioning",
+                            "section_type": "know_your_market",
                             "priority": 1,
                             "persona": "general",
                             "channel": "all",
@@ -376,5 +403,9 @@ class GroundingEngine:
                     })
 
         if vectors:
-            self.index.upsert(vectors=vectors, namespace=self.namespace)
+            try:
+                self.index.upsert(vectors=vectors, namespace=self.namespace)
+            except PineconeException as e:
+                log.error("Pinecone upsert failed for house %s: %s", house_id, e)
+                raise
         return len(vectors)
