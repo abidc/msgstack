@@ -12,17 +12,19 @@ class Session:
         self.active_house_name: str = ""
         self.active_house_summary: str = ""
         self.active_personas: list[str] = []
+        self.active_workspace_id: str = "default"
         self.recent_searches: list[str] = []
         self.used_chunks: list[str] = []
         self._context = GroundingContext()
 
     def set_active_house(
-        self, house_id: UUID, house_name: str, house_summary: str, personas: list[str]
+        self, house_id: UUID, house_name: str, house_summary: str, personas: list[str], workspace_id: str = "default"
     ) -> GroundingContext:
         self.active_house_id = house_id
         self.active_house_name = house_name
         self.active_house_summary = house_summary
         self.active_personas = personas
+        self.active_workspace_id = workspace_id
         self._context = GroundingContext(
             active_house_id=house_id,
             house_name=house_name,

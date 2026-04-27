@@ -242,6 +242,11 @@ class Store:
                 return None
             return _house_from_row(row)
 
+    def get_house_workspace_id(self, house_id: UUID) -> str | None:
+        with self.session() as s:
+            row = s.get(HouseModel, str(house_id))
+            return row.workspace_id if row else None
+
     def get_house_by_name(self, name: str) -> MessageHouse | None:
         with self.session() as s:
             row = s.query(HouseModel).filter(HouseModel.name == name).first()
@@ -426,6 +431,77 @@ class Store:
                 s.commit()
                 return True
             return False
+
+    def diff_snapshot(self, snapshot_id: UUID) -> dict:
+        """Compare a snapshot against the current state of its house."""
+        snap = self.get_snapshot(snapshot_id)
+        if not snap:
+            raise ValueError(f"Snapshot {snapshot_id} not found")
+
+        snap_data = snap["snapshot_json"]
+        house_id = UUID(snap_data["house"]["id"])
+
+        current_house = self.get_house(house_id)
+        if not current_house:
+            raise ValueError("House no longer exists")
+
+        current_messages = self.get_key_messages(house_id)
+        current_personas = self.get_personas(house_id)
+
+        field_changes = {}
+        snap_house = snap_data["house"]
+        for field in ("name", "summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"):
+            snap_val = snap_house.get(field, "")
+            curr_val = getattr(current_house, field, "") or ""
+            if snap_val != curr_val:
+                field_changes[field] = {"snapshot": snap_val, "current": curr_val}
+
+        snap_msgs = {m["id"]: m for m in snap_data.get("messages", [])}
+        curr_msgs = {str(m.id): m for m in current_messages}
+
+        added_messages = [
+            {"id": mid, "content": m.content, "section_type": str(m.section_type)}
+            for mid, m in curr_msgs.items() if mid not in snap_msgs
+        ]
+        removed_messages = [
+            {"id": mid, "content": m["content"], "section_type": m["section_type"]}
+            for mid, m in snap_msgs.items() if mid not in curr_msgs
+        ]
+        changed_messages = []
+        for mid in snap_msgs:
+            if mid in curr_msgs:
+                snap_m = snap_msgs[mid]
+                curr_m = curr_msgs[mid]
+                if snap_m["content"] != curr_m.content:
+                    changed_messages.append({
+                        "id": mid,
+                        "snapshot_content": snap_m["content"],
+                        "current_content": curr_m.content,
+                        "section_type": str(curr_m.section_type),
+                    })
+
+        snap_personas = {p["id"]: p for p in snap_data.get("personas", [])}
+        curr_personas = {str(p.id): p for p in current_personas}
+        added_personas = [{"id": pid, "name": p.name} for pid, p in curr_personas.items() if pid not in snap_personas]
+        removed_personas = [{"id": pid, "name": p["name"]} for pid, p in snap_personas.items() if pid not in curr_personas]
+
+        return {
+            "snapshot_id": str(snapshot_id),
+            "snapshot_label": snap["label"],
+            "snapshot_created_at": snap["created_at"],
+            "house_id": str(house_id),
+            "field_changes": field_changes,
+            "messages": {
+                "added": added_messages,
+                "removed": removed_messages,
+                "changed": changed_messages,
+            },
+            "personas": {
+                "added": added_personas,
+                "removed": removed_personas,
+            },
+            "has_changes": bool(field_changes or added_messages or removed_messages or changed_messages or added_personas or removed_personas),
+        }
 
     # --- Artifact History ---
 

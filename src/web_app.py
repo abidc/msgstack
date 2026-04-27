@@ -55,6 +55,24 @@ structurer = HouseStructurer()
 import openai as _oai_mod
 _oai_client = _oai_mod.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Ensure Pinecone index exists on startup."""
+    from src.grounding.search import GroundingEngine
+    try:
+        engine = GroundingEngine(
+            store=store,
+            openai_api_key=os.environ.get("OPENAI_API_KEY"),
+            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+            index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+            namespace="default",
+        )
+        engine.ensure_index()
+        log.info("Pinecone index ensured on startup")
+    except Exception as e:
+        log.warning("Pinecone index creation skipped: %s", e)
+
 def _check_token_budget(workspace_id: str) -> None:
     """Raise HTTP 402 if workspace token budget is exhausted."""
     ws = store.get_workspace(workspace_id)
@@ -255,14 +273,14 @@ def update_house(house_id: str, data: HouseUpdate):
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(house, k, v)
     store.upsert_house(house)
-    return {"ok": True}
+    return {"ok": True, "updated_id": house_id}
 
 
 @app.delete("/api/houses/{house_id}")
 def delete_house(house_id: str):
     if not store.delete_house(UUID(house_id)):
         raise HTTPException(404, "House not found")
-    return {"ok": True}
+    return {"ok": True, "deleted_id": house_id}
 
 
 # --- Key Messages ---
@@ -317,14 +335,83 @@ def update_message(msg_id: str, data: MessageUpdate):
         else:
             setattr(msg, k, v)
     store.upsert_key_message(msg)
-    return {"ok": True}
+    return {"ok": True, "updated_id": msg_id}
 
 
 @app.delete("/api/messages/{msg_id}")
 def delete_message(msg_id: str):
-    if not _delete_message(msg_id):
+    if not store.delete_key_message(UUID(msg_id)):
         raise HTTPException(404, "Message not found")
-    return {"ok": True}
+    return {"ok": True, "deleted_id": msg_id}
+
+
+class MessageReorder(BaseModel):
+    ordered_ids: list[str]
+
+
+@app.patch("/api/houses/{house_id}/messages/reorder")
+def reorder_messages(house_id: str, data: MessageReorder):
+    """Update priority values so messages appear in the given order."""
+    count = 0
+    for priority, msg_id in enumerate(data.ordered_ids, start=1):
+        msg = _find_message(msg_id)
+        if msg and str(msg.message_house_id) == house_id:
+            msg.priority = priority
+            store.upsert_key_message(msg)
+            count += 1
+    return {"ok": True, "reordered_count": count}
+
+
+class BulkMessageImport(BaseModel):
+    rows: list[dict]
+
+
+@app.post("/api/houses/{house_id}/messages/bulk-import")
+def bulk_import_messages(house_id: str, data: BulkMessageImport):
+    """Import multiple key messages at once."""
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    if not store.get_house(house_uuid):
+        raise HTTPException(404, "House not found")
+
+    if not data.rows:
+        raise HTTPException(400, "No rows provided")
+
+    created = []
+    errors = []
+    existing = store.get_key_messages(house_uuid)
+    next_priority = (max((m.priority for m in existing), default=0) + 1)
+
+    for i, row in enumerate(data.rows):
+        try:
+            content = row.get("content")
+            if not content:
+                errors.append({"row": i, "error": "Missing required field: content"})
+                continue
+            if not isinstance(content, str) or not content.strip():
+                errors.append({"row": i, "error": "Invalid content: must be non-empty string"})
+                continue
+
+            section_type = row.get("section_type", "headline")
+            try:
+                st = SectionType(section_type)
+            except ValueError:
+                st = SectionType.HEADLINE
+
+            msg = KeyMessage(
+                message_house_id=house_uuid,
+                section_type=st,
+                priority=row.get("priority", next_priority + i),
+                content=content.strip(),
+            )
+            store.upsert_key_message(msg)
+            created.append(str(msg.id))
+        except Exception as e:
+            errors.append({"row": i, "error": str(e)})
+
+    return {"created": len(created), "errors": errors, "ids": created}
 
 
 # --- Personas ---
@@ -368,14 +455,14 @@ def update_persona(persona_id: str, data: PersonaUpdate):
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(persona, k, v)
     store.upsert_persona(persona)
-    return {"ok": True}
+    return {"ok": True, "updated_id": persona_id}
 
 
 @app.delete("/api/personas/{persona_id}")
 def delete_persona(persona_id: str):
-    if not _delete_persona(persona_id):
+    if not store.delete_persona(UUID(persona_id)):
         raise HTTPException(404, "Persona not found")
-    return {"ok": True}
+    return {"ok": True, "deleted_id": persona_id}
 
 
 # --- Source Upload & Processing ---
@@ -642,11 +729,13 @@ def _commit_structured_house(structured: StructuredHouse, filename: str) -> tupl
     save_path.write_text(markdown, encoding="utf-8")
 
     from src.grounding.search import GroundingEngine
+    house_row_ws = store.get_house_workspace_id(house.id)
     engine = GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
         pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
         index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+        namespace=house_row_ws or "default",
     )
     try:
         engine.index_house(house.id)
@@ -731,15 +820,16 @@ def run_seed():
     total_messages = sum(len(store.get_key_messages(h.id)) for h in houses)
     total_personas = sum(len(store.get_personas(h.id)) for h in houses)
 
-    engine = GroundingEngine(
-        store=store,
-        openai_api_key=os.environ.get("OPENAI_API_KEY"),
-        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
-    )
-
     indexed_count = 0
     for house in houses:
+        ws_id = store.get_house_workspace_id(house.id) or "default"
+        engine = GroundingEngine(
+            store=store,
+            openai_api_key=os.environ.get("OPENAI_API_KEY"),
+            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+            index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+            namespace=ws_id,
+        )
         try:
             engine.index_house(house.id)
             indexed_count += 1
@@ -768,11 +858,13 @@ def index_house(house_id: str):
     if not house:
         raise HTTPException(404, "House not found")
 
+    ws_id = store.get_house_workspace_id(house_uuid) or "default"
     engine = GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
         pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
         index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+        namespace=ws_id,
     )
 
     vectors_indexed = engine.index_house(house_uuid)
@@ -791,15 +883,16 @@ def index_all_houses():
 
     houses = store.list_houses()
 
-    engine = GroundingEngine(
-        store=store,
-        openai_api_key=os.environ.get("OPENAI_API_KEY"),
-        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
-    )
-
     total_vectors = 0
     for house in houses:
+        ws_id = store.get_house_workspace_id(house.id) or "default"
+        engine = GroundingEngine(
+            store=store,
+            openai_api_key=os.environ.get("OPENAI_API_KEY"),
+            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+            index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+            namespace=ws_id,
+        )
         try:
             vectors = engine.index_house(house.id)
             total_vectors += vectors
@@ -827,11 +920,13 @@ def get_house_index_status(house_id: str):
     if not house:
         raise HTTPException(404, "House not found")
 
+    ws_id = store.get_house_workspace_id(house_uuid) or "default"
     engine = GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
         pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
         index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+        namespace=ws_id,
     )
 
     if engine.index is None:
@@ -1233,6 +1328,16 @@ def get_snapshot(snapshot_id: str):
     return snap
 
 
+@app.get("/api/snapshots/{snapshot_id}/diff")
+def get_snapshot_diff(snapshot_id: str):
+    """Return a diff between a snapshot and the current framework state."""
+    try:
+        result = store.diff_snapshot(UUID(snapshot_id))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return result
+
+
 @app.delete("/api/snapshots/{snapshot_id}")
 def delete_snapshot(snapshot_id: str):
     if not store.delete_snapshot(UUID(snapshot_id)):
@@ -1366,6 +1471,55 @@ def download_artifact_docx(artifact_id: str):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.get("/api/artifacts/{artifact_id}/pdf", response_class=HTMLResponse)
+def download_artifact_pdf(artifact_id: str):
+    """Return a print-ready HTML page that auto-triggers browser print dialog."""
+    record = store.get_artifact(UUID(artifact_id))
+    if not record:
+        raise HTTPException(404, "Artifact not found")
+
+    sections_html = ""
+    for key, value in record["sections"].items():
+        sections_html += f"""
+        <div class="section">
+            <h2>{key.replace('_', ' ').title()}</h2>
+            <div class="section-body">{str(value).replace(chr(10), '<br>')}</div>
+        </div>"""
+
+    if record.get("raw_content"):
+        sections_html += f"""
+        <div class="section">
+            <h2>Full Content</h2>
+            <div class="section-body">{record['raw_content'].replace(chr(10), '<br>')}</div>
+        </div>"""
+
+    html = f"""<!doctype html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>{record['house_name']} — {record['skill_id'].replace('_', ' ').title()}</title>
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{ font-family: 'Inter', sans-serif; color: #0f172a; padding: 40px; max-width: 800px; margin: 0 auto; }}
+        h1 {{ font-size: 28px; font-weight: 700; margin-bottom: 4px; }}
+        .subtitle {{ color: #64748b; font-size: 14px; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 2px solid #e2e8f0; }}
+        .section {{ margin-bottom: 28px; page-break-inside: avoid; }}
+        h2 {{ font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6366f1; margin-bottom: 10px; }}
+        .section-body {{ font-size: 15px; line-height: 1.7; color: #334155; }}
+        @media print {{ body {{ padding: 0; }} }}
+        </style>
+    </head>
+    <body>
+        <h1>{record['house_name']}</h1>
+        <div class="subtitle">{record['skill_id'].replace('_', ' ').title()} · Generated {record['created_at'][:10]}</div>
+        {sections_html}
+        <script>window.onload = () => window.print();</script>
+    </body>
+    </html>"""
+    return HTMLResponse(content=html)
 
 
 # --- Completeness in houses list ---

@@ -240,6 +240,26 @@
         .history-item-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; }
         /* ── Tone check ── */
         .tone-warning { padding: 8px 12px; background: var(--warn-dim); border: 1px solid rgba(251,191,36,0.3); border-radius: var(--radius); margin-bottom: 8px; font-size: 13px; line-height: 1.5; }
+        /* ── Drag and drop ── */
+        .drag-handle { cursor: grab; color: #94a3b8; margin-right: 8px; user-select: none; }
+        .msg-item.dragging { opacity: 0.4; }
+        /* ── Milestone toast ── */
+        .milestone-toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: #fff; border-radius: 14px; padding: 16px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); z-index: 9999; transform: translateY(80px); opacity: 0; transition: all 0.35s cubic-bezier(0.34,1.56,0.64,1); min-width: 240px; }
+        .milestone-toast.toast-show { transform: translateY(0); opacity: 1; }
+        .toast-emoji { font-size: 28px; }
+        .toast-sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+        /* ── Diff modal ── */
+        .diff-field-changed { margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+        .diff-field-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+        .diff-field-values { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .diff-value { font-size: 12.5px; padding: 8px; background: var(--bg-2); border-radius: 4px; }
+        .diff-value-label { font-size: 10px; color: var(--text-3); margin-bottom: 4px; }
+        .diff-added { background: var(--success-dim); border: 1px solid rgba(52,211,153,0.3); }
+        .diff-removed { background: var(--danger-dim); border: 1px solid rgba(248,113,113,0.3); }
+        .diff-changed { background: var(--warn-dim); border: 1px solid rgba(251,191,36,0.3); }
+        /* ── Bulk import ── */
+        .bulk-import-preview { max-height: 300px; overflow-y: auto; margin: 12px 0; }
+        .bulk-import-row { display: grid; grid-template-columns: 120px 1fr; gap: 8px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -434,10 +454,15 @@
                 <div id="detail-messages" class="tab-content">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
                         <span style="color:var(--text-2);font-size:13px;" id="messages-count"></span>
-                        <button class="btn btn-ghost btn-sm" onclick="openMessageModal()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Add Message
-                        </button>
+                        <div style="display:flex;gap:6px;">
+                            <button class="btn btn-ghost btn-sm" onclick="openBulkImportModal()">
+                                Bulk Import
+                            </button>
+                            <button class="btn btn-ghost btn-sm" onclick="openMessageModal()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Add Message
+                            </button>
+                        </div>
                     </div>
                     <div id="detail-messages-list"></div>
                 </div>
@@ -941,6 +966,58 @@
     </div>
 </div>
 
+<div class="modal-overlay" id="bulk-import-modal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <span class="modal-title">Bulk Import Messages</span>
+            <button class="modal-close" onclick="closeModal('bulk-import-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Paste from spreadsheet or CSV</label>
+                <textarea class="form-textarea" id="bulk-import-text" style="min-height:150px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;" placeholder="Format: section_type TAB content (one per line)
+
+Example:
+headline	We help teams ship 3x faster
+benefit	Reduce deployment time by 60%
+subhead	The fastest way to production"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Default section type (for single-column input)</label>
+                <select class="form-select" id="bulk-default-section">
+                    <option value="headline">Headline</option>
+                    <option value="subhead">Subhead</option>
+                    <option value="benefit" selected>Benefit</option>
+                    <option value="use_case">Use Case</option>
+                    <option value="proof_point">Proof Point</option>
+                    <option value="objection">Objection</option>
+                    <option value="social_proof">Social Proof</option>
+                    <option value="positioning">Positioning</option>
+                </select>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="parseBulkImport()">Parse & Preview</button>
+            <div id="bulk-import-preview" class="bulk-import-preview" style="display:none;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('bulk-import-modal')">Cancel</button>
+            <button class="btn btn-primary" id="bulk-import-btn" onclick="doBulkImport()" disabled>Import All</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="diff-modal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <span class="modal-title" id="diff-modal-title">Changes</span>
+            <button class="modal-close" onclick="closeModal('diff-modal')">&times;</button>
+        </div>
+        <div class="modal-body" id="diff-modal-body"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('diff-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -980,6 +1057,27 @@ function toast(msg, type = '') {
     el.textContent = msg;
     el.className = `toast ${type} show`;
     setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ── Milestone Notifications ─────────────────────────────────────────────────
+let _lastMilestoneScore = 0;
+const _COMPLETION_MILESTONES = [25, 50, 75, 100];
+
+function checkCompletionMilestone(newScore) {
+    const crossed = _COMPLETION_MILESTONES.filter(m => _lastMilestoneScore < m && newScore >= m);
+    if (crossed.length) {
+        showMilestoneToast(crossed[crossed.length - 1]);
+    }
+    _lastMilestoneScore = newScore;
+}
+
+function showMilestoneToast(percent) {
+    const el = document.createElement('div');
+    el.className = 'milestone-toast';
+    el.innerHTML = `<div class="toast-emoji">🎉</div><div><div style="font-weight:600;font-size:14px;">${percent}% Complete!</div><div class="toast-sub">Your framework is coming together</div></div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('toast-show'));
+    setTimeout(() => { el.classList.remove('toast-show'); setTimeout(() => el.remove(), 400); }, 4000);
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────────
@@ -1147,6 +1245,7 @@ async function viewHouse(id) {
         } catch { document.getElementById('detail-markdown-content').textContent = '(No saved markdown)'; }
 
         showView('house-detail');
+        return house;
     } catch (e) { toast('Failed to load framework: ' + e.message, 'error'); }
 }
 
@@ -1174,25 +1273,77 @@ function renderMessages(messages) {
     ml.innerHTML = !messages.length
         ? '<div class="empty"><div class="empty-title">No messages yet</div></div>'
         : Object.entries(grouped).map(([st, msgs]) => `
-            <div style="margin-bottom:18px;">
+            <div style="margin-bottom:18px;" class="msg-section" data-section="${st}">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:8px;">${sectionLabels[st]||st}</div>
                 ${msgs.sort((a,b)=>a.priority-b.priority).map(m=>`
-                    <div class="msg-item" id="msg-item-${m.id}">
-                        <div class="msg-meta">
-                            <span class="badge badge-default">P${m.priority}</span>
-                            ${m.channels.map(c=>`<span class="badge badge-primary">${c}</span>`).join('')}
-                            ${Object.keys(m.variants||{}).length ? `<span class="badge badge-default" title="Has variants">${Object.keys(m.variants).join(', ')} variants</span>` : ''}
+                    <div class="msg-item" id="msg-item-${m.id}" draggable="true" data-msg-id="${m.id}">
+                        <span class="drag-handle" title="Drag to reorder">⠿</span>
+                        <div style="flex:1;">
+                            <div class="msg-meta">
+                                <span class="badge badge-default">P${m.priority}</span>
+                                ${m.channels.map(c=>`<span class="badge badge-primary">${c}</span>`).join('')}
+                                ${Object.keys(m.variants||{}).length ? `<span class="badge badge-default" title="Has variants">${Object.keys(m.variants).join(', ')} variants</span>` : ''}
+                            </div>
+                            <div class="msg-content">${esc(m.content)}</div>
+                            <div class="msg-item-actions">
+                                <button class="btn btn-ghost btn-xs" onclick="improveMessage('${m.id}')">✦ Improve</button>
+                                <button class="btn btn-ghost btn-xs" onclick="openVariantModal('${m.id}','${esc(m.content.slice(0,40))}')">+ Variant</button>
+                                <button class="btn btn-ghost btn-xs" onclick="editMessage('${m.id}')">Edit</button>
+                                <button class="btn btn-danger btn-xs" onclick="deleteMessage('${m.id}')">Delete</button>
+                            </div>
+                            <div id="improve-result-${m.id}" style="display:none;margin-top:8px;padding:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;line-height:1.6;"></div>
                         </div>
-                        <div class="msg-content">${esc(m.content)}</div>
-                        <div class="msg-item-actions">
-                            <button class="btn btn-ghost btn-xs" onclick="improveMessage('${m.id}')">✦ Improve</button>
-                            <button class="btn btn-ghost btn-xs" onclick="openVariantModal('${m.id}','${esc(m.content.slice(0,40))}')">+ Variant</button>
-                            <button class="btn btn-ghost btn-xs" onclick="editMessage('${m.id}')">Edit</button>
-                            <button class="btn btn-danger btn-xs" onclick="deleteMessage('${m.id}')">Delete</button>
-                        </div>
-                        <div id="improve-result-${m.id}" style="display:none;margin-top:8px;padding:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;line-height:1.6;"></div>
                     </div>`).join('')}
             </div>`).join('');
+    setupMessageDragAndDrop();
+}
+
+let _draggedMsgId = null;
+function setupMessageDragAndDrop() {
+    document.querySelectorAll('.msg-item[draggable="true"]').forEach(item => {
+        item.addEventListener('dragstart', e => {
+            _draggedMsgId = item.dataset.msgId;
+            item.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+            _draggedMsgId = null;
+        });
+        item.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        item.addEventListener('drop', e => {
+            e.preventDefault();
+            const targetId = item.dataset.msgId;
+            if (_draggedMsgId && targetId && _draggedMsgId !== targetId) {
+                const section = item.closest('.msg-section');
+                if (!section) return;
+                const items = Array.from(section.querySelectorAll('.msg-item')).map(el => el.dataset.msgId);
+                const fromIdx = items.indexOf(_draggedMsgId);
+                const toIdx = items.indexOf(targetId);
+                if (fromIdx === -1 || toIdx === -1) return;
+                items.splice(fromIdx, 1);
+                items.splice(toIdx, 0, _draggedMsgId);
+                reorderMessages(currentHouseId, items);
+            }
+        });
+    });
+}
+
+async function reorderMessages(houseId, orderedIds) {
+    try {
+        await fetch(`${API}/houses/${houseId}/messages/reorder`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ordered_ids: orderedIds}),
+        });
+        const house = await fetch(`${API}/houses/${houseId}`).then(r => r.json());
+        renderMessages(house.key_messages);
+        if (house.completeness_score != null) checkCompletionMilestone(house.completeness_score);
+        toast('Messages reordered', 'success');
+    } catch (e) { toast('Reorder failed: ' + e.message, 'error'); }
 }
 
 function renderPersonas(personas) {
@@ -1332,7 +1483,11 @@ async function saveMessage() {
         });
     }
     closeModal('message-modal');
-    viewHouse(currentHouseId);
+    viewHouse(currentHouseId).then(house => {
+        if (house && house.completeness_score != null) {
+            checkCompletionMilestone(house.completeness_score);
+        }
+    });
     toast('Message saved', 'success');
 }
 
@@ -1819,6 +1974,94 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
     el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
 });
 
+// ── Bulk Import ───────────────────────────────────────────────────────────────
+function openBulkImportModal() {
+    openModal('bulk-import-modal');
+    document.getElementById('bulk-import-text').value = '';
+    document.getElementById('bulk-import-preview').style.display = 'none';
+    document.getElementById('bulk-import-btn').disabled = true;
+}
+
+let _bulkImportParsed = [];
+
+function parseBulkImport() {
+    const text = document.getElementById('bulk-import-text').value.trim();
+    if (!text) return;
+    const defaultSection = document.getElementById('bulk-default-section').value;
+    const lines = text.split('\n');
+    const parsed = [];
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const tabIdx = trimmed.indexOf('\t');
+        if (tabIdx > -1) {
+            const section = trimmed.substring(0, tabIdx).trim().toLowerCase().replace(/ /g, '_');
+            const content = trimmed.substring(tabIdx + 1).trim();
+            if (content) parsed.push({ section_type: section || defaultSection, content });
+        } else {
+            parsed.push({ section_type: defaultSection, content: trimmed });
+        }
+    });
+    _bulkImportParsed = parsed;
+    const preview = parsed.map(p => `<div style="padding:4px 8px;border-bottom:1px solid var(--border);"><span style="background:var(--primary);color:white;padding:2px 6px;border-radius:3px;font-size:11px;">${esc(p.section_type)}</span> <span style="color:var(--text);">${esc(p.content.substring(0, 60))}${p.content.length > 60 ? '...' : ''}</span></div>`).join('');
+    document.getElementById('bulk-import-preview').innerHTML = `<div style="margin-top:12px;padding:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);max-height:200px;overflow-y:auto;">${parsed.length} rows parsed:<br>${preview}</div>`;
+    document.getElementById('bulk-import-preview').style.display = 'block';
+    document.getElementById('bulk-import-btn').disabled = parsed.length === 0;
+}
+
+async function doBulkImport() {
+    if (!_bulkImportParsed.length) return;
+    const btn = document.getElementById('bulk-import-btn');
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+    try {
+        const resp = await fetch(`${API}/houses/${currentHouseId}/messages/bulk-import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: _bulkImportParsed })
+        });
+        if (!resp.ok) throw new Error('Import failed');
+        closeModal('bulk-import-modal');
+        const house = await viewHouse(currentHouseId);
+        if (house && house.completeness_score != null) checkCompletionMilestone(house.completeness_score);
+    } catch (e) {
+        alert('Import failed: ' + e.message);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Import All';
+}
+
+// ── Snapshot Diff ───────────────────────────────────────────────────────────────
+async function showSnapshotDiff(snapId, snapLabel) {
+    try {
+        const resp = await fetch(`${API}/snapshots/${snapId}/diff`);
+        const data = await resp.json();
+        document.getElementById('diff-modal-title').textContent = `Changes: ${esc(snapLabel || 'Snapshot')}`;
+        if (!data.has_changes) {
+            document.getElementById('diff-modal-body').innerHTML = '<p style="color:var(--text-2);">No changes since this snapshot.</p>';
+        } else {
+            let html = '<div style="font-family:monospace;font-size:13px;line-height:1.6;">';
+            if (data.messages_added?.length) {
+                html += '<div style="color:var(--success);margin-bottom:8px;">+ Added messages:</div>';
+                data.messages_added.forEach(m => html += `<div style="padding-left:16px;color:var(--success);">[${esc(m.section_type)}] ${esc(m.content.substring(0, 80))}</div>`);
+            }
+            if (data.messages_removed?.length) {
+                html += '<div style="color:var(--danger);margin:12px 0 8px;">- Removed messages:</div>';
+                data.messages_removed.forEach(m => html += `<div style="padding-left:16px;color:var(--danger);">[${esc(m.section_type)}] ${esc(m.content.substring(0, 80))}</div>`);
+            }
+            if (data.messages_modified?.length) {
+                html += '<div style="color:var(--warning);margin:12px 0 8px;">~ Modified messages:</div>';
+                data.messages_modified.forEach(m => html += `<div style="padding-left:16px;color:var(--warning);">[${esc(m.section_type)}] ${esc(m.content.substring(0, 80))}</div>`);
+            }
+            html += '</div>';
+            document.getElementById('diff-modal-body').innerHTML = html;
+        }
+        openModal('diff-modal');
+    } catch (e) {
+        alert('Failed to load diff: ' + e.message);
+    }
+}
+
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function esc(str) {
     if (!str) return '';
@@ -1995,6 +2238,7 @@ async function loadHistory(houseId) {
                     <div class="history-item-meta">${s.message_count} messages · ${s.persona_count} personas · ${new Date(s.created_at).toLocaleString()}</div>
                 </div>
                 <div style="display:flex;gap:4px;flex-shrink:0;">
+                    <button class="btn btn-ghost btn-xs" onclick="showSnapshotDiff('${s.id}', '${esc(s.label)}')">Diff</button>
                     <button class="btn btn-ghost btn-xs" onclick="restoreSnapshot('${s.id}')">Restore</button>
                     <button class="btn btn-danger btn-xs" onclick="deleteSnap('${s.id}')">Delete</button>
                 </div>
@@ -2010,6 +2254,7 @@ async function loadHistory(houseId) {
                 </div>
                 <div style="display:flex;gap:4px;flex-shrink:0;">
                     <a class="btn btn-ghost btn-xs" href="${API.replace('/api','')}/api/artifacts/${a.id}/docx" download>DOCX</a>
+                    <a class="btn btn-ghost btn-xs" href="${API.replace('/api','')}/api/artifacts/${a.id}/pdf" download>PDF</a>
                     <button class="btn btn-ghost btn-xs" onclick="reopenArtifact('${a.id}')">Open</button>
                 </div>
             </div>`).join('');

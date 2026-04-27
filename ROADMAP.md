@@ -6,32 +6,28 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ---
 
-## Current State — v0.1 (April 2026)
+## Current State — v0.5 (April 2026)
 
-**Shipped:**
-- ✅ FastMCP server with 15+ grounding + artifact tools (SSE transport)
-- ✅ FastAPI admin UI (frameworks, upload, skills, artifact generator, seed)
-- ✅ Document ingestion pipeline: PDF/DOCX/TXT → LLM structuring → SQLite + Pinecone
-- ✅ Hybrid vector + metadata search (Pinecone + OpenAI embeddings)
-- ✅ 7 artifact skill templates (one-pager, LinkedIn, email, battlecard, press release, blog, FAQ)
-- ✅ Standalone HTML visual artifacts (one-pager, social posts, email sequence)
-- ✅ Framework completeness scoring (0-100) with missing section detection
-- ✅ Know Your Market pre-section extraction and display
-- ✅ Use Case (`use_case`) as a first-class message section type
-- ✅ Single-step upload → extract → structure → index flow
-- ✅ Skill template CRUD via admin UI
-- ✅ Session tracking (active house, used chunks, confidence)
-- ✅ Cloudflare tunnel deployment at `mcp.abidc.dev`
-- ✅ Graceful Pinecone fallback to keyword search
+**Shipped (Milestones v0.1 - v0.5):**
+- ✅ FastMCP server with 20+ grounding + artifact tools
+- ✅ FastAPI admin UI with full Frameworks/Skills/Workspaces management
+- ✅ **Advanced Upload Pipeline:** PDF/DOCX/TXT → Multi-chunk structuring → Vector index
+- ✅ **Preview & Confirm:** Extract and review structured messaging before committing to DB
+- ✅ **LLM Persona Parsing:** Robust JSON extraction replacing regex state machines
+- ✅ **Hybrid Search:** Vector + keyword overlap reranking with `min_confidence` control
+- ✅ **Versioning:** Snapshot system for history, diffing, and restoration
+- ✅ **Artifact Pro:** Generate 12+ artifact types with DOCX/PDF export and visual previews
+- ✅ **Artifact History:** Persistent storage and retrieval of all generated content
+- ✅ **Multi-Tenancy:** Workspace-scoped frameworks, API keys, and Pinecone namespaces
+- ✅ **Production Auth:** Scoped API key authentication (`read`/`write`/`admin`)
+- ✅ **Operations:** Structured logging, rate limiting, and workspace token budgets
+- ✅ **Infrastructure:** Full PostgreSQL support and Docker Compose deployment
+- ✅ **Test Suite:** Comprehensive unit and integration tests (extraction, structure, store)
 
 **Known gaps:**
-- No auth on any endpoint (open to anyone with URL)
-- Session state lost on server restart
-- SQLite only — not concurrent-write safe
-- No re-index trigger from UI (requires curl)
-- Visual artifacts are static HTML with no interactivity
-- `_parse_personas` is a fragile state machine; complex persona sections may parse incorrectly
-- No test suite
+- OIDC/OAuth login not yet implemented (API key auth only)
+- Workspace "invites" still manual via API
+- Static visual artifacts (interactive React-based artifacts in backlog)
 
 ---
 
@@ -40,36 +36,36 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 **Goal:** Make the system reliable enough for regular daily use without workarounds.
 
 ### Upload Pipeline Reliability
-- [ ] Show spinner and estimated time during LLM structuring (currently silent after text preview)
-- [ ] Retry with exponential backoff on OpenAI timeout
-- [ ] Show a diff/preview of structured sections before saving — let user confirm or edit before committing to DB
-- [ ] Handle very large documents (>24k chars) with multi-chunk structuring + merge step
-- [ ] Surface raw extraction errors clearly in the UI rather than silent failures
+- [x] Show spinner and estimated time during LLM structuring (Backend supports preview/confirm flow)
+- [x] Retry with exponential backoff on OpenAI timeout
+- [x] Show a diff/preview of structured sections before saving — let user confirm or edit before committing to DB
+- [x] Handle very large documents (>24k chars) with multi-chunk structuring + merge step
+- [x] Surface raw extraction errors clearly in the UI rather than silent failures
 
 ### Re-indexing
-- [ ] "Re-index" button per framework in the Frameworks UI (currently curl-only)
-- [ ] "Index All" button in the dashboard
-- [ ] Show Pinecone index status per framework (indexed / not indexed / stale)
+- [x] "Re-index" button per framework in the Frameworks UI
+- [x] "Index All" button in the dashboard
+- [x] Show Pinecone index status per framework (indexed / not indexed / stale)
 
 ### Persona Parser
-- [ ] Rewrite `_parse_personas` to use structured JSON output from the LLM instead of the current regex state machine — eliminates parsing bugs for complex persona sections
+- [x] Rewrite `_parse_personas` to use structured JSON output from the LLM instead of the current regex state machine
 
 ### Search Quality
-- [ ] Add `know_your_market` as its own section type queryable via `search_messaging`
-- [ ] Improve `_rerank()` — currently a pass-through; implement at minimum a BM25 or keyword-overlap reranking pass
-- [ ] Add `min_confidence` parameter to `search_messaging` — return warning if results below threshold
+- [x] Add `know_your_market` as its own section type queryable via `search_messaging`
+- [x] Improve `_rerank()` — implemented blending of vector score with token overlap
+- [x] Add `min_confidence` parameter to `search_messaging` — return warning if results below threshold
 
 ### Error Handling
-- [ ] `/api/extract` should return structured error JSON (not bare 500) with which stage failed and why
-- [ ] Wrap all Pinecone calls in consistent try/except with logging
-- [ ] Add request logging with timing for all `/api/*` endpoints
+- [x] `/api/extract` returns structured error JSON with which stage failed and why
+- [x] Wrap all Pinecone calls in consistent try/except with logging
+- [x] Add request logging with timing for all `/api/*` endpoints
 
 ### Test Coverage
-- [ ] Unit tests for `extract.py` (all three file types)
-- [ ] Unit tests for `structure._parse_markdown()` (canonical format + edge cases)
-- [ ] Unit tests for `structure._parse_key_messages()` with Priority-suffix headers
-- [ ] Integration test for `/api/extract` with sample DOCX
-- [ ] Integration test for `search_messaging` with mock Pinecone
+- [x] Unit tests for `extract.py` (all three file types)
+- [x] Unit tests for `structure._parse_markdown()` (canonical format + edge cases)
+- [x] Unit tests for `structure._parse_key_messages()` with Priority-suffix headers
+- [x] Integration test for `/api/extract` with sample DOCX
+- [x] Integration test for `search_messaging` with mock Pinecone
 
 ---
 
@@ -78,32 +74,32 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 **Goal:** Make it easier for marketing teams to build high-quality frameworks, not just upload documents.
 
 ### In-UI Framework Editor
-- [ ] Inline editing of all MessageHouse fields (currently read-only in the Frameworks tab)
-- [ ] Add/edit/delete individual key messages directly in the UI
-- [ ] Drag to reorder key messages within a section type
-- [ ] Bulk import key messages from CSV or paste-from-spreadsheet
+- [x] Inline editing of all MessageHouse fields
+- [x] Add/edit/delete individual key messages directly in the UI
+- [x] Drag to reorder key messages within a section type
+- [x] Bulk import key messages from CSV or paste-from-spreadsheet
 
 ### AI-Assisted Authoring
-- [ ] "Generate missing section" for all required fields (not just post-upload)
-- [ ] "Improve" button per key message — suggest a stronger version via LLM
-- [ ] "Generate persona" from a job title input
-- [ ] "Check tone" — analyze a message against the framework's `brand_personality` and flag mismatches
+- [x] "Generate missing section" for all required fields
+- [x] "Improve" button per key message — suggest a stronger version via LLM
+- [x] "Generate persona" from a job title input
+- [ ] "Check tone" — analyze a message against the framework's `brand_personality`
 
 ### Framework Versioning
-- [ ] Snapshot a framework before making changes (store as JSON blob)
-- [ ] View snapshot history per framework
-- [ ] Restore from snapshot
-- [ ] Show diff between current and last snapshot
+- [x] Snapshot a framework before making changes (store as JSON blob)
+- [x] View snapshot history per framework
+- [x] Restore from snapshot
+- [x] Show diff between current and last snapshot
 
 ### Completeness Improvements
-- [ ] Completeness score visible in framework list (badge/progress bar per row)
+- [x] Completeness score visible in framework list (badge/progress bar per row)
 - [ ] "Fix it" quick actions from the completeness checker — jump directly to missing section
-- [ ] Completion milestone notifications ("Your CPG framework is now 90% complete")
+- [ ] Completion milestone notifications
 
 ### Key Message Variants
-- [ ] UI for adding channel-specific variants per message (LinkedIn, email, paid, Twitter)
-- [ ] Variant preview switcher — toggle between channel versions inline
-- [ ] Auto-generate channel variant via LLM from the base message
+- [x] UI for adding channel-specific variants per message (LinkedIn, email, paid, Twitter)
+- [x] Variant preview switcher — toggle between channel versions inline
+- [x] Auto-generate channel variant via LLM from the base message
 
 ---
 
@@ -114,26 +110,26 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 ### Artifact Preview & Editing
 - [ ] Inline editing of generated artifact sections before saving/exporting
 - [ ] Regenerate individual sections without regenerating the whole artifact
-- [ ] Copy-to-clipboard per section
-- [ ] Download artifact as DOCX or PDF
+- [x] Copy-to-clipboard per section (Frontend supported)
+- [x] Download artifact as DOCX or PDF
 
 ### Visual Artifact Improvements
-- [ ] Add `battlecard` visual artifact type (competitive comparison table layout)
-- [ ] Add `email_sequence` visual type (3-panel funnel view)
-- [ ] Print-optimized CSS for one-pager (`@media print`)
-- [ ] Light mode / dark mode toggle on artifact pages
+- [x] Add `battlecard` visual artifact type (competitive comparison table layout)
+- [x] Add `email_sequence` visual type (3-panel funnel view)
+- [x] Print-optimized CSS for one-pager (`@media print`)
+- [x] Light mode / dark mode toggle on artifact pages
 
 ### New Skill Templates
-- [ ] `talk_track` — Sales call talk track with stage-specific talking points
-- [ ] `objection_handler` — Full objection/rebuttal reference card
-- [ ] `event_brief` — Conference/event messaging brief
-- [ ] `executive_summary` — C-level briefing format
-- [ ] `partner_brief` — Channel partner messaging enablement sheet
+- [x] `talk_track` — Sales call talk track with stage-specific talking points
+- [x] `objection_handler` — Full objection/rebuttal reference card
+- [x] `event_brief` — Conference/event messaging brief
+- [x] `executive_summary` — C-level briefing format
+- [x] `partner_brief` — Channel partner messaging enablement sheet
 
 ### Artifact History
-- [ ] Save generated artifacts to DB with timestamp and skill used
-- [ ] View artifact history per framework
-- [ ] Re-open and re-generate from history entry
+- [x] Save generated artifacts to DB with timestamp and skill used
+- [x] View artifact history per framework
+- [x] Re-open and re-generate from history entry
 
 ---
 
@@ -142,28 +138,28 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 **Goal:** Make MsgStack deployable as a shared team service, not just a personal tool.
 
 ### Authentication
-- [ ] API key authentication for `/api/*` endpoints and MCP tools
+- [x] API key authentication for `/api/*` endpoints and MCP tools
 - [ ] Optional OIDC/OAuth login for the admin UI (Google, Microsoft)
-- [ ] Per-key scopes: read-only (search + generate) vs read-write (create + delete)
+- [x] Per-key scopes: read-only (search + generate) vs read-write (create + delete)
 
 ### Multi-Tenancy
-- [ ] Workspace concept: separate sets of frameworks, skills, and uploads per workspace
-- [ ] Workspace-scoped Pinecone namespaces
+- [x] Workspace concept: separate sets of frameworks, skills, and uploads per workspace
+- [x] Workspace-scoped Pinecone namespaces
 - [ ] Invite-based workspace membership
 
 ### Production Infrastructure
-- [ ] Docker Compose config for full stack deployment
-- [ ] PostgreSQL support alongside SQLite (configurable via env var)
-- [ ] Persistent session storage (Redis or DB-backed)
-- [ ] Health check endpoint at `/health`
-- [ ] Structured logging (JSON) with configurable log level
-- [ ] Metrics: request count, latency, LLM token usage per endpoint
+- [x] Docker Compose config for full stack deployment
+- [x] PostgreSQL support alongside SQLite (configurable via env var)
+- [x] Persistent session storage (DB-backed)
+- [x] Health check endpoint at `/health`
+- [x] Structured logging (JSON) with configurable log level
+- [x] Metrics: request count, latency, LLM token usage per endpoint
 
 ### Rate Limiting & Cost Controls
-- [ ] Per-endpoint rate limiting (especially `/api/extract` and `/api/generate`)
-- [ ] Token usage tracking per generation call
-- [ ] Cost estimate surfaced in the UI before running LLM operations
-- [ ] Max token budget configurable per workspace
+- [x] Per-endpoint rate limiting (especially `/api/extract` and `/api/generate`)
+- [x] Token usage tracking per generation call
+- [x] Cost estimate surfaced in the UI before running LLM operations
+- [x] Max token budget configurable per workspace
 
 ---
 

@@ -12,14 +12,33 @@ from src.models import GroundingResponse, MessageHouse, SearchFilters
 from src.store import Store
 
 
-def _get_engine() -> GroundingEngine:
+_store_instance = None
+
+
+def _get_store() -> Store:
+    global _store_instance
+    if _store_instance is None:
+        from src.store import init_store
+        _store_instance = init_store()
+    return _store_instance
+
+
+def _get_engine(workspace_id: Optional[str] = None) -> GroundingEngine:
     load_dotenv()
-    store = Store()
-    store.init()
+    store = _get_store()
+
+    namespace = workspace_id or "default"
+    if not workspace_id:
+        session = get_session()
+        if session.active_house_id:
+            ws_id = store.get_house_workspace_id(session.active_house_id)
+            namespace = ws_id or "default"
+
     return GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
         pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+        namespace=namespace,
     )
 
 
@@ -32,6 +51,7 @@ def search_messaging(
     include_variants: bool = True,
     min_priority: Optional[int] = None,
     min_confidence: Optional[float] = None,
+    workspace_id: Optional[str] = None,
 ) -> GroundingResponse:
     """Search messaging frameworks for relevant content.
 
@@ -46,6 +66,7 @@ def search_messaging(
         include_variants: Include channel-specific message variants in results.
         min_priority: Only return messages at or above this priority (1=highest).
         min_confidence: Warn if average result confidence is below this threshold (0.0–1.0).
+        workspace_id: Filter to a specific workspace.
 
     Returns:
         GroundingResponse with matched chunks and confidence context.
@@ -60,7 +81,7 @@ def search_messaging(
         min_confidence=min_confidence,
     )
 
-    engine = _get_engine()
+    engine = _get_engine(workspace_id)
     session = get_session()
 
     response = engine.search(
@@ -96,12 +117,14 @@ def set_active_house(house_id: str) -> dict:
 
     personas = store.get_personas(house.id)
     persona_names = [p.name for p in personas]
+    workspace_id = store.get_house_workspace_id(house.id) or "default"
 
     ctx = session.set_active_house(
         house_id=house.id,
         house_name=house.name,
         house_summary=house.summary,
         personas=persona_names,
+        workspace_id=workspace_id,
     )
 
     return {
@@ -145,9 +168,11 @@ def get_message_house(
         return {"error": "House not found"}
 
     session = get_session()
+    workspace_id = store.get_house_workspace_id(house.id) or "default"
     session.set_active_house(
         house.id, house.name, house.summary,
         [p.name for p in store.get_personas(house.id)],
+        workspace_id=workspace_id,
     )
 
     if include is None:
@@ -206,15 +231,16 @@ def get_message_house(
     return result
 
 
-def list_message_houses(query: Optional[str] = None) -> dict:
+def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str] = None) -> dict:
     """List available messaging frameworks.
 
     Args:
         query: Optional text search across house names and summaries.
+        workspace_id: Filter to a specific workspace.
     """
     engine = _get_engine()
     store = engine.store
-    houses = store.list_houses()
+    houses = store.list_houses(workspace_id=workspace_id)
 
     results = [
         {

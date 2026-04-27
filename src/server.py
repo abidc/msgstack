@@ -25,6 +25,7 @@ def search_messaging(
     include_variants: bool = True,
     min_priority: Optional[int] = None,
     min_confidence: Optional[float] = None,
+    workspace_id: Optional[str] = None,
 ) -> dict:
     """Search marketing messaging frameworks for grounding content.
 
@@ -43,6 +44,7 @@ def search_messaging(
         include_variants: Include channel-specific message variants in results.
         min_priority: Only return messages at or above this priority (1=highest).
         min_confidence: Warn if average result confidence is below this threshold (0.0–1.0).
+        workspace_id: Filter to a specific workspace (optional).
 
     Returns:
         Matched messaging chunks with confidence scores and grounding context.
@@ -56,6 +58,7 @@ def search_messaging(
         include_variants=include_variants,
         min_priority=min_priority,
         min_confidence=min_confidence,
+        workspace_id=workspace_id,
     ).model_dump()
 
 
@@ -74,10 +77,12 @@ def get_message_house(
     house_id: Optional[str] = None,
     house_name: Optional[str] = None,
 ) -> dict:
-    """Retrieve a full message house with all key messages, personas, and positioning.
+    """Retrieve full content of a messaging framework for research.
 
-    Returns all content: positioning statement, tagline, differentiation, key messages
-    by section type, and full persona profiles.
+    Use this tool to understand the brand positioning, audience, and key messages.
+    
+    CRITICAL: Do NOT use the data returned here to manually write a one-pager or 
+    artifact for the user. Instead, use 'generate_artifact' or 'build_ui_artifact'.
 
     Args:
         house_id: UUID of the message house.
@@ -87,7 +92,7 @@ def get_message_house(
 
 
 @mcp.tool()
-def list_message_houses(query: Optional[str] = None) -> dict:
+def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str] = None) -> dict:
     """List all available message houses with their IDs and summaries.
 
     Call this FIRST whenever the user mentions a brand, product, or company
@@ -96,8 +101,9 @@ def list_message_houses(query: Optional[str] = None) -> dict:
 
     Args:
         query: Optional text search across house names and summaries.
+        workspace_id: Filter to a specific workspace (optional).
     """
-    return grounding_tools.list_message_houses(query)
+    return grounding_tools.list_message_houses(query, workspace_id)
 
 
 @mcp.tool()
@@ -135,21 +141,13 @@ def _resolve_house(store, house_id: Optional[str], house_name: Optional[str] = N
     return house
 
 
-@mcp.tool()
-def generate_one_pager(messaging_house_id: str) -> dict:
-    """Generate a structured messaging one-pager from a message house.
-
-    Returns positioning, tagline, key messages by section, and personas
-    in a structured format — present this as a formatted document to the user.
-
-    Args:
-        messaging_house_id: UUID or name of the message house.
-    """
+def generate_one_pager_data(messaging_house_id: str) -> dict:
+    """Internal helper to get structured data for a one-pager."""
     store = Store()
     store.init()
     house = _resolve_house(store, messaging_house_id)
     if not house:
-        return {"error": f"House not found. Use list_message_houses to find valid IDs."}
+        return {"error": f"House not found."}
 
     messages = store.get_key_messages(house.id)
     personas = store.get_personas(house.id)
@@ -172,103 +170,24 @@ def generate_one_pager(messaging_house_id: str) -> dict:
 
 
 @mcp.tool()
-def generate_social_posts(
-    messaging_house_id: str,
-    channels: Optional[list[str]] = None,
-) -> dict:
-    """Get social media post variants from a message house.
-
-    Returns pre-written LinkedIn/social variants stored in the message house.
-    Use generate_artifact with skill_id='linkedin_post' for LLM-generated posts.
-
-    Args:
-        messaging_house_id: UUID or name of the message house.
-        channels: Which channels: linkedin, twitter, email, etc.
-    """
-    store = Store()
-    store.init()
-    house = _resolve_house(store, messaging_house_id)
-    if not house:
-        return {"error": "House not found. Use list_message_houses."}
-
-    messages = store.get_key_messages(house.id)
-    target_channels = channels or ["linkedin"]
-    posts = []
-    for m in messages:
-        for channel in target_channels:
-            variant = (m.variants or {}).get(channel)
-            if variant:
-                posts.append({
-                    "channel": channel,
-                    "section_type": str(m.section_type),
-                    "content": variant,
-                    "priority": m.priority,
-                })
-
-    return {
-        "house_name": house.name,
-        "posts": posts,
-        "note": "These are pre-written channel variants. Use generate_artifact(skill_id='linkedin_post') for fresh LLM-generated posts.",
-    }
-
-
-@mcp.tool()
-def generate_email_template(
-    messaging_house_id: str,
-    stage: str = "awareness",
-) -> dict:
-    """Generate an email template grounded in the message house.
-
-    Uses LLM to create a subject line, hook, body, and CTA for the funnel stage.
-    Returns the template content directly — present it to the user as a formatted email.
-
-    Args:
-        messaging_house_id: UUID or name of the message house.
-        stage: Funnel stage: awareness, consideration, or decision.
-    """
-    from src.pipeline.generator import ArtifactGenerator
-    from src.pipeline.skills import SkillManager
-
-    store = Store()
-    store.init()
-    house = _resolve_house(store, messaging_house_id)
-    if not house:
-        return {"error": "House not found. Use list_message_houses."}
-
-    skills = SkillManager()
-    generator = ArtifactGenerator(store, skills)
-    artifact = generator.generate("email_template", str(house.id), {"stage": stage})
-    return {
-        "skill_id": "email_template",
-        "stage": stage,
-        "house_name": artifact.house_name,
-        "sections": artifact.sections,
-        "raw_content": artifact.raw_content,
-    }
-
-
-@mcp.tool()
 def generate_artifact(
     skill_id: str,
     house_id: Optional[str] = None,
     house_name: Optional[str] = None,
     custom_context: Optional[dict] = None,
 ) -> str:
-    """Generate a marketing artifact grounded in a message house using the LLM.
+    """MANDATORY tool for generating any marketing copy (One-Pager, Email, Post, etc).
 
-    IMPORTANT: You MUST provide either house_id or house_name. If you don't
-    know the house ID or exact name, call list_message_houses first.
-
-    Returns the COMPLETE artifact text. You MUST display the full text verbatim
-    to the user — do NOT summarize, paraphrase, or describe it. Paste it all.
+    USE THIS TOOL whenever the user asks to "generate", "write", "create", or "draft" 
+    a document. DO NOT attempt to write the document yourself based on house data.
 
     Args:
-        skill_id: Artifact type — one of: one_pager, linkedin_post,
-                  email_template, battlecard, press_release, blog_post,
-                  faq_document
-        house_id: UUID from list_message_houses (preferred).
-        house_name: Exact house name as returned by list_message_houses.
-        custom_context: Optional extra context dict (e.g. {"stage": "decision"}).
+        skill_id: The type of content to generate. MUST be one of the IDs 
+                  returned by list_skills (e.g., 'one_pager', 'linkedin_post', 
+                  'email_template', 'battlecard').
+        house_id: UUID of the message house (preferred).
+        house_name: Exact name of the message house.
+        custom_context: Optional context like {"stage": "decision", "competitor": "X"}.
     """
     from src.pipeline.generator import ArtifactGenerator
     from src.pipeline.skills import SkillManager
@@ -299,14 +218,38 @@ def generate_artifact(
 
     # Record in grounding session so get_grounding_context reflects this
     session = get_session()
+    workspace_id = store.get_house_workspace_id(house.id) or "default"
     session.set_active_house(
         house_id=house.id,
         house_name=house.name,
         house_summary=house.summary or "",
         personas=[],
+        workspace_id=workspace_id,
     )
 
-    return artifact.raw_content
+    # Automatically append a visual link if this artifact type supports a UI view
+    # Supported skills: one_pager, linkedin_post, email_template, battlecard, 
+    # blog_post, press_release, faq_document, talk_track, objection_handler, 
+    # event_brief, executive_summary, partner_brief
+    
+    base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
+    url = f"{base_url}/artifact/{skill_id}/{house.id}"
+    
+    # Add stage/channel context to URL if available
+    if custom_context:
+        params = []
+        if skill_id == "email_template" and "stage" in custom_context:
+            params.append(f"stage={custom_context['stage']}")
+        elif skill_id == "linkedin_post" and "channels" in custom_context:
+            ch = custom_context["channels"]
+            params.append(f"channels={','.join(ch) if isinstance(ch, list) else ch}")
+        if params:
+            url += "?" + "&".join(params)
+
+    content = artifact.raw_content
+    content += f"\n\n---\n\n**Visual Version:** {url}"
+
+    return content
 
 
 @mcp.tool()
@@ -317,16 +260,15 @@ def build_ui_artifact(
     stage: Optional[str] = None,
     channels: Optional[list[str]] = None,
 ) -> str:
-    """Build a visual artifact page and return a public URL to open in a browser.
+    """Generate a visual/HTML link for a marketing artifact.
 
-    You do NOT need to call list_message_houses first — pass house_name directly
-    (e.g. house_name="Clarity CMS") and the server resolves it automatically.
-    Present the returned URL as a clickable link for the user to open.
+    USE THIS TOOL when the user wants a "link", "page", "visual version", 
+    or "web view" of an artifact.
 
     Args:
         artifact_type: one_pager | social_posts | email_template
         house_id: UUID of the message house (optional if house_name provided).
-        house_name: Exact name of the message house — use this to skip list_message_houses.
+        house_name: Exact name of the message house.
         stage: For email_template only: awareness | consideration | decision
         channels: For social_posts only: e.g. ["linkedin"]
     """
@@ -354,10 +296,46 @@ def build_ui_artifact(
 
 @mcp.tool()
 def list_skills() -> dict:
-    """List all available artifact skills."""
+    """List all available marketing artifact types (skills).
+
+    Use this to see what kinds of documents you can generate for a user.
+    Each skill returned can be used as 'skill_id' in 'generate_artifact'.
+    """
     from src.pipeline.skills import SkillManager
     skills = SkillManager()
-    return {"skills": skills.list_skills()}
+    return {
+        "available_artifacts": [
+            {
+                "id": s["id"],
+                "name": s["name"],
+                "description": s["description"],
+                "recommended_for": s.get("channels", ["all"])
+            }
+            for s in skills.list_skills()
+        ]
+    }
+
+
+@mcp.tool()
+def list_mcp_tools() -> dict:
+    """List all available MCP tools in this server with their descriptions.
+    
+    Use this to understand the full capabilities of MsgStack, including
+    grounding, research, generation, and visual artifact creation.
+    """
+    tool_defs = [
+        {"name": "search_messaging", "description": "Search messaging frameworks for grounding content (headlines, proof points, etc)."},
+        {"name": "list_message_houses", "description": "List all available messaging frameworks/brands."},
+        {"name": "get_message_house", "description": "Retrieve full framework content for deep research (positioning, personas)."},
+        {"name": "list_skills", "description": "List all 12+ types of marketing artifacts you can generate (Email, PR, Blog, etc)."},
+        {"name": "generate_artifact", "description": "MANDATORY: Generate a full document draft with an automatic visual link."},
+        {"name": "build_ui_artifact", "description": "Get a visual HTML link for a specific framework artifact."},
+        {"name": "set_active_house", "description": "Focus the session on a specific brand framework."},
+        {"name": "check_framework_completeness", "description": "Audit a framework for missing critical messaging sections."},
+        {"name": "get_framework_spec", "description": "See the requirements for a 'Perfect' messaging house."},
+        {"name": "seed_database", "description": "Reset or load sample B2B SaaS data."},
+    ]
+    return {"tools": tool_defs}
 
 
 @mcp.tool()
