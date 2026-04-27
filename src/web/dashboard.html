@@ -204,6 +204,35 @@
     </div>
 </section>
 
+<!-- ── Skills ── -->
+<section id="skills" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Marketing Artifact Skills</div>
+                <div class="page-subtitle">Available templates and copy types for generation</div>
+            </div>
+        </div>
+        <div id="skills-list-container" class="grid-2"></div>
+    </div>
+</section>
+
+<!-- ── Settings ── -->
+<section id="settings" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">System Settings</div>
+                <div class="page-subtitle">Manage API keys, workspaces, and production configuration</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Production Readiness</div>
+            <p class="text-[13px] text-slate-400 mt-2">v0.6.0 Governance & Operations Active</p>
+        </div>
+    </div>
+</section>
+
 <!-- Modals -->
 <div class="modal-overlay" id="house-modal">
     <!-- Existing house modal content -->
@@ -215,38 +244,11 @@
     const API = '/api';
     let currentHouseId = null;
     let selectedSkillId = null;
-    let currentRawContent = '';
+    let _extractedHouseId = null;
+    let _milestoneShown = new Set();
+    let _dragSrcEl = null;
 
-    async function generateArtifact() {
-        const houseId = document.getElementById('artifact-house').value;
-        if (!houseId || !selectedSkillId) { 
-            toast('Select a framework and skill first', 'error'); 
-            return; 
-        }
-        
-        const container = document.getElementById('artifact-preview-container');
-        container.innerHTML = '<div class="flex items-center justify-center p-20"><span class="spinner"></span><span class="ml-3 text-slate-400">Generating with AI...</span></div>';
-        
-        // Use HTMX to load the preview snippet
-        htmx.ajax('GET', `/api/preview/${selectedSkillId}/${houseId}`, {
-            target: '#artifact-preview-container',
-            swap: 'innerHTML'
-        }).then(() => {
-            toast('Artifact Generated', 'success');
-        });
-    }
-
-    function showSection(id) {
-        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-        if (id === 'dashboard') loadDashboard();
-        if (id === 'frameworks') loadHouses();
-        if (id === 'artifacts') loadArtifactHouses();
-        if (id === 'settings') loadSettings();
-    }
-
-    // Helper functions
+    // ── Utilities ──────────────────────────────────────────────────────────────
     function toast(msg, type = 'success') {
         const t = document.createElement('div');
         t.className = `toast toast-${type}`;
@@ -256,34 +258,505 @@
         setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3000);
     }
 
+    function milestoneToast(score, houseName) {
+        const m = [100,90,75,50].find(n => score >= n);
+        if (!m) return;
+        const key = `${houseName}-${m}`;
+        if (_milestoneShown.has(key)) return;
+        _milestoneShown.add(key);
+        const labels = {50:'🎯 50% — Halfway there!', 75:'🔥 75% — Great progress!', 90:'⭐ 90% — Almost done!', 100:'🏆 100% — Framework complete!'};
+        toast(labels[m], 'success');
+    }
+
     function esc(str) {
         if (!str) return '';
         return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    // Load initial data
+    // ── Routing ────────────────────────────────────────────────────────────────
+
+    function showSection(id, pushState = true) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        const target = document.getElementById(id);
+        if (target) target.classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => {
+            n.classList.remove('active');
+            if (n.getAttribute('onclick')?.includes(`showSection('${id}'`)) n.classList.add('active');
+        });
+        if (pushState && id !== 'house-detail') {
+            history.pushState({ section: id }, '', id === 'dashboard' ? '/' : `/${id}`);
+        }
+        if (id === 'dashboard') loadDashboard();
+        else if (id === 'frameworks') loadHouses();
+        else if (id === 'artifacts') loadArtifactHouses();
+        else if (id === 'skills') loadSkills();
+        else if (id === 'settings') loadSettings();
+    }
+
+    window.onpopstate = e => showSection(e.state?.section || 'dashboard', false);
+
+    function initRouting() {
+        const path = window.location.pathname.replace(/^\//, '') || 'dashboard';
+        const valid = ['dashboard','frameworks','upload','artifacts','skills','settings'];
+        showSection(valid.includes(path) ? path : 'dashboard', false);
+    }
+
+    // ── Dashboard ──────────────────────────────────────────────────────────────
+
     async function loadDashboard() {
         try {
             const data = await fetch(`${API}/stats`).then(r => r.json());
-            document.getElementById('stat-houses').textContent = data.houses || 0;
-            document.getElementById('stat-messages').textContent = data.messages || 0;
-            document.getElementById('stat-artifacts').textContent = data.artifacts || 0;
-            document.getElementById('stat-tokens').textContent = (data.tokens || 0).toLocaleString();
-        } catch (e) { console.error('Dashboard load failed', e); }
+            document.getElementById('stat-houses').textContent = data.house_count || 0;
+            document.getElementById('stat-messages').textContent = data.message_count || 0;
+            document.getElementById('stat-artifacts').textContent = data.artifact_count || 0;
+            document.getElementById('stat-tokens').textContent = (data.token_count || 0).toLocaleString();
+
+            const houses = await fetch(`${API}/houses`).then(r => r.json());
+            const recentEl = document.getElementById('recent-houses');
+            if (houses.length) {
+                recentEl.innerHTML = houses.slice(0,4).map(h => `
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius);cursor:pointer;"
+                         onmouseenter="this.style.background='var(--bg-2)'" onmouseleave="this.style.background=''"
+                         onclick="viewHouse('${h.id}')">
+                        <div style="width:30px;height:30px;background:var(--primary-dim);color:var(--primary);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;">${(h.name[0]||'?').toUpperCase()}</div>
+                        <div style="min-width:0;">
+                            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.name)}</div>
+                            <div style="font-size:11px;color:var(--text-3);">${h.message_count} messages · ${h.completeness_score}% complete</div>
+                        </div>
+                    </div>`).join('');
+            } else {
+                recentEl.innerHTML = '<div style="font-size:13px;color:var(--text-3);">No frameworks yet. Upload a document to get started.</div>';
+            }
+        } catch(e) { console.error('Dashboard load failed', e); }
     }
 
+    // ── Frameworks list ─────────────────────────────────────────────────────────
+
+    async function loadHouses() {
+        const list = document.getElementById('houses-list');
+        list.innerHTML = '<div style="grid-column:1/-1;color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
+        try {
+            const houses = await fetch(`${API}/houses`).then(r => r.json());
+            if (!houses.length) {
+                list.innerHTML = `<div style="grid-column:1/-1;" class="card"><div style="color:var(--text-3);font-size:14px;text-align:center;padding:32px 0;">No frameworks yet. <button class="btn btn-ghost btn-sm" onclick="showSection('upload')">Upload a document →</button></div></div>`;
+                return;
+            }
+            list.innerHTML = houses.map(h => `
+                <div class="card" style="cursor:pointer;transition:border-color .12s;"
+                     onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor=''"
+                     onclick="viewHouse('${h.id}')">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+                        <div class="card-title">${esc(h.name)}</div>
+                        <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:4px;flex-shrink:0;background:${h.status==='active'?'var(--success-dim)':'var(--bg-3)'};color:${h.status==='active'?'var(--success)':'var(--text-3)'};">${h.status}</span>
+                    </div>
+                    <div style="font-size:12.5px;color:var(--text-2);line-height:1.5;margin-bottom:12px;min-height:36px;">${esc(h.summary)}</div>
+                    <div style="display:flex;gap:12px;font-size:11px;color:var(--text-3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">
+                        <span>${h.message_count} Messages</span>
+                        <span>${h.persona_count} Personas</span>
+                        <span style="margin-left:auto;color:${h.completeness_score>=75?'var(--success)':h.completeness_score>=50?'var(--warn)':'var(--text-3)'};">${h.completeness_score}%</span>
+                    </div>
+                </div>`).join('');
+        } catch(e) { list.innerHTML = `<div style="color:var(--danger);grid-column:1/-1;">Error: ${e.message}</div>`; }
+    }
+
+    // ── House detail ─────────────────────────────────────────────────────────────
+
+    const SECTION_META = {
+        headline:     { label:'Headline',     color:'#6366f1', bg:'rgba(99,102,241,.12)' },
+        subhead:      { label:'Subhead',      color:'#8b5cf6', bg:'rgba(139,92,246,.12)' },
+        benefit:      { label:'Benefit',      color:'#10b981', bg:'rgba(16,185,129,.12)' },
+        use_case:     { label:'Use Case',     color:'#06b6d4', bg:'rgba(6,182,212,.12)' },
+        proof_point:  { label:'Proof Point',  color:'#3b82f6', bg:'rgba(59,130,246,.12)' },
+        objection:    { label:'Objection',    color:'#ef4444', bg:'rgba(239,68,68,.12)' },
+        social_proof: { label:'Social Proof', color:'#f59e0b', bg:'rgba(245,158,11,.12)' },
+        positioning:  { label:'Positioning',  color:'#64748b', bg:'rgba(100,116,139,.12)' },
+    };
+    const SECTION_ORDER = ['headline','subhead','benefit','use_case','proof_point','objection','social_proof','positioning'];
+
+    function normST(raw) { return (raw||'').split('.').pop().toLowerCase().replace(/ /g,'_'); }
+
+    async function viewHouse(id) {
+        currentHouseId = id;
+        showSection('house-detail', false);
+        const detail = document.getElementById('house-detail-content');
+        detail.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span></div>';
+        try {
+            const house = await fetch(`${API}/houses/${id}`).then(r => r.json());
+            _renderHouseDetail(house);
+        } catch(e) {
+            detail.innerHTML = `<div style="color:var(--danger);padding:20px;">Error: ${e.message}</div>`;
+        }
+    }
+
+    function _renderHouseDetail(house) {
+        const detail = document.getElementById('house-detail-content');
+        const score = house.completeness_score || 0;
+        const scoreColor = score>=75?'var(--success)':score>=50?'var(--warn)':'var(--text-3)';
+
+        const grouped = {};
+        for (const m of (house.key_messages||[])) {
+            const st = normST(m.section_type);
+            if (!grouped[st]) grouped[st] = [];
+            grouped[st].push(m);
+        }
+
+        const tabs = [
+            {id:'overview',  label:'Overview'},
+            {id:'messages',  label:`Messages (${(house.key_messages||[]).length})`},
+            {id:'personas',  label:`Personas (${(house.personas||[]).length})`},
+        ];
+
+        detail.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:12px;flex-wrap:wrap;">
+            <div style="min-width:0;">
+                <div style="font-size:20px;font-weight:700;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(house.name)}</div>
+                ${house.tagline?`<div style="font-size:13px;color:var(--text-2);margin-top:3px;">${esc(house.tagline)}</div>`:''}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+                <span style="font-size:12px;font-weight:600;color:${scoreColor};border:1px solid ${scoreColor};padding:3px 10px;border-radius:100px;">${score}% complete</span>
+                <button class="btn btn-ghost btn-sm" onclick="viewArtifactForHouse('${house.id}')">Generate →</button>
+                <button class="btn btn-ghost btn-sm" onclick="showSection('frameworks')">← Back</button>
+            </div>
+        </div>
+
+        <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;">
+            ${tabs.map((t,i)=>`<button id="htab-${t.id}" onclick="switchHouseTab('${t.id}')"
+                style="padding:8px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:${i===0?'600':'500'};color:${i===0?'var(--primary)':'var(--text-3)'};border-bottom:2px solid ${i===0?'var(--primary)':'transparent'};margin-bottom:-1px;transition:all .12s;font-family:inherit;">${t.label}</button>`).join('')}
+        </div>
+
+        <div id="house-tab-overview">
+            <div class="card">
+                ${['summary','audience','brand_personality','positioning','tagline','differentiation'].map(f=>`
+                <div style="margin-bottom:14px;">
+                    <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">${f.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</label>
+                    <textarea id="hf-${f}" rows="${['summary','positioning','differentiation'].includes(f)?3:1}"
+                        style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;transition:border-color .12s;"
+                        onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor=''"
+                    >${esc(house[f]||'')}</textarea>
+                </div>`).join('')}
+                <button class="btn btn-primary btn-sm" onclick="saveHouseFields('${house.id}')">Save Changes</button>
+            </div>
+        </div>
+
+        <div id="house-tab-messages" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+                <span style="font-size:13px;color:var(--text-2);">${(house.key_messages||[]).length} messages across ${Object.keys(grouped).length} sections</span>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-ghost btn-sm" onclick="openBulkImport('${house.id}')">Bulk Import</button>
+                    <button class="btn btn-primary btn-sm" onclick="openAddMessage('${house.id}')">+ Add Message</button>
+                </div>
+            </div>
+            <div id="messages-container">${_renderGrouped(grouped)}</div>
+        </div>
+
+        <div id="house-tab-personas" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+                <span style="font-size:13px;color:var(--text-2);">${(house.personas||[]).length} personas defined</span>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-ghost btn-sm" onclick="generatePersona('${house.id}')">AI Generate</button>
+                    <button class="btn btn-primary btn-sm" onclick="openAddPersona('${house.id}')">+ Add Persona</button>
+                </div>
+            </div>
+            <div id="personas-container">${_renderPersonas(house.personas||[], house.id)}</div>
+        </div>`;
+    }
+
+    function _renderGrouped(grouped) {
+        const sections = SECTION_ORDER.filter(s=>grouped[s]?.length)
+            .concat(Object.keys(grouped).filter(s=>!SECTION_ORDER.includes(s)&&grouped[s]?.length));
+        if (!sections.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No messages yet. Add one above or use Bulk Import.</div>';
+        return sections.map(st => {
+            const meta = SECTION_META[st]||{label:st.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),color:'#64748b',bg:'rgba(100,116,139,.1)'};
+            const msgs = grouped[st]||[];
+            return `<div class="card" style="margin-bottom:12px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                    <span style="width:7px;height:7px;border-radius:50%;background:${meta.color};display:inline-block;"></span>
+                    ${meta.label} <span style="font-weight:400;color:var(--text-3);">(${msgs.length})</span>
+                </div>
+                ${msgs.map(m=>`
+                <div class="msg-row" data-id="${m.id}" draggable="true"
+                     ondragstart="msgDragStart(event)" ondragover="msgDragOver(event)" ondrop="msgDrop(event,'${currentHouseId}')" ondragleave="this.style.borderColor=''"
+                     style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;transition:all .15s;cursor:default;">
+                    <span style="cursor:grab;color:var(--text-3);font-size:13px;padding-top:2px;flex-shrink:0;user-select:none;">⠿</span>
+                    <span style="flex:1;font-size:13.5px;color:var(--text);line-height:1.55;">${esc(m.content)}</span>
+                    <button onclick="deleteMessage('${m.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-3);padding:2px 4px;border-radius:4px;font-size:13px;flex-shrink:0;line-height:1;"
+                        onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text-3)'">✕</button>
+                </div>`).join('')}
+            </div>`;
+        }).join('');
+    }
+
+    function _renderPersonas(personas, houseId) {
+        if (!personas.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No personas yet. Add one above or use AI Generate.</div>';
+        return personas.map(p=>`
+            <div class="card" style="margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                    <div>
+                        <div style="font-weight:600;font-size:14px;">${esc(p.name)}</div>
+                        ${p.description?`<div style="font-size:12.5px;color:var(--text-2);margin-top:2px;">${esc(p.description)}</div>`:''}
+                    </div>
+                    <button onclick="deletePersona('${p.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:13px;padding:2px 4px;"
+                        onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text-3)'">✕</button>
+                </div>
+                ${p.pain_points?.length?`<div style="margin-top:8px;">
+                    <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:4px;">Pain Points</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:4px;">${p.pain_points.map(pp=>`<span style="background:var(--danger-dim);color:var(--danger);font-size:11px;padding:2px 7px;border-radius:4px;">${esc(String(pp).slice(0,60))}</span>`).join('')}</div>
+                </div>`:''}
+            </div>`).join('');
+    }
+
+    function switchHouseTab(tab) {
+        ['overview','messages','personas'].forEach(t => {
+            const el = document.getElementById(`house-tab-${t}`);
+            const btn = document.getElementById(`htab-${t}`);
+            if (el) el.style.display = t===tab?'':'none';
+            if (btn) {
+                btn.style.color = t===tab?'var(--primary)':'var(--text-3)';
+                btn.style.fontWeight = t===tab?'600':'500';
+                btn.style.borderBottomColor = t===tab?'var(--primary)':'transparent';
+            }
+        });
+    }
+
+    // ── Drag-to-reorder ──────────────────────────────────────────────────────────
+
+    function msgDragStart(e) {
+        _dragSrcEl = e.currentTarget;
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(()=>{ if(_dragSrcEl) _dragSrcEl.style.opacity='0.4'; }, 0);
+    }
+    function msgDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (e.currentTarget !== _dragSrcEl) e.currentTarget.style.borderColor='var(--primary)';
+    }
+    async function msgDrop(e, houseId) {
+        e.preventDefault();
+        const target = e.currentTarget;
+        target.style.borderColor = '';
+        if (_dragSrcEl && _dragSrcEl !== target) {
+            const parent = target.parentNode;
+            const rows = [...parent.querySelectorAll('.msg-row')];
+            if (rows.indexOf(_dragSrcEl) < rows.indexOf(target)) parent.insertBefore(_dragSrcEl, target.nextSibling);
+            else parent.insertBefore(_dragSrcEl, target);
+        }
+        if (_dragSrcEl) _dragSrcEl.style.opacity = '';
+        _dragSrcEl = null;
+        const orderedIds = [...document.querySelectorAll('#messages-container .msg-row')].map(r=>r.dataset.id);
+        try {
+            await fetch(`${API}/houses/${houseId}/messages/reorder`, {
+                method:'PATCH', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ordered_ids: orderedIds}),
+            });
+        } catch(err) { console.error('Reorder failed', err); }
+    }
+
+    // ── Save house fields ────────────────────────────────────────────────────────
+
+    async function saveHouseFields(houseId) {
+        const data = {};
+        ['summary','audience','brand_personality','positioning','tagline','differentiation'].forEach(f => {
+            const el = document.getElementById(`hf-${f}`);
+            if (el) data[f] = el.value;
+        });
+        try {
+            const res = await fetch(`${API}/houses/${houseId}`, {
+                method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            toast('Saved', 'success');
+            const house = await fetch(`${API}/houses/${houseId}`).then(r=>r.json());
+            milestoneToast(house.completeness_score||0, house.name);
+        } catch(e) { toast('Save failed: '+e.message, 'error'); }
+    }
+
+    // ── Add / delete messages ────────────────────────────────────────────────────
+
+    function openAddMessage(houseId) {
+        const opts = SECTION_ORDER.map(s=>`<option value="${s}">${SECTION_META[s]?.label||s}</option>`).join('');
+        openModal(`<div style="padding:24px;">
+            <div style="font-weight:600;font-size:15px;margin-bottom:16px;">Add Key Message</div>
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Section Type</label>
+                <select id="nm-type" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;">${opts}</select>
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Content</label>
+                <textarea id="nm-content" rows="3" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;" placeholder="Enter the key message…"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary btn-sm" onclick="submitAddMessage('${houseId}')">Add Message</button>
+            </div>
+        </div>`);
+    }
+
+    async function submitAddMessage(houseId) {
+        const section_type = document.getElementById('nm-type')?.value;
+        const content = document.getElementById('nm-content')?.value?.trim();
+        if (!content) { toast('Content required','error'); return; }
+        try {
+            const res = await fetch(`${API}/messages`,{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({message_house_id:houseId,section_type,content,priority:99})});
+            if (!res.ok) throw new Error(await res.text());
+            closeModal(); toast('Message added','success');
+            const house = await fetch(`${API}/houses/${houseId}`).then(r=>r.json());
+            _renderHouseDetail(house); switchHouseTab('messages');
+            milestoneToast(house.completeness_score||0, house.name);
+        } catch(e) { toast('Failed: '+e.message,'error'); }
+    }
+
+    async function deleteMessage(msgId) {
+        if (!confirm('Delete this message?')) return;
+        try {
+            const res = await fetch(`${API}/messages/${msgId}`,{method:'DELETE'});
+            if (!res.ok) throw new Error(await res.text());
+            toast('Deleted','success');
+            const house = await fetch(`${API}/houses/${currentHouseId}`).then(r=>r.json());
+            _renderHouseDetail(house); switchHouseTab('messages');
+        } catch(e) { toast('Delete failed: '+e.message,'error'); }
+    }
+
+    // ── Bulk import ──────────────────────────────────────────────────────────────
+
+    function openBulkImport(houseId) {
+        const opts = SECTION_ORDER.map(s=>`<option value="${s}">${SECTION_META[s]?.label||s}</option>`).join('');
+        openModal(`<div style="padding:24px;">
+            <div style="font-weight:600;font-size:15px;margin-bottom:6px;">Bulk Import Messages</div>
+            <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px;">Paste from a spreadsheet: <code style="background:var(--bg-3);padding:1px 4px;border-radius:3px;">section_type TAB content</code> per line. Or paste just content lines and pick a default type.</div>
+            <div style="margin-bottom:10px;">
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Default Section Type</label>
+                <select id="bi-type" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;">${opts}</select>
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Paste Data</label>
+                <textarea id="bi-text" rows="7" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;" placeholder="headline&#9;We help teams ship 3× faster&#10;benefit&#9;Reduce deployment time by 60%"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary btn-sm" onclick="submitBulkImport('${houseId}')">Import</button>
+            </div>
+        </div>`);
+    }
+
+    async function submitBulkImport(houseId) {
+        const raw = document.getElementById('bi-text')?.value?.trim();
+        const defaultType = document.getElementById('bi-type')?.value||'headline';
+        if (!raw) { toast('Nothing to import','error'); return; }
+        const rows = raw.split('\n').filter(l=>l.trim()).map(line=>{
+            const parts = line.split('\t');
+            return parts.length>=2
+                ? {section_type:parts[0].trim().toLowerCase().replace(/ /g,'_'), content:parts.slice(1).join('\t').trim()}
+                : {section_type:defaultType, content:line.trim()};
+        }).filter(r=>r.content);
+        if (!rows.length) { toast('No valid rows found','error'); return; }
+        try {
+            const res = await fetch(`${API}/houses/${houseId}/messages/bulk-import`,{method:'POST',
+                headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})});
+            if (!res.ok) throw new Error(await res.text());
+            const result = await res.json();
+            closeModal(); toast(`Imported ${result.created} messages`,'success');
+            const house = await fetch(`${API}/houses/${houseId}`).then(r=>r.json());
+            _renderHouseDetail(house); switchHouseTab('messages');
+        } catch(e) { toast('Import failed: '+e.message,'error'); }
+    }
+
+    // ── Personas ─────────────────────────────────────────────────────────────────
+
+    function openAddPersona(houseId) {
+        openModal(`<div style="padding:24px;">
+            <div style="font-weight:600;font-size:15px;margin-bottom:16px;">Add Persona</div>
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Name</label>
+                <input id="np-name" type="text" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="e.g. VP Engineering">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Description</label>
+                <textarea id="np-desc" rows="2" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;" placeholder="Brief role description…"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary btn-sm" onclick="submitAddPersona('${houseId}')">Add Persona</button>
+            </div>
+        </div>`);
+    }
+
+    async function submitAddPersona(houseId) {
+        const name = document.getElementById('np-name')?.value?.trim();
+        const description = document.getElementById('np-desc')?.value?.trim()||'';
+        if (!name) { toast('Name required','error'); return; }
+        try {
+            const res = await fetch(`${API}/personas`,{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({message_house_id:houseId,name,description})});
+            if (!res.ok) throw new Error(await res.text());
+            closeModal(); toast('Persona added','success');
+            const house = await fetch(`${API}/houses/${houseId}`).then(r=>r.json());
+            _renderHouseDetail(house); switchHouseTab('personas');
+        } catch(e) { toast('Failed: '+e.message,'error'); }
+    }
+
+    async function generatePersona(houseId) {
+        const jobTitle = prompt('Job title for AI persona generation:');
+        if (!jobTitle) return;
+        try {
+            const res = await fetch(`${API}/generate-persona`,{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({house_id:houseId,job_title:jobTitle})});
+            if (!res.ok) throw new Error(await res.text());
+            toast('Persona generated','success');
+            const house = await fetch(`${API}/houses/${houseId}`).then(r=>r.json());
+            _renderHouseDetail(house); switchHouseTab('personas');
+        } catch(e) { toast('Failed: '+e.message,'error'); }
+    }
+
+    async function deletePersona(personaId) {
+        if (!confirm('Delete this persona?')) return;
+        try {
+            const res = await fetch(`${API}/personas/${personaId}`,{method:'DELETE'});
+            if (!res.ok) throw new Error(await res.text());
+            toast('Deleted','success');
+            const house = await fetch(`${API}/houses/${currentHouseId}`).then(r=>r.json());
+            _renderHouseDetail(house); switchHouseTab('personas');
+        } catch(e) { toast('Delete failed: '+e.message,'error'); }
+    }
+
+    // ── Modal helper ─────────────────────────────────────────────────────────────
+
+    function openModal(html) {
+        let overlay = document.getElementById('modal-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'modal-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:1000;';
+            overlay.onclick = e => { if (e.target===overlay) closeModal(); };
+            document.body.appendChild(overlay);
+        }
+        overlay.style.display = 'flex';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius-lg);min-width:440px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;';
+        box.innerHTML = html;
+        overlay.innerHTML = '';
+        overlay.appendChild(box);
+    }
+
+    function closeModal() {
+        const o = document.getElementById('modal-overlay');
+        if (o) o.style.display = 'none';
+    }
+
+    // ── Artifact generator ────────────────────────────────────────────────────────
+
     async function loadArtifactHouses() {
-        const houses = await fetch(`${API}/houses`).then(r => r.json());
+        const houses = await fetch(`${API}/houses`).then(r=>r.json());
         const sel = document.getElementById('artifact-house');
         sel.innerHTML = '<option value="">Select a framework…</option>' +
-            houses.map(h => `<option value="${h.id}">${esc(h.name)}</option>`).join('');
+            houses.map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join('');
     }
 
     async function onArtifactHouseChange() {
         const houseId = document.getElementById('artifact-house').value;
         if (!houseId) return;
-        const skills = await fetch(`${API}/skills`).then(r => r.json());
-        document.getElementById('artifact-skills-list').innerHTML = skills.map(s => `
+        const skills = await fetch(`${API}/skills`).then(r=>r.json());
+        document.getElementById('artifact-skills-list').innerHTML = skills.map(s=>`
             <div class="skill-opt" id="skill-opt-${s.id}" onclick="selectSkill('${s.id}')">
                 <div class="skill-opt-name">${esc(s.name)}</div>
                 <div class="skill-opt-desc">${esc(s.description)}</div>
@@ -292,12 +765,238 @@
 
     function selectSkill(id) {
         selectedSkillId = id;
-        document.querySelectorAll('.skill-opt').forEach(el => el.classList.remove('active'));
-        document.getElementById(`skill-opt-${id}`)?.classList.add('active');
+        document.querySelectorAll('.skill-opt').forEach(el => { el.style.borderColor=''; el.style.background=''; });
+        const el = document.getElementById(`skill-opt-${id}`);
+        if (el) { el.style.borderColor='var(--primary)'; el.style.background='var(--primary-dim)'; }
         document.getElementById('generate-btn').disabled = false;
     }
 
-    // Init
-    loadDashboard();
+    async function generateArtifact() {
+        const houseId = document.getElementById('artifact-house').value;
+        if (!houseId || !selectedSkillId) { toast('Select a framework and skill first','error'); return; }
+        const container = document.getElementById('artifact-preview-container');
+        container.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span><span style="margin-left:12px;color:var(--text-2);">Generating with AI…</span></div>';
+        const form = new FormData();
+        form.append('skill_id', selectedSkillId);
+        form.append('house_id', houseId);
+        try {
+            const res = await fetch(`${API}/generate`,{method:'POST',body:form});
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            container.innerHTML = _renderArtifactResult(data);
+            toast('Artifact generated','success');
+        } catch(e) {
+            container.innerHTML = `<div class="card" style="border-color:var(--danger-dim);"><div style="color:var(--danger);">Generation failed: ${e.message}</div></div>`;
+            toast('Generation failed','error');
+        }
+    }
+
+    function _renderArtifactResult(data) {
+        const secs = Object.entries(data.sections||{}).map(([k,v])=>`
+            <div style="margin-bottom:18px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:7px;">${esc(k.replace(/_/g,' '))}</div>
+                <div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;">${esc(Array.isArray(v)?v.join('\n'):String(v))}</div>
+            </div>`).join('');
+        const artId = data.artifact_id;
+        const dlBtns = artId ? `<a href="/api/artifacts/${artId}/pdf" target="_blank" class="btn btn-ghost btn-sm">↓ PDF</a>
+            <a href="/api/artifacts/${artId}/docx" class="btn btn-ghost btn-sm">↓ DOCX</a>` : '';
+        const visBtn = data.visual_url ? `<a href="${data.visual_url}" target="_blank" class="btn btn-ghost btn-sm">Visual →</a>` : '';
+        return `<div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+                <div>
+                    <div class="card-title">${esc(data.house_name)}</div>
+                    <div style="font-size:12px;color:var(--text-3);margin-top:2px;">${esc((data.skill_id||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}</div>
+                </div>
+                <div style="display:flex;gap:6px;">${dlBtns}${visBtn}</div>
+            </div>
+            ${secs}
+            ${data.raw_content?`<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:7px;">Full Content</div>
+                <div style="font-size:13.5px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;">${esc(data.raw_content)}</div>
+            </div>`:''}
+        </div>`;
+    }
+
+    function viewArtifactForHouse(houseId) {
+        showSection('artifacts');
+        const sel = document.getElementById('artifact-house');
+        if (sel) { sel.value = houseId; onArtifactHouseChange(); }
+    }
+
+    // ── Skills ────────────────────────────────────────────────────────────────────
+
+    async function loadSkills() {
+        const container = document.getElementById('skills-list-container');
+        container.innerHTML = '<span class="spinner"></span>';
+        try {
+            const skills = await fetch(`${API}/skills`).then(r=>r.json());
+            container.innerHTML = skills.map(s=>`
+                <div class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+                        <div class="card-title">${esc(s.name)}</div>
+                        <button class="btn btn-ghost btn-xs" onclick="editSkill('${s.id}')">Edit</button>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">${esc(s.description)}</div>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                        ${(s.channels||[]).map(ch=>`<span style="background:var(--bg-3);color:var(--text-3);font-size:10px;padding:2px 7px;border-radius:4px;">${ch}</span>`).join('')}
+                    </div>
+                </div>`).join('');
+        } catch(e) { container.innerHTML = 'Error: '+e.message; }
+    }
+
+    async function editSkill(id) {
+        try {
+            const skill = await fetch(`${API}/skills/${id}`).then(r=>r.json());
+            const newName = prompt('Skill Name:', skill.name);
+            if (newName===null) return;
+            const newDesc = prompt('Description:', skill.description);
+            if (newDesc===null) return;
+            const newSectionsRaw = prompt('Sections (JSON):', JSON.stringify(skill.sections, null, 2));
+            if (newSectionsRaw===null) return;
+            let newSections;
+            try { newSections = JSON.parse(newSectionsRaw); } catch(e) { alert('Invalid JSON'); return; }
+            const res = await fetch(`${API}/skills/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({...skill,name:newName,description:newDesc,sections:newSections})});
+            if (res.ok) { toast('Skill updated','success'); loadSkills(); }
+            else throw new Error(await res.text());
+        } catch(e) { toast('Update failed: '+e.message,'error'); }
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────────────────
+
+    async function loadSettings() {
+        // Settings section exists — could add workspace/token info here later
+    }
+
+    // ── Upload flow ───────────────────────────────────────────────────────────────
+
+    const uploadZone = document.getElementById('upload-zone');
+    const fileInput = document.getElementById('file-input');
+
+    if (uploadZone) {
+        uploadZone.addEventListener('click', () => fileInput?.click());
+        uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor='var(--primary)'; uploadZone.style.background='var(--primary-dim)'; });
+        uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor=''; uploadZone.style.background=''; });
+        uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.style.borderColor=''; uploadZone.style.background=''; handleFile(e.dataTransfer.files[0]); });
+        fileInput?.addEventListener('change', () => handleFile(fileInput.files[0]));
+    }
+
+    function handleFile(file) {
+        if (!file) return;
+        document.getElementById('upload-filename').textContent = file.name;
+        document.getElementById('upload-stats').textContent = `${(file.size/1024).toFixed(1)} KB`;
+        document.getElementById('upload-preview-card').style.display = '';
+        document.getElementById('structure-preview').style.display = 'none';
+        document.getElementById('extraction-result').style.display = 'none';
+        document.getElementById('extraction-error').style.display = 'none';
+        uploadAndStructure(file);
+    }
+
+    let _structureTimer = null;
+    async function uploadAndStructure(file) {
+        const statusEl = document.getElementById('process-status');
+        const timerEl = document.getElementById('structuring-timer');
+        let elapsed = 0;
+        _structureTimer = setInterval(() => { elapsed++; if(timerEl) timerEl.textContent = `${elapsed}s`; }, 1000);
+
+        const form = new FormData();
+        form.append('file', file);
+        form.append('source_name', file.name.replace(/\.[^.]+$/, ''));
+
+        try {
+            const res = await fetch(`${API}/preview-structure`, {method:'POST', body:form});
+            clearInterval(_structureTimer);
+            if (!res.ok) {
+                const err = await res.json().catch(()=>({error:{stage:'unknown',message:res.statusText,detail:''}}));
+                showUploadError(err.error||{stage:'unknown',message:'Upload failed',detail:''});
+                return;
+            }
+            const data = await res.json();
+            if (data.status === 'failed') { showUploadError(data.error); return; }
+            showStructurePreview(data);
+        } catch(e) {
+            clearInterval(_structureTimer);
+            showUploadError({stage:'upload',message:'Network error',detail:e.message});
+        }
+    }
+
+    let _previewToken = null;
+    function showStructurePreview(data) {
+        _previewToken = data.preview_token;
+        document.getElementById('upload-preview-card').style.display = 'none';
+        document.getElementById('structure-preview').style.display = '';
+        document.getElementById('preview-name').textContent = data.name || 'Untitled';
+        document.getElementById('preview-meta').textContent = `${data.word_count?.toLocaleString()||0} words · ${data.message_count||data.key_messages?.length||0} messages · ${data.persona_count||data.personas?.length||0} personas`;
+
+        const score = data.completeness_score || 0;
+        document.getElementById('preview-completeness-fill').style.width = score + '%';
+        document.getElementById('preview-completeness-label').textContent = `${score}% complete${data.missing_sections?.length ? ' — missing: '+data.missing_sections.join(', ') : ''}`;
+
+        const sectionsEl = document.getElementById('preview-sections');
+        const msgs = data.key_messages || [];
+        const grouped = {};
+        for (const m of msgs) {
+            const st = normST(m.section_type||'headline');
+            if (!grouped[st]) grouped[st] = [];
+            grouped[st].push(m);
+        }
+        const sections = SECTION_ORDER.filter(s=>grouped[s]?.length).concat(Object.keys(grouped).filter(s=>!SECTION_ORDER.includes(s)&&grouped[s]?.length));
+        sectionsEl.innerHTML = sections.map(st => {
+            const meta = SECTION_META[st]||{label:st,color:'#64748b',bg:'rgba(100,116,139,.1)'};
+            const items = (grouped[st]||[]).map(m=>`<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px;color:var(--text-2);line-height:1.5;">${esc(m.content)}</div>`).join('');
+            return `<div style="margin-bottom:12px;padding:12px;background:${meta.bg};border-radius:var(--radius);">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:8px;">${meta.label} (${(grouped[st]||[]).length})</div>
+                ${items}
+            </div>`;
+        }).join('');
+    }
+
+    async function confirmSave() {
+        if (!_previewToken) return;
+        const btn = document.getElementById('confirm-save-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+        try {
+            const res = await fetch(`${API}/confirm-structure`,{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({preview_token:_previewToken})});
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            _extractedHouseId = data.id;
+            document.getElementById('structure-preview').style.display = 'none';
+            document.getElementById('extraction-result').style.display = '';
+            document.getElementById('extraction-name').textContent = data.name;
+            document.getElementById('extraction-meta').textContent = `${data.message_count} messages · ${data.persona_count} personas · ${data.completeness_score}% complete`;
+            document.getElementById('completeness-fill').style.width = (data.completeness_score||0) + '%';
+            document.getElementById('completeness-label').textContent = `${data.completeness_score||0}% complete`;
+            toast('Framework saved','success');
+        } catch(e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Save Framework →'; }
+            toast('Save failed: '+e.message,'error');
+        }
+    }
+
+    function viewExtractedHouse() {
+        if (_extractedHouseId) viewHouse(_extractedHouseId);
+    }
+
+    function showUploadError(err) {
+        document.getElementById('upload-preview-card').style.display = 'none';
+        document.getElementById('extraction-error').style.display = '';
+        document.getElementById('err-stage').textContent = err.stage || '';
+        document.getElementById('err-msg').textContent = err.message || 'Unknown error';
+        document.getElementById('err-detail').textContent = err.detail || '';
+    }
+
+    function resetUpload() {
+        document.getElementById('upload-preview-card').style.display = 'none';
+        document.getElementById('structure-preview').style.display = 'none';
+        document.getElementById('extraction-result').style.display = 'none';
+        document.getElementById('extraction-error').style.display = 'none';
+        if (fileInput) fileInput.value = '';
+        _previewToken = null;
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────────
+
+    initRouting();
 </script>
 {% endblock %}

@@ -812,12 +812,16 @@ def get_stats():
     houses = store.list_houses()
     total_messages = sum(len(store.get_key_messages(h.id)) for h in houses)
     total_personas = sum(len(store.get_personas(h.id)) for h in houses)
-    skill_list = skills.list_skills()
+    total_artifacts = sum(len(store.list_artifacts(h.id)) for h in houses)
+    usage = store.get_token_usage_summary()
+
     return {
         "house_count": len(houses),
         "message_count": total_messages,
         "persona_count": total_personas,
-        "skill_count": len(skill_list),
+        "artifact_count": total_artifacts,
+        "token_count": usage.get("total_input_tokens", 0) + usage.get("total_output_tokens", 0),
+        "skill_count": len(skills.list_skills()),
     }
 
 
@@ -2295,8 +2299,7 @@ def view_artifact(artifact_type: str, house_id: str, request: Request):
     
     try:
         artifact = generator.generate(artifact_type, house_id, {})
-        return templates.TemplateResponse("artifact_visual.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "artifact_visual.html", {
             "artifact": artifact,
             "type": artifact_type,
             "house_name": artifact.house_name
@@ -2309,9 +2312,14 @@ def view_artifact(artifact_type: str, house_id: str, request: Request):
 # --- Frontend ---
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
+@app.get("/frameworks", response_class=HTMLResponse)
+@app.get("/upload", response_class=HTMLResponse)
+@app.get("/artifacts", response_class=HTMLResponse)
+@app.get("/skills", response_class=HTMLResponse)
+@app.get("/settings", response_class=HTMLResponse)
 def index(request: Request):
-    p = Path("src/web/dashboard.html")
-    return HTMLResponse(content=p.read_text(encoding="utf-8"))
+    return templates.TemplateResponse(request, "dashboard.html")
 
 
 if __name__ == "__main__":
