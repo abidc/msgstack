@@ -1722,6 +1722,10 @@ function renderMissingSections(missing, houseId) {
     const list = document.getElementById('missing-sections-list');
     if (!missing.length) { card.style.display = 'none'; return; }
     card.style.display = 'block';
+    const fieldMap = {
+        summary:'detail-summary', audience:'detail-audience', brand_personality:'detail-brand-personality',
+        positioning:'detail-positioning', tagline:'detail-tagline', differentiation:'detail-differentiation',
+    };
     const labels = {
         summary:'Summary', audience:'Target Audience', brand_personality:'Brand Personality',
         positioning:'Positioning', tagline:'Tagline', differentiation:'Differentiation',
@@ -1734,7 +1738,18 @@ function renderMissingSections(missing, houseId) {
                 <div class="missing-section-name">${labels[s]||s}</div>
                 <div id="gen-content-${s.replace(':','-')}" class="generated-content"></div>
             </div>
-            <button class="btn btn-ghost btn-xs" onclick="generateMissingSection('${houseId}','${s}',this)">
+            <div style="display:flex;gap:4px;">
+                ${fieldMap[s] ? `<button class="btn btn-primary btn-xs" onclick="viewHouse('${houseId}'); setTimeout(() => document.getElementById('${fieldMap[s]}')?.scrollIntoView({behavior:'smooth'}),300)">Fix it</button>` : ''}
+                <button class="btn btn-ghost btn-xs" onclick="generateMissingSection('${houseId}','${s}',this)">Generate</button>
+            </div>
+        </div>`).join('');
+    list.querySelectorAll('.missing-section').forEach(el => {
+        el.style.display = 'flex';
+        el.style.justifyContent = 'space-between';
+        el.style.alignItems = 'center';
+        el.style.padding = '8px 0';
+    });
+}>
                 ✦ Generate with AI
             </button>
         </div>`).join('');
@@ -2340,9 +2355,12 @@ generateArtifact = async function() {
                 <div class="section-block">
                     <div class="section-block-label" style="display:flex;justify-content:space-between;align-items:center;">
                         <span>${k.replace(/_/g,' ')}</span>
-                        <button class="btn btn-ghost btn-xs" onclick="copySectionContent(this)" style="font-size:10px;">Copy</button>
+                        <div style="display:flex;gap:4px;">
+                            <button class="btn btn-ghost btn-xs" onclick="regenerateSection('${k}', this)" style="font-size:10px;" title="Regenerate">↻</button>
+                            <button class="btn btn-ghost btn-xs" onclick="copySectionContent(this)" style="font-size:10px;">Copy</button>
+                        </div>
                     </div>
-                    <div class="section-block-content" contenteditable="true" data-section-key="${k}">${esc(v)}</div>
+                    <div class="section-block-content" contenteditable="true" data-section-key="${k}" onblur="saveArtifactSection('${k}', this.textContent)">${esc(v)}</div>
                 </div>`).join('');
         } else { sectionsEl.innerHTML = ''; }
 
@@ -2376,6 +2394,51 @@ generateArtifact = async function() {
 function copySectionContent(btn) {
     const content = btn.closest('.section-block')?.querySelector('.section-block-content')?.textContent || '';
     navigator.clipboard.writeText(content).then(() => toast('Copied', 'success'));
+}
+
+async function saveArtifactSection(sectionKey, newContent) {
+    if (!_currentArtifactId) {
+        toast('No artifact selected', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`${API}/artifacts/${_currentArtifactId}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ sections: { [sectionKey]: newContent } })
+        });
+        if (!res.ok) throw new Error('Failed to save');
+        toast('Section saved', 'success');
+    } catch (e) {
+        toast('Save failed: ' + e.message, 'error');
+    }
+}
+
+async function regenerateSection(sectionKey, btn) {
+    const houseId = document.getElementById('artifact-house').value;
+    if (!houseId) { toast('Select a framework first', 'error'); return; }
+
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span>';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${API}/generate-section-single?house_id=${houseId}&section=${sectionKey}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Generation failed');
+
+        const sectionEl = document.querySelector(`[data-section-key="${sectionKey}"]`);
+        if (sectionEl) {
+            sectionEl.textContent = data.content;
+            await saveArtifactSection(sectionKey, data.content);
+        }
+        btn.innerHTML = '✓';
+        setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 1500);
+    } catch (e) {
+        toast('Regenerate failed: ' + e.message, 'error');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
 }
 
 // ── Settings helpers ──────────────────────────────────────────────────────────

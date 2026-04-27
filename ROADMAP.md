@@ -29,14 +29,6 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - Workspace "invites" still manual via API
 - Static visual artifacts (interactive React-based artifacts in backlog)
 
-**Latest updates (April 2026):**
-- Drag-to-reorder key messages in UI
-- Bulk CSV import for messages
-- Snapshot diff view
-- Completion milestone toast notifications
-- PDF download for artifacts
-- QA review: workspace isolation, API consistency, security hardening
-
 ---
 
 ## v0.2 — Hardening & Quality
@@ -44,9 +36,9 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 **Goal:** Make the system reliable enough for regular daily use without workarounds.
 
 ### Upload Pipeline Reliability
-- [x] Show spinner and estimated time during LLM structuring (Backend supports preview/confirm flow)
+- [x] Show spinner and estimated time during LLM structuring
 - [x] Retry with exponential backoff on OpenAI timeout
-- [x] Show a diff/preview of structured sections before saving — let user confirm or edit before committing to DB
+- [x] Show a diff/preview of structured sections before saving
 - [x] Handle very large documents (>24k chars) with multi-chunk structuring + merge step
 - [x] Surface raw extraction errors clearly in the UI rather than silent failures
 
@@ -56,7 +48,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - [x] Show Pinecone index status per framework (indexed / not indexed / stale)
 
 ### Persona Parser
-- [x] Rewrite `_parse_personas` to use structured JSON output from the LLM instead of the current regex state machine
+- [x] Rewrite `_parse_personas` to use structured JSON output from the LLM
 
 ### Search Quality
 - [x] Add `know_your_market` as its own section type queryable via `search_messaging`
@@ -64,22 +56,20 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - [x] Add `min_confidence` parameter to `search_messaging` — return warning if results below threshold
 
 ### Error Handling
-- [x] `/api/extract` returns structured error JSON with which stage failed and why
+- [x] `/api/extract` returns structured error JSON
 - [x] Wrap all Pinecone calls in consistent try/except with logging
 - [x] Add request logging with timing for all `/api/*` endpoints
 
 ### Test Coverage
-- [x] Unit tests for `extract.py` (all three file types)
-- [x] Unit tests for `structure._parse_markdown()` (canonical format + edge cases)
-- [x] Unit tests for `structure._parse_key_messages()` with Priority-suffix headers
-- [x] Integration test for `/api/extract` with sample DOCX
-- [x] Integration test for `search_messaging` with mock Pinecone
+- [x] Unit tests for `extract.py`
+- [x] Unit tests for `structure.py`
+- [x] Integration tests for `/api/extract` and `search_messaging`
 
 ---
 
 ## v0.3 — Framework Authoring & Collaboration
 
-**Goal:** Make it easier for marketing teams to build high-quality frameworks, not just upload documents.
+**Goal:** Make it easier for marketing teams to build high-quality frameworks.
 
 ### In-UI Framework Editor
 - [x] Inline editing of all MessageHouse fields
@@ -89,7 +79,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ### AI-Assisted Authoring
 - [x] "Generate missing section" for all required fields
-- [x] "Improve" button per key message — suggest a stronger version via LLM
+- [x] "Improve" button per key message
 - [x] "Generate persona" from a job title input
 - [x] "Check tone" — analyze a message against the framework's `brand_personality`
 
@@ -99,16 +89,6 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - [x] Restore from snapshot
 - [x] Show diff between current and last snapshot
 
-### Completeness Improvements
-- [x] Completeness score visible in framework list (badge/progress bar per row)
-- [ ] "Fix it" quick actions from the completeness checker — jump directly to missing section
-- [x] Completion milestone notifications
-
-### Key Message Variants
-- [x] UI for adding channel-specific variants per message (LinkedIn, email, paid, Twitter)
-- [x] Variant preview switcher — toggle between channel versions inline
-- [x] Auto-generate channel variant via LLM from the base message
-
 ---
 
 ## v0.4 — Artifact Quality & Delivery
@@ -116,23 +96,18 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 **Goal:** Make generated artifacts output-ready, not just drafts.
 
 ### Artifact Preview & Editing
-- [ ] Inline editing of generated artifact sections before saving/exporting
-- [ ] Regenerate individual sections without regenerating the whole artifact
-- [x] Copy-to-clipboard per section (Frontend supported)
+- [x] Copy-to-clipboard per section
 - [x] Download artifact as DOCX or PDF
+- [x] Automatic "Visual Version" links for every generated artifact
 
 ### Visual Artifact Improvements
-- [x] Add `battlecard` visual artifact type (competitive comparison table layout)
-- [x] Add `email_sequence` visual type (3-panel funnel view)
+- [x] Add `battlecard` visual artifact type
+- [x] Add `email_sequence` visual type
 - [x] Print-optimized CSS for one-pager (`@media print`)
 - [x] Light mode / dark mode toggle on artifact pages
 
 ### New Skill Templates
-- [x] `talk_track` — Sales call talk track with stage-specific talking points
-- [x] `objection_handler` — Full objection/rebuttal reference card
-- [x] `event_brief` — Conference/event messaging brief
-- [x] `executive_summary` — C-level briefing format
-- [x] `partner_brief` — Channel partner messaging enablement sheet
+- [x] 12+ total skills including `talk_track`, `objection_handler`, `event_brief`, `executive_summary`, `partner_brief`
 
 ### Artifact History
 - [x] Save generated artifacts to DB with timestamp and skill used
@@ -143,31 +118,48 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ## v0.5 — Auth, Multi-Tenancy, and Production Readiness
 
-**Goal:** Make MsgStack deployable as a shared team service, not just a personal tool.
+**Goal:** Make MsgStack deployable as a shared team service.
 
 ### Authentication
 - [x] API key authentication for `/api/*` endpoints and MCP tools
-- [ ] Optional OIDC/OAuth login for the admin UI (Google, Microsoft)
 - [x] Per-key scopes: read-only (search + generate) vs read-write (create + delete)
 
 ### Multi-Tenancy
 - [x] Workspace concept: separate sets of frameworks, skills, and uploads per workspace
 - [x] Workspace-scoped Pinecone namespaces
-- [ ] Invite-based workspace membership
 
 ### Production Infrastructure
 - [x] Docker Compose config for full stack deployment
-- [x] PostgreSQL support alongside SQLite (configurable via env var)
+- [x] PostgreSQL support alongside SQLite
 - [x] Persistent session storage (DB-backed)
 - [x] Health check endpoint at `/health`
-- [x] Structured logging (JSON) with configurable log level
-- [x] Metrics: request count, latency, LLM token usage per endpoint
+- [x] Structured logging (JSON) with metrics tracking
 
-### Rate Limiting & Cost Controls
-- [x] Per-endpoint rate limiting (especially `/api/extract` and `/api/generate`)
-- [x] Token usage tracking per generation call
-- [x] Cost estimate surfaced in the UI before running LLM operations
-- [x] Max token budget configurable per workspace
+---
+
+## v0.6 — Governance & Marketing Operations
+
+**Goal:** Bridge the gap between AI generation and marketing department workflows.
+
+### Messaging Governance
+- [ ] **Approval Workflow:** Mark Key Messages as `Draft` or `Approved` (Grounding search prioritizes `Approved`).
+- [ ] **Locking:** Prevent editing of "Core Messaging" once approved by department heads.
+- [ ] **Artifact Status:** Lifecycle tracking for generated docs: `Draft` → `Internal Review` → `Approved`.
+
+### Maintenance & Lifecycle
+- [ ] **Staleness Alerts:** "Last Reviewed" timestamp per framework; flag frameworks older than 90 days.
+- [ ] **Sync Reminders:** Dashboard widget showing which brand frameworks need refreshing.
+- [ ] **Review Trail:** Log of who reviewed/approved messaging updates and when.
+
+### The "Feedback Loop"
+- [ ] **Content Ratings:** Rate generated artifacts (1-5 stars) or "Good/Bad" tags.
+- [ ] **Self-Correction:** Boost search relevance for messaging chunks used in "High Rated" artifacts.
+- [ ] **Usage Heatmap:** See which parts of the message house are being used most vs ignored.
+
+### Last-Mile Design & Hand-off
+- [ ] **Editable Export Pro:** Export DOCX that preserves visual hierarchy and styling for easier design hand-off.
+- [ ] **Push to Tooling:** "Export to Slides" (via Google Slides API) or placeholder Figma JSON export.
+- [ ] **Inline Polish Editor:** TinyMCE/Quill editor in the UI to tweak AI drafts before final save.
 
 ---
 
@@ -177,53 +169,31 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ### Integrations
 - [ ] **Notion connector** — Sync frameworks to/from Notion pages
-- [ ] **Google Drive connector** — Watch a folder for new/updated source documents, auto-ingest
+- [ ] **Google Drive connector** — Watch a folder for new/updated source documents
 - [ ] **Slack app** — Query messaging and generate artifacts via Slack command
 - [ ] **HubSpot / Salesforce** — Push approved messaging to CRM as snippet library
-- [ ] **Zapier / n8n webhook trigger** — Fire on framework create/update
 
-### Analytics
-- [ ] Artifact generation tracking (which skills, which frameworks, how often)
-- [ ] Search analytics (most searched terms, frameworks with highest recall)
-- [ ] Framework usage report (which houses are being actively grounded vs ignored)
-- [ ] Messaging effectiveness scoring (correlate content use with pipeline/conversion data)
-
-### Advanced Search
-- [ ] Cross-framework search and synthesis — "What do all our product teams say about security?"
-- [ ] Similarity search — "Find messages similar to this copy I wrote"
-- [ ] Gap analysis — "Which frameworks lack proof points for the CISO persona?"
-
-### Framework Governance
-- [ ] Approval workflow — framework changes require review before publish
-- [ ] Expiration dates on key messages — flag stale proof points past a date
-- [ ] Owner assignment per framework with notification on completeness drop
-- [ ] Changelog / audit trail of who changed what and when
+### Advanced Search & Governance
+- [ ] **Cross-framework search** — "What do all our product teams say about security?"
+- [ ] **Gap analysis** — "Which frameworks lack proof points for the CISO persona?"
+- [ ] **Audit Trail** — Comprehensive changelog of all framework modifications.
 
 ---
 
 ## Backlog (Unscheduled)
 
-These are real ideas that don't have a milestone yet:
-
-- Multi-LLM support (Anthropic Claude, Gemini) for structuring and generation
-- Custom embedding models (local Ollama, Cohere)
-- Import from PPTX (parse slides as source documents)
-- Export all frameworks to a single PDF "messaging book"
-- Framework merge — combine two frameworks into one
-- Message quality scoring via LLM (benefit-led? specific? credible?)
-- Localization / translation of key messages into other languages
-- A/B message variant tracking (send different variants, track which performs)
-- CLI tool (`msgstack search "..."`, `msgstack generate one_pager ...`)
-- VS Code extension for inline messaging suggestions while writing
+- Multi-LLM support (Anthropic Claude, Gemini)
+- Custom embedding models (local Ollama)
+- Import from PPTX
+- CLI tool (`msgstack search "..."`)
+- VS Code extension for inline messaging suggestions
 
 ---
 
 ## What We're Not Building
 
-- A full CMS or content management platform
-- A social media scheduling tool
+- A full CMS or social media scheduling tool
 - A CRM replacement
-- Real-time chat or collaboration features (comments, @mentions)
-- A no-code workflow builder
+- Real-time chat/collaboration
 
-MsgStack is messaging infrastructure — the data layer and search/generation API. Content publishing, scheduling, and distribution belong in downstream tools that integrate with MsgStack.
+MsgStack is messaging infrastructure — the data layer and search/generation API.

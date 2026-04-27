@@ -1100,6 +1100,67 @@ def generate_section(house_id: str = Form(...), section: str = Form(...)):
     return {"section": section, "content": resp.choices[0].message.content.strip()}
 
 
+_SECTION_REGEN_PROMPTS = {
+    "summary": "Rewrite the summary for {name}. Positioning: {positioning}. Keep it 2-3 sentences, compelling and specific.",
+    "audience": "Rewrite the target audience description for {name}. Positioning: {positioning}. Be specific about role, company size, industry.",
+    "tagline": "Create a new tagline for {name}. Positioning: {positioning}. Must be 7 words or fewer, memorable and ownable.",
+    "differentiation": "Rewrite the differentiation for {name}. Positioning: {positioning}. List 2-3 specific ways this is better than alternatives.",
+    "headline": "Write 3 new compelling headlines for {name}. Positioning: {positioning}. Benefit-led, specific, punchy. Return as bulleted list.",
+    "subhead": "Write 3 new subheadlines for {name}. Positioning: {positioning}. Expand on headlines. Return as bulleted list.",
+    "benefit": "Write 3 new benefit statements for {name}. Positioning: {positioning}. Outcome-focused with evidence. Return as bulleted list.",
+    "proof_point": "Write 3 new proof points for {name}. Positioning: {positioning}. Quantified stats or customer evidence. Return as bulleted list.",
+    "objection": "Write 3 new objection handlers for {name}. Positioning: {positioning}. Concise rebuttals. Return as bulleted list.",
+    "social_proof": "Write 3 new social proof items for {name}. Positioning: {positioning}. Customer quotes, awards, G2 recognition. Return as bulleted list.",
+}
+
+
+@app.post("/api/generate-section-single")
+def generate_section_single(house_id: str = Query(...), section: str = Query(...)):
+    """Regenerate a single section of an artifact using LLM."""
+    try:
+        h = store.get_house(UUID(house_id))
+    except Exception:
+        raise HTTPException(400, "Invalid house_id")
+    if not h:
+        raise HTTPException(404, "House not found")
+
+    messages = store.get_key_messages(h.id)
+    messages_by_section = {}
+    for m in messages:
+        st = str(m.section_type)
+        messages_by_section.setdefault(st, []).append(m.content)
+    existing_msgs = "\n".join(f"- {st}: {msg}" for st, msgs in messages_by_section.items() for msg in msgs[:2])
+
+    template = _SECTION_REGEN_PROMPTS.get(section.lower())
+    if not template:
+        template = _SECTION_PROMPTS.get(section, "Generate content for {name}. Positioning: {positioning}")
+
+    prompt = template.format(
+        name=h.name,
+        positioning=h.positioning or h.summary or "",
+    ) + f"\n\nExisting key messages:\n{existing_msgs}"
+
+    client = _oai_client
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a B2B messaging strategist. Be specific, benefit-led, and concise."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.6,
+        max_tokens=600,
+    )
+    store.record_token_usage(
+        workspace_id="default",
+        endpoint="generate-section-single",
+        model="gpt-4o-mini",
+        input_tokens=resp.usage.prompt_tokens,
+        output_tokens=resp.usage.completion_tokens,
+        cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
+    )
+    return {"section": section, "content": resp.choices[0].message.content.strip()}
+
+
 # --- Message Improve / Variant Generation ---
 
 @app.post("/api/messages/{msg_id}/improve")
@@ -1431,6 +1492,30 @@ def get_artifact(artifact_id: str):
     if not record:
         raise HTTPException(404, "Artifact not found")
     return record
+
+
+@app.patch("/api/artifacts/{artifact_id}")
+def update_artifact(artifact_id: str, data: dict):
+    """Update sections or raw_content of an existing artifact."""
+    record = store.get_artifact(UUID(artifact_id))
+    if not record:
+        raise HTTPException(404, "Artifact not found")
+
+    sections = record.get("sections", {})
+    if "sections" in data and isinstance(data["sections"], dict):
+        sections.update(data["sections"])
+
+    from src.store import ArtifactHistoryModel
+    from uuid import UUID as UUID_
+    with store.session() as s:
+        row = s.get(ArtifactHistoryModel, artifact_id)
+        if row:
+            row.sections_json = sections
+            if "raw_content" in data:
+                row.raw_content = data["raw_content"]
+            s.commit()
+
+    return {"ok": True, "updated_id": artifact_id}
 
 
 # --- DOCX Download ---
