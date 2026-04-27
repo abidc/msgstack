@@ -198,6 +198,159 @@ Rules:
 - Include an 'Other questions?' section at the end""",
         "prefab_template": "faq_document",
     },
+    "talk_track": {
+        "id": "talk_track",
+        "name": "Sales Talk Track",
+        "description": "Stage-by-stage sales call script with discovery questions and value statements.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "opener", "label": "Call Opener", "required": True},
+            {"key": "discovery", "label": "Discovery Questions", "required": True},
+            {"key": "value_prop", "label": "Value Proposition", "required": True},
+            {"key": "demo_focus", "label": "Demo Focus Points", "required": True},
+            {"key": "objection_handling", "label": "Common Objections + Responses", "required": True},
+            {"key": "close", "label": "Close / Next Steps", "required": True},
+        ],
+        "prompt_template": """Write a sales talk track for {house_name}.
+
+Grounded in: {positioning}
+Key differentiators: {key_messages}
+Target persona: {persona}
+
+Structure:
+1. Call opener (30 seconds, hook the prospect immediately)
+2. 5-7 discovery questions that uncover pain points specific to this persona
+3. Value proposition statement (2-3 sentences tied to their likely pain points)
+4. Demo focus points (top 3 capabilities to show — ordered by persona priority)
+5. 4-5 common objections with specific, confident counter-responses
+6. Close / next steps (2 options for low-friction progression)
+
+Tone: consultative, confident, not pushy. Ask questions before pitching.""",
+        "prefab_template": "talk_track",
+    },
+    "objection_handler": {
+        "id": "objection_handler",
+        "name": "Objection Handler",
+        "description": "Full objection/rebuttal reference card for common sales and marketing objections.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "objection", "label": "Objection", "required": True},
+            {"key": "root_cause", "label": "Root Cause", "required": True},
+            {"key": "response", "label": "Response", "required": True},
+            {"key": "proof", "label": "Supporting Proof Point", "required": False},
+        ],
+        "prompt_template": """Write a comprehensive objection handler reference card for {house_name}.
+
+Grounded in: {positioning}
+Known objections from personas: {objections}
+
+For each objection:
+1. State the objection verbatim as a prospect would say it
+2. Identify the root cause (fear, misunderstanding, prior bad experience)
+3. Write a 2-3 sentence response: acknowledge → reframe → redirect
+4. Add a supporting proof point or stat where possible
+
+Cover at least 8 objections across these categories:
+- Price / ROI objections
+- Complexity / implementation concerns
+- "We already have a solution" objections
+- Timing / priority objections
+- Trust / credibility objections
+
+Tone: empathetic, factual, never defensive.""",
+        "prefab_template": "objection_handler",
+    },
+    "event_brief": {
+        "id": "event_brief",
+        "name": "Event Brief",
+        "description": "Conference or event messaging brief with talking points and booth/session strategy.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "event_theme", "label": "Event Theme & Audience", "required": True},
+            {"key": "our_angle", "label": "Our Angle / Key Message", "required": True},
+            {"key": "talking_points", "label": "Top 3 Talking Points", "required": True},
+            {"key": "demo_story", "label": "Demo Story", "required": True},
+            {"key": "booth_hooks", "label": "Booth / Session Hooks", "required": False},
+            {"key": "follow_up", "label": "Post-Event Follow-up Messaging", "required": True},
+        ],
+        "prompt_template": """Write an event messaging brief for {house_name} at {event_name}.
+
+Grounded in: {positioning}
+Key audience at this event: {audience}
+Primary message to land: {primary_message}
+
+Structure:
+1. Event theme and attendee profile (who will be in the room, what they care about)
+2. Our angle — the single idea we want every attendee to walk away with
+3. Top 3 talking points tailored to this specific audience
+4. Demo story (3-minute narrative arc: before → after → proof)
+5. Booth/session hook (what gets someone to stop, come in, stay)
+6. Post-event follow-up email subject lines and first-line hooks (3 options)
+
+Tone: energetic but credible. Avoid generic conference buzzwords.""",
+        "prefab_template": "event_brief",
+    },
+    "executive_summary": {
+        "id": "executive_summary",
+        "name": "Executive Summary",
+        "description": "C-level briefing format — business case, strategic fit, and decision criteria.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "situation", "label": "Situation", "required": True},
+            {"key": "complication", "label": "Complication / Risk", "required": True},
+            {"key": "resolution", "label": "Resolution / Recommendation", "required": True},
+            {"key": "business_case", "label": "Business Case", "required": True},
+            {"key": "next_steps", "label": "Next Steps", "required": True},
+        ],
+        "prompt_template": """Write an executive summary for {house_name} targeted at C-level decision makers.
+
+Grounded in: {positioning}
+Key proof points: {key_messages}
+Target executive persona: {persona}
+
+Use the SCR (Situation-Complication-Resolution) framework:
+1. Situation (1 paragraph): The current state — what is the executive already dealing with?
+2. Complication (1 paragraph): What's the problem or risk if nothing changes?
+3. Resolution (1 paragraph): How {house_name} addresses it specifically
+4. Business case (bullet points): 3 quantified outcomes or ROI data points
+5. Next steps: 2-3 low-friction action items with owners and timeline
+
+Rules:
+- No jargon, no product feature lists
+- Lead with business outcomes, not capabilities
+- Under 400 words total
+- Each section starts with a bold topic sentence""",
+        "prefab_template": "executive_summary",
+    },
+    "partner_brief": {
+        "id": "partner_brief",
+        "name": "Partner Brief",
+        "description": "Channel partner messaging enablement sheet with co-sell angles and joint value proposition.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "joint_value_prop", "label": "Joint Value Proposition", "required": True},
+            {"key": "partner_benefit", "label": "Why Partners Win with Us", "required": True},
+            {"key": "target_customer", "label": "Ideal Joint Customer", "required": True},
+            {"key": "co_sell_motion", "label": "Co-Sell Motion", "required": True},
+            {"key": "field_messaging", "label": "Field-Ready Messaging", "required": True},
+            {"key": "resources", "label": "Available Resources", "required": False},
+        ],
+        "prompt_template": """Write a channel partner messaging brief for {house_name}.
+
+Our positioning: {positioning}
+Our key differentiators: {key_messages}
+
+Structure:
+1. Joint value proposition (2-3 sentences: what we do together that neither does alone)
+2. Why partners win with us (3 bullets: margin, stickiness, competitive advantage)
+3. Ideal joint customer profile (firmographics + tech environment + pain points)
+4. Co-sell motion (step-by-step: when to bring us in, how to position together)
+5. Field-ready messaging (3 one-liners partners can use in customer conversations)
+6. Available resources (sales tools, demo access, co-marketing options)
+
+Tone: partner-first. Focus on what the partner gains, not what we gain.""",
+        "prefab_template": "partner_brief",
+    },
 }
 
 

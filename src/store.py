@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Self
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     create_engine,
 )
 from sqlalchemy.orm import (
@@ -88,6 +89,32 @@ class PersonaModel(Base):
     objections: Mapped[list] = mapped_column(JSON, default=list)
 
     message_house: Mapped["HouseModel"] = relationship(back_populates="personas")
+
+
+class SnapshotModel(Base):
+    __tablename__ = "snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    house_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("message_houses.id"), nullable=False
+    )
+    label: Mapped[str] = mapped_column(String(255), default="")
+    snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class ArtifactHistoryModel(Base):
+    __tablename__ = "artifact_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    house_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("message_houses.id"), nullable=False
+    )
+    skill_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    house_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    sections_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    raw_content: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class Store:
@@ -180,6 +207,178 @@ class Store:
                 s.commit()
                 return True
             return False
+
+    def delete_key_message(self, msg_id: UUID) -> bool:
+        with self.session() as s:
+            row = s.get(KeyMessageModel, str(msg_id))
+            if row:
+                s.delete(row)
+                s.commit()
+                return True
+            return False
+
+    def delete_persona(self, persona_id: UUID) -> bool:
+        with self.session() as s:
+            row = s.get(PersonaModel, str(persona_id))
+            if row:
+                s.delete(row)
+                s.commit()
+                return True
+            return False
+
+    # --- Snapshots ---
+
+    def create_snapshot(self, house_id: UUID, label: str = "") -> dict:
+        house = self.get_house(house_id)
+        if not house:
+            raise ValueError(f"House {house_id} not found")
+        messages = self.get_key_messages(house_id)
+        personas = self.get_personas(house_id)
+        snapshot_data = {
+            "house": {
+                "id": str(house.id),
+                "name": house.name,
+                "source": house.source,
+                "summary": house.summary,
+                "audience": house.audience,
+                "brand_personality": house.brand_personality,
+                "positioning": house.positioning,
+                "tagline": house.tagline,
+                "differentiation": house.differentiation,
+                "status": str(house.status),
+            },
+            "messages": [
+                {
+                    "id": str(m.id),
+                    "section_type": str(m.section_type),
+                    "priority": m.priority,
+                    "content": m.content,
+                    "variants": m.variants,
+                    "personas": m.personas,
+                    "channels": [str(c) for c in m.channels],
+                }
+                for m in messages
+            ],
+            "personas": [
+                {
+                    "id": str(p.id),
+                    "name": p.name,
+                    "description": p.description,
+                    "pain_points": p.pain_points,
+                    "buying_triggers": p.buying_triggers,
+                    "objections": p.objections,
+                }
+                for p in personas
+            ],
+        }
+        snap_id = str(uuid4())
+        now = datetime.utcnow()
+        with self.session() as s:
+            s.add(SnapshotModel(
+                id=snap_id,
+                house_id=str(house_id),
+                label=label or f"Snapshot {now.strftime('%Y-%m-%d %H:%M')}",
+                snapshot_json=snapshot_data,
+                created_at=now,
+            ))
+            s.commit()
+        return {"id": snap_id, "house_id": str(house_id), "label": label, "created_at": now.isoformat()}
+
+    def list_snapshots(self, house_id: UUID) -> list[dict]:
+        with self.session() as s:
+            rows = (
+                s.query(SnapshotModel)
+                .filter(SnapshotModel.house_id == str(house_id))
+                .order_by(SnapshotModel.created_at.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "house_id": r.house_id,
+                    "label": r.label,
+                    "created_at": r.created_at.isoformat(),
+                    "message_count": len(r.snapshot_json.get("messages", [])),
+                    "persona_count": len(r.snapshot_json.get("personas", [])),
+                }
+                for r in rows
+            ]
+
+    def get_snapshot(self, snapshot_id: UUID) -> dict | None:
+        with self.session() as s:
+            row = s.get(SnapshotModel, str(snapshot_id))
+            if not row:
+                return None
+            return {
+                "id": row.id,
+                "house_id": row.house_id,
+                "label": row.label,
+                "created_at": row.created_at.isoformat(),
+                "snapshot_json": row.snapshot_json,
+            }
+
+    def delete_snapshot(self, snapshot_id: UUID) -> bool:
+        with self.session() as s:
+            row = s.get(SnapshotModel, str(snapshot_id))
+            if row:
+                s.delete(row)
+                s.commit()
+                return True
+            return False
+
+    # --- Artifact History ---
+
+    def save_artifact(self, house_id: UUID, skill_id: str, house_name: str,
+                      sections: dict, raw_content: str = "") -> dict:
+        art_id = str(uuid4())
+        now = datetime.utcnow()
+        with self.session() as s:
+            s.add(ArtifactHistoryModel(
+                id=art_id,
+                house_id=str(house_id),
+                skill_id=skill_id,
+                house_name=house_name,
+                sections_json=sections,
+                raw_content=raw_content,
+                created_at=now,
+            ))
+            s.commit()
+        return {"id": art_id, "house_id": str(house_id), "skill_id": skill_id, "created_at": now.isoformat()}
+
+    def list_artifacts(self, house_id: UUID) -> list[dict]:
+        with self.session() as s:
+            rows = (
+                s.query(ArtifactHistoryModel)
+                .filter(ArtifactHistoryModel.house_id == str(house_id))
+                .order_by(ArtifactHistoryModel.created_at.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "house_id": r.house_id,
+                    "skill_id": r.skill_id,
+                    "house_name": r.house_name,
+                    "created_at": r.created_at.isoformat(),
+                    "section_count": len(r.sections_json),
+                }
+                for r in rows
+            ]
+
+    def get_artifact(self, artifact_id: UUID) -> dict | None:
+        with self.session() as s:
+            row = s.get(ArtifactHistoryModel, str(artifact_id))
+            if not row:
+                return None
+            return {
+                "id": row.id,
+                "house_id": row.house_id,
+                "skill_id": row.skill_id,
+                "house_name": row.house_name,
+                "sections": row.sections_json,
+                "raw_content": row.raw_content,
+                "created_at": row.created_at.isoformat(),
+            }
 
 
 def _house_from_row(row: HouseModel) -> MessageHouse:

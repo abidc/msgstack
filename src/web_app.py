@@ -114,6 +114,7 @@ def list_houses(query: Optional[str] = None):
     for h in houses:
         msgs = store.get_key_messages(h.id)
         personas = store.get_personas(h.id)
+        completeness = _completeness_score_fast(h, msgs, personas)
         item = {
             "id": str(h.id),
             "name": h.name,
@@ -123,12 +124,30 @@ def list_houses(query: Optional[str] = None):
             "persona_count": len(personas),
             "message_count": len(msgs),
             "last_synced": h.last_synced.isoformat() if h.last_synced else None,
+            "completeness_score": completeness,
         }
         if query:
             if query.lower() not in h.name.lower() and query.lower() not in h.summary.lower():
                 continue
         result.append(item)
     return result
+
+
+def _completeness_score_fast(house, messages, personas) -> int:
+    score = 0
+    if house.name: score += 10
+    if house.summary: score += 10
+    if house.audience: score += 10
+    if house.brand_personality: score += 10
+    if house.positioning: score += 15
+    if house.tagline: score += 10
+    if house.differentiation: score += 10
+    headlines = [m for m in messages if str(m.section_type).endswith("headline")]
+    if headlines: score += 10
+    benefits = [m for m in messages if str(m.section_type).endswith("benefit")]
+    if benefits: score += 10
+    if personas: score += 5
+    return min(score, 100)
 
 
 @app.get("/api/houses/{house_id}")
@@ -800,16 +819,14 @@ def _find_persona(persona_id: str) -> Optional[Persona]:
 
 def _delete_message(msg_id: str) -> bool:
     try:
-        store.engine.execute(f"DELETE FROM key_messages WHERE id = '{msg_id}'")
-        return True
+        return store.delete_key_message(UUID(msg_id))
     except Exception:
         return False
 
 
 def _delete_persona(persona_id: str) -> bool:
     try:
-        store.engine.execute(f"DELETE FROM personas WHERE id = '{persona_id}'")
-        return True
+        return store.delete_persona(UUID(persona_id))
     except Exception:
         return False
 
@@ -829,9 +846,24 @@ def generate_artifact(
 
     try:
         artifact = generator.generate(skill_id, house_id, custom_context or {})
-        visual_types = {"one_pager", "social_posts", "email_template"}
+        visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
         artifact_type = skill_id if skill_id in visual_types else None
-        visual_url = f"{os.environ.get('MSGSTACK_BASE_URL', 'http://localhost:8001')}/artifact/{artifact_type}/{house_id}" if artifact_type else None
+        base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
+        visual_url = f"{base_url}/artifact/{artifact_type}/{house_id}" if artifact_type else None
+
+        # Auto-save to artifact history
+        try:
+            saved = store.save_artifact(
+                house_id=UUID(house_id),
+                skill_id=skill_id,
+                house_name=artifact.house_name,
+                sections=artifact.sections,
+                raw_content=artifact.raw_content,
+            )
+            artifact_history_id = saved["id"]
+        except Exception:
+            artifact_history_id = None
+
         return {
             "skill_id": skill_id,
             "house_name": artifact.house_name,
@@ -839,6 +871,7 @@ def generate_artifact(
             "sections": artifact.sections,
             "raw_content": artifact.raw_content,
             "visual_url": visual_url,
+            "artifact_id": artifact_history_id,
         }
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -891,15 +924,373 @@ def generate_section(house_id: str = Form(...), section: str = Form(...)):
     return {"section": section, "content": resp.choices[0].message.content.strip()}
 
 
+# --- Message Improve / Variant Generation ---
+
+@app.post("/api/messages/{msg_id}/improve")
+def improve_message(msg_id: str):
+    """Suggest a stronger version of a key message via LLM."""
+    msg = _find_message(msg_id)
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    houses = store.list_houses()
+    house = next((h for h in houses if any(str(m.id) == msg_id for m in store.get_key_messages(h.id))), None)
+    positioning = house.positioning if house else ""
+
+    import openai as _oai
+    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a B2B messaging expert. Rewrite the message to be more specific, benefit-led, and compelling. Return only the improved message text — no preamble."},
+            {"role": "user", "content": f"Section type: {msg.section_type}\nPositioning context: {positioning}\n\nOriginal message:\n{msg.content}\n\nImproved version:"},
+        ],
+        temperature=0.6,
+        max_tokens=300,
+    )
+    return {"original": msg.content, "improved": resp.choices[0].message.content.strip()}
+
+
+@app.post("/api/messages/{msg_id}/generate-variant")
+def generate_variant(msg_id: str, channel: str = Form(...)):
+    """Generate a channel-specific variant of a message."""
+    msg = _find_message(msg_id)
+    if not msg:
+        raise HTTPException(404, "Message not found")
+
+    channel_guidance = {
+        "linkedin": "LinkedIn post hook (under 150 chars, stops the scroll)",
+        "email": "email subject line + opening hook (subject max 60 chars)",
+        "twitter": "Twitter/X post (under 280 chars, punchy)",
+        "paid": "paid ad headline + description (headline max 30 chars, description max 90 chars)",
+        "landing": "landing page headline (benefit-led, max 10 words)",
+        "blog": "blog post title and meta description",
+    }
+    guidance = channel_guidance.get(channel, f"{channel} version")
+
+    import openai as _oai
+    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": f"You are a B2B copywriter. Adapt the message for {channel}: {guidance}. Return only the adapted text."},
+            {"role": "user", "content": f"Original message:\n{msg.content}"},
+        ],
+        temperature=0.6,
+        max_tokens=200,
+    )
+    variant_text = resp.choices[0].message.content.strip()
+
+    # Save the variant back to the message
+    variants = dict(msg.variants or {})
+    variants[channel] = variant_text
+    msg.variants = variants
+    store.upsert_key_message(msg)
+
+    return {"channel": channel, "variant": variant_text, "msg_id": msg_id}
+
+
+# --- Persona Generation ---
+
+class GeneratePersonaRequest(BaseModel):
+    house_id: str
+    job_title: str
+
+
+@app.post("/api/generate-persona")
+def generate_persona(data: GeneratePersonaRequest):
+    """Generate a full persona from a job title using LLM."""
+    house = store.get_house(UUID(data.house_id))
+    if not house:
+        raise HTTPException(404, "House not found")
+
+    import openai as _oai
+    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a B2B buyer persona expert. Return JSON only."},
+            {"role": "user", "content": f"""Generate a buyer persona for a '{data.job_title}' who might buy {house.name}.
+
+Context: {house.positioning or house.summary or 'B2B SaaS product'}
+
+Return JSON:
+{{
+  "name": "<descriptive persona name like 'SMB CTO'>",
+  "description": "<1-2 sentence role description>",
+  "pain_points": ["<pain 1>", "<pain 2>", "<pain 3>"],
+  "buying_triggers": ["<trigger 1>", "<trigger 2>"],
+  "objections": ["<objection 1>", "<objection 2>"]
+}}"""},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.5,
+        max_tokens=400,
+    )
+    try:
+        import json as _json
+        persona_data = _json.loads(resp.choices[0].message.content)
+    except Exception:
+        raise HTTPException(500, "Failed to parse LLM persona response")
+
+    persona = Persona(
+        message_house_id=house.id,
+        name=persona_data.get("name", data.job_title),
+        description=persona_data.get("description", ""),
+        pain_points=persona_data.get("pain_points", []),
+        buying_triggers=persona_data.get("buying_triggers", []),
+        objections=persona_data.get("objections", []),
+    )
+    store.upsert_persona(persona)
+    return {
+        "id": str(persona.id),
+        "name": persona.name,
+        "description": persona.description,
+        "pain_points": persona.pain_points,
+        "buying_triggers": persona.buying_triggers,
+        "objections": persona.objections,
+    }
+
+
+# --- Tone Check ---
+
+@app.post("/api/houses/{house_id}/check-tone")
+def check_tone(house_id: str):
+    """Analyze key messages against brand_personality and flag mismatches."""
+    house = store.get_house(UUID(house_id))
+    if not house:
+        raise HTTPException(404, "House not found")
+    messages = store.get_key_messages(UUID(house_id))
+    if not messages:
+        return {"warnings": [], "score": 100, "summary": "No messages to check"}
+    if not house.brand_personality:
+        return {"warnings": [], "score": 100, "summary": "No brand personality defined — add one in Overview to enable tone checking"}
+
+    samples = [m.content for m in messages[:12]]
+
+    import openai as _oai
+    import json as _json
+    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a brand voice analyst. Return JSON only."},
+            {"role": "user", "content": f"""Brand personality: {house.brand_personality}
+
+Key messages:
+{chr(10).join(f'- {m}' for m in samples)}
+
+Identify which messages (if any) are inconsistent with the brand personality. Return JSON:
+{{
+  "score": <0-100 tone alignment score>,
+  "summary": "<1 sentence overall assessment>",
+  "warnings": [
+    {{"message": "<message text>", "issue": "<what's inconsistent>", "suggestion": "<how to fix>"}}
+  ]
+}}"""},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.3,
+        max_tokens=600,
+    )
+    try:
+        result = _json.loads(resp.choices[0].message.content)
+    except Exception:
+        raise HTTPException(500, "Failed to parse tone check response")
+    return result
+
+
+# --- Snapshots ---
+
+@app.post("/api/houses/{house_id}/snapshots")
+def create_snapshot(house_id: str, data: dict = {}):
+    """Save a snapshot of the current framework state."""
+    label = (data or {}).get("label", "")
+    try:
+        snap = store.create_snapshot(UUID(house_id), label)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return snap
+
+
+@app.get("/api/houses/{house_id}/snapshots")
+def list_snapshots(house_id: str):
+    return store.list_snapshots(UUID(house_id))
+
+
+@app.get("/api/snapshots/{snapshot_id}")
+def get_snapshot(snapshot_id: str):
+    snap = store.get_snapshot(UUID(snapshot_id))
+    if not snap:
+        raise HTTPException(404, "Snapshot not found")
+    return snap
+
+
+@app.delete("/api/snapshots/{snapshot_id}")
+def delete_snapshot(snapshot_id: str):
+    if not store.delete_snapshot(UUID(snapshot_id)):
+        raise HTTPException(404, "Snapshot not found")
+    return {"ok": True}
+
+
+@app.post("/api/snapshots/{snapshot_id}/restore")
+def restore_snapshot(snapshot_id: str):
+    """Restore a framework to a snapshot state (replaces messages and personas)."""
+    snap = store.get_snapshot(UUID(snapshot_id))
+    if not snap:
+        raise HTTPException(404, "Snapshot not found")
+
+    data = snap["snapshot_json"]
+    house_data = data.get("house", {})
+    house_id = UUID(house_data["id"])
+
+    house = store.get_house(house_id)
+    if not house:
+        raise HTTPException(404, "Framework no longer exists")
+
+    # Restore house fields
+    for field in ("name", "summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"):
+        if field in house_data:
+            setattr(house, field, house_data[field])
+    store.upsert_house(house)
+
+    # Replace messages
+    for m in store.get_key_messages(house_id):
+        store.delete_key_message(m.id)
+    for md in data.get("messages", []):
+        try:
+            msg = KeyMessage(
+                message_house_id=house_id,
+                section_type=SectionType(md["section_type"].split(".")[-1] if "." in md["section_type"] else md["section_type"]),
+                priority=md.get("priority", 3),
+                content=md["content"],
+                variants=md.get("variants", {}),
+                personas=md.get("personas", []),
+                channels=[Channel(c.split(".")[-1] if "." in c else c) for c in md.get("channels", ["all"])],
+            )
+            store.upsert_key_message(msg)
+        except Exception:
+            pass
+
+    # Replace personas
+    for p in store.get_personas(house_id):
+        store.delete_persona(p.id)
+    for pd in data.get("personas", []):
+        persona = Persona(
+            message_house_id=house_id,
+            name=pd["name"],
+            description=pd.get("description", ""),
+            pain_points=pd.get("pain_points", []),
+            buying_triggers=pd.get("buying_triggers", []),
+            objections=pd.get("objections", []),
+        )
+        store.upsert_persona(persona)
+
+    return {"ok": True, "house_id": str(house_id), "restored_from": snapshot_id}
+
+
+# --- Artifact History ---
+
+@app.post("/api/artifacts/save")
+def save_artifact(data: dict):
+    """Save a generated artifact to history."""
+    try:
+        house_id = UUID(data["house_id"])
+    except Exception:
+        raise HTTPException(400, "Invalid house_id")
+    record = store.save_artifact(
+        house_id=house_id,
+        skill_id=data.get("skill_id", ""),
+        house_name=data.get("house_name", ""),
+        sections=data.get("sections", {}),
+        raw_content=data.get("raw_content", ""),
+    )
+    return record
+
+
+@app.get("/api/houses/{house_id}/artifacts")
+def list_house_artifacts(house_id: str):
+    return store.list_artifacts(UUID(house_id))
+
+
+@app.get("/api/artifacts/{artifact_id}")
+def get_artifact(artifact_id: str):
+    record = store.get_artifact(UUID(artifact_id))
+    if not record:
+        raise HTTPException(404, "Artifact not found")
+    return record
+
+
+# --- DOCX Download ---
+
+@app.get("/api/artifacts/{artifact_id}/docx")
+def download_artifact_docx(artifact_id: str):
+    """Download a saved artifact as a DOCX file."""
+    record = store.get_artifact(UUID(artifact_id))
+    if not record:
+        raise HTTPException(404, "Artifact not found")
+
+    try:
+        from docx import Document as DocxDocument
+        from docx.shared import Pt, RGBColor
+        from io import BytesIO
+        from fastapi.responses import StreamingResponse
+    except ImportError:
+        raise HTTPException(500, "python-docx not installed")
+
+    doc = DocxDocument()
+    doc.add_heading(f"{record['house_name']} — {record['skill_id'].replace('_', ' ').title()}", 0)
+
+    for section_key, section_value in record["sections"].items():
+        doc.add_heading(section_key.replace("_", " ").title(), 2)
+        doc.add_paragraph(str(section_value))
+
+    if record.get("raw_content"):
+        doc.add_heading("Full Content", 2)
+        doc.add_paragraph(record["raw_content"])
+
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+
+    filename = f"{record['house_name'].replace(' ', '_')}_{record['skill_id']}.docx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# --- Completeness in houses list ---
+
+def _completeness_score(house: MessageHouse) -> int:
+    """Return 0-100 completeness score for a house."""
+    messages = store.get_key_messages(house.id)
+    personas = store.get_personas(house.id)
+    score = 0
+    if house.name: score += 10
+    if house.summary: score += 10
+    if house.audience: score += 10
+    if house.brand_personality: score += 10
+    if house.positioning: score += 15
+    if house.tagline: score += 10
+    if house.differentiation: score += 10
+    headlines = [m for m in messages if str(m.section_type).endswith("headline")]
+    if headlines: score += 10
+    benefits = [m for m in messages if str(m.section_type).endswith("benefit")]
+    if benefits: score += 10
+    if personas: score += 5
+    return min(score, 100)
+
+
 @app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)
-def serve_artifact(artifact_type: str, house_id: str, stage: str = "awareness", channels: str = "linkedin"):
+def serve_artifact(artifact_type: str, house_id: str, stage: str = "awareness", channels: str = "linkedin", competitor: str = ""):
     """Serve a standalone HTML artifact page for a message house."""
     try:
         hid = UUID(house_id)
     except ValueError:
         raise HTTPException(400, "Invalid house_id UUID")
 
-    valid_types = ["one_pager", "social_posts", "email_template"]
+    valid_types = ["one_pager", "social_posts", "email_template", "battlecard", "email_sequence"]
     if artifact_type not in valid_types:
         raise HTTPException(400, f"Unknown artifact_type. Use: {', '.join(valid_types)}")
 
@@ -910,7 +1301,6 @@ def serve_artifact(artifact_type: str, house_id: str, stage: str = "awareness", 
     messages = store.get_key_messages(hid)
     personas = store.get_personas(hid)
 
-    # Group messages by section type
     grouped: dict[str, list] = {}
     for m in messages:
         key = str(m.section_type).replace("_", " ").title()
@@ -921,6 +1311,10 @@ def serve_artifact(artifact_type: str, house_id: str, stage: str = "awareness", 
     elif artifact_type == "social_posts":
         target = channels.split(",")
         html = _render_social_posts(house, messages, target)
+    elif artifact_type == "battlecard":
+        html = _render_battlecard(house, messages, competitor or "Competitor")
+    elif artifact_type == "email_sequence":
+        html = _render_email_sequence(house, messages)
     else:
         html = _render_email_template(house, messages, stage)
 
@@ -941,7 +1335,12 @@ _SECTION_META = {
 _BASE_STYLES = """
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Inter', system-ui, sans-serif; background: #f1f5f9; color: #0f172a; -webkit-font-smoothing: antialiased; }
+  :root { --bg: #f1f5f9; --fg: #0f172a; --card-bg: #fff; --card-border: #e2e8f0; --muted: #64748b; --muted-2: #94a3b8; }
+  body.dark { --bg: #0f172a; --fg: #f1f5f9; --card-bg: #1e293b; --card-border: #334155; --muted: #94a3b8; --muted-2: #64748b; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; transition: background 0.2s, color 0.2s; }
+  .theme-toggle { position: fixed; top: 16px; right: 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; color: var(--muted); z-index: 50; }
+  @media print { .theme-toggle { display: none; } .page { padding: 0; } .hero { background: #0f172a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; } }
+
   .page { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
   .hero { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%); border-radius: 20px; padding: 52px 48px; margin-bottom: 24px; position: relative; overflow: hidden; }
   .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 70% 50%, rgba(99,102,241,0.25) 0%, transparent 60%); }
@@ -996,9 +1395,15 @@ def _base_html(title: str, body: str, extra_styles: str = "") -> str:
   <style>{_BASE_STYLES}{extra_styles}</style>
 </head>
 <body>
+  <button class="theme-toggle" onclick="document.body.classList.toggle('dark')">&#9680; Toggle theme</button>
   <div class="page">
 {body}
   </div>
+  <script>
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {{
+      document.body.classList.add('dark');
+    }}
+  </script>
 </body>
 </html>"""
 
@@ -1161,6 +1566,138 @@ def _render_email_template(house, messages: list, stage: str) -> str:
 
     footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP</span></div>'
     return _base_html(f"{house.name} — Email ({stage.title()})", hero + email_card + footer)
+
+
+def _render_battlecard(house, messages: list, competitor: str) -> str:
+    objections = [m for m in messages if str(m.section_type).endswith("objection")]
+    proofs = [m for m in messages if str(m.section_type).endswith("proof_point")]
+    benefits = [m for m in messages if str(m.section_type).endswith("benefit")]
+
+    extra = """
+  .bc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 640px) { .bc-grid { grid-template-columns: 1fr; } }
+  .bc-col { border-radius: 12px; padding: 20px; }
+  .bc-col.ours { background: #ecfdf5; border: 1.5px solid #34d399; }
+  .bc-col.theirs { background: #fef2f2; border: 1.5px solid #f87171; }
+  .bc-col-title { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 12px; }
+  .bc-col.ours .bc-col-title { color: #059669; }
+  .bc-col.theirs .bc-col-title { color: #dc2626; }
+  .bc-row { font-size: 13.5px; color: #334155; padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.06); line-height: 1.5; }
+  .bc-row:last-child { border-bottom: none; }
+  .objection-row { padding: 10px 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
+  .objection-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; margin-bottom: 4px; }
+  .objection-text { font-size: 13.5px; color: #1e293b; line-height: 1.5; }
+"""
+    hero = f"""<div class="hero">
+      <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Battlecard</div>
+      <h1>{house.name} vs {competitor}</h1>
+      <p class="hero-tagline">{house.tagline or house.positioning[:80] if house.positioning else ""}</p>
+    </div>"""
+
+    our_items = "".join(f'<div class="bc-row">✓ {b.content}</div>' for b in benefits[:5])
+    their_items = "".join(f'<div class="bc-row">✗ {o.content}</div>' for o in objections[:4]) or \
+        '<div class="bc-row" style="color:#94a3b8;">Add competitor weaknesses via objection messages</div>'
+
+    compare_card = f"""<div class="card">
+      <div class="card-label">Head-to-Head Comparison</div>
+      <div class="bc-grid">
+        <div class="bc-col ours">
+          <div class="bc-col-title">✦ {house.name}</div>
+          {our_items or '<div class="bc-row" style="color:#94a3b8;">Add benefit messages</div>'}
+        </div>
+        <div class="bc-col theirs">
+          <div class="bc-col-title">✗ {competitor}</div>
+          {their_items}
+        </div>
+      </div>
+    </div>"""
+
+    pos_card = f"""<div class="card">
+      <div class="card-label">Positioning Against {competitor}</div>
+      <p class="positioning-text">{house.positioning or "—"}</p>
+      {"<p class='diff-text'>" + house.differentiation + "</p>" if house.differentiation else ""}
+    </div>"""
+
+    proof_items = "".join(f'<div class="bc-row">◆ {p.content}</div>' for p in proofs[:5])
+    proof_card = f"""<div class="card">
+      <div class="card-label">Proof Points</div>
+      {proof_items or '<p style="color:#94a3b8;font-size:13px;">Add proof_point messages to populate this section</p>'}
+    </div>""" if proofs else ""
+
+    obj_items = "".join(f'''<div class="objection-row">
+        <div class="objection-label">Objection {i+1}</div>
+        <div class="objection-text">{o.content}</div>
+      </div>''' for i, o in enumerate(objections[:6]))
+    obj_card = f"""<div class="card">
+      <div class="card-label">Objection Responses</div>
+      {obj_items or '<p style="color:#94a3b8;font-size:13px;">Add objection messages to populate this section</p>'}
+    </div>"""
+
+    footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP · Battlecard</span></div>'
+    return _base_html(f"{house.name} vs {competitor} — Battlecard", hero + compare_card + pos_card + proof_card + obj_card + footer, extra)
+
+
+def _render_email_sequence(house, messages: list) -> str:
+    headlines = [m for m in messages if str(m.section_type).endswith("headline")]
+    benefits = [m for m in messages if str(m.section_type).endswith("benefit")]
+    proofs = [m for m in messages if str(m.section_type).endswith("proof_point")]
+
+    extra = """
+  .seq-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 700px) { .seq-grid { grid-template-columns: 1fr; } }
+  .seq-card { border-radius: 14px; padding: 24px; border: 1.5px solid #e2e8f0; background: #fff; position: relative; }
+  .seq-number { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: #fff; margin-bottom: 14px; }
+  .seq-stage { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 8px; }
+  .seq-subject { font-size: 15px; font-weight: 600; color: #0f172a; line-height: 1.4; margin-bottom: 10px; }
+  .seq-body { font-size: 13px; color: #475569; line-height: 1.6; margin-bottom: 12px; }
+  .seq-cta { display: inline-block; font-size: 13px; font-weight: 600; color: #6366f1; text-decoration: none; border-bottom: 1px solid #6366f1; }
+  .seq-connector { display: none; }
+  @media (min-width: 700px) { .seq-connector { display: flex; align-items: center; justify-content: center; font-size: 18px; color: #cbd5e1; } }
+"""
+    stages = [
+        {
+            "num": "1", "color": "#6366f1", "stage": "Awareness",
+            "subject": headlines[0].content[:70] if headlines else (house.tagline or house.name),
+            "body": benefits[0].content if benefits else house.positioning or "",
+            "cta": f"Learn how {house.name} works →",
+        },
+        {
+            "num": "2", "color": "#0891b2", "stage": "Consideration",
+            "subject": f"How teams like yours use {house.name}",
+            "body": proofs[0].content if proofs else (benefits[1].content if len(benefits) > 1 else house.differentiation or house.positioning or ""),
+            "cta": "See the case study →",
+        },
+        {
+            "num": "3", "color": "#059669", "stage": "Decision",
+            "subject": f"Ready to get started with {house.name}?",
+            "body": house.differentiation or house.positioning or "",
+            "cta": "Start your free trial →",
+        },
+    ]
+
+    hero = f"""<div class="hero">
+      <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Email Sequence</div>
+      <h1>{house.name}</h1>
+      <p class="hero-tagline">3-stage nurture sequence · Awareness → Consideration → Decision</p>
+    </div>"""
+
+    cards = ""
+    for i, s in enumerate(stages):
+        cards += f"""<div class="seq-card">
+        <div class="seq-number" style="background:{s['color']}">{s['num']}</div>
+        <div class="seq-stage" style="color:{s['color']}">{s['stage']}</div>
+        <div class="seq-subject">{s['subject']}</div>
+        <div class="seq-body">{s['body'][:300]}</div>
+        <span class="seq-cta">{s['cta']}</span>
+      </div>"""
+
+    seq_card = f"""<div class="card">
+      <div class="card-label">3-Email Nurture Sequence</div>
+      <div class="seq-grid">{cards}</div>
+    </div>"""
+
+    footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP · Email Sequence</span></div>'
+    return _base_html(f"{house.name} — Email Sequence", hero + seq_card + footer, extra)
 
 
 @app.get("/api/preview/{skill_id}/{house_id}")

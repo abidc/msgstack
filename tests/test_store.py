@@ -1,6 +1,6 @@
 import pytest
 import os
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 os.environ["OPENAI_API_KEY"] = "test-key"
 os.environ["PINECONE_API_KEY"] = "test-key"
@@ -124,6 +124,71 @@ def test_search_filters_model():
     )
     assert "headline" in f.section_types
     assert f.min_priority == 2
+
+
+def test_delete_key_message(store):
+    house = MessageHouse(name="Test House")
+    store.upsert_house(house)
+    msg = KeyMessage(message_house_id=house.id, section_type=SectionType.BENEFIT, priority=1, content="Test msg")
+    store.upsert_key_message(msg)
+    assert len(store.get_key_messages(house.id)) == 1
+    assert store.delete_key_message(msg.id) is True
+    assert len(store.get_key_messages(house.id)) == 0
+
+
+def test_delete_persona(store):
+    house = MessageHouse(name="Test House")
+    store.upsert_house(house)
+    persona = Persona(message_house_id=house.id, name="Test Persona")
+    store.upsert_persona(persona)
+    assert len(store.get_personas(house.id)) == 1
+    assert store.delete_persona(persona.id) is True
+    assert len(store.get_personas(house.id)) == 0
+
+
+def test_snapshots(store):
+    house = MessageHouse(name="Snap House", positioning="Position A")
+    store.upsert_house(house)
+    msg = KeyMessage(message_house_id=house.id, section_type=SectionType.HEADLINE, priority=1, content="Test headline")
+    store.upsert_key_message(msg)
+
+    snap = store.create_snapshot(house.id, label="Before edit")
+    assert snap["id"]
+    assert snap["label"] == "Before edit"
+
+    snaps = store.list_snapshots(house.id)
+    assert len(snaps) == 1
+    assert snaps[0]["message_count"] == 1
+
+    full = store.get_snapshot(UUID(snap["id"]))
+    assert full["snapshot_json"]["house"]["positioning"] == "Position A"
+    assert len(full["snapshot_json"]["messages"]) == 1
+
+    assert store.delete_snapshot(UUID(snap["id"])) is True
+    assert store.list_snapshots(house.id) == []
+
+
+def test_artifact_history(store):
+    house = MessageHouse(name="Art House")
+    store.upsert_house(house)
+
+    record = store.save_artifact(
+        house_id=house.id,
+        skill_id="one_pager",
+        house_name=house.name,
+        sections={"positioning": "Test positioning", "tagline": "Test tagline"},
+        raw_content="Full raw output here",
+    )
+    assert record["id"]
+    assert record["skill_id"] == "one_pager"
+
+    arts = store.list_artifacts(house.id)
+    assert len(arts) == 1
+    assert arts[0]["section_count"] == 2
+
+    full = store.get_artifact(UUID(record["id"]))
+    assert full["sections"]["tagline"] == "Test tagline"
+    assert full["raw_content"] == "Full raw output here"
 
 
 def test_grounding_response_model():

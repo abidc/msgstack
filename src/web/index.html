@@ -164,9 +164,12 @@
         .skill-card-actions { display: flex; gap: 6px; }
         .skill-channels { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
 
-        /* ── Missing sections ── */
+        /* ── Completeness ── */
         .completeness-bar { height: 4px; background: var(--bg-3); border-radius: 99px; margin: 8px 0; overflow: hidden; }
         .completeness-fill { height: 100%; border-radius: 99px; background: var(--success); transition: width 0.3s; }
+        .fw-card-completeness { margin: 6px 0 10px; }
+        .fw-card-completeness .completeness-bar { margin: 4px 0 2px; }
+        .fw-card-score { font-size: 11px; color: var(--text-3); }
         .missing-section { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; }
         .missing-section-name { font-size: 13px; color: var(--text-2); }
         .generated-content { margin-top: 8px; padding: 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; line-height: 1.6; white-space: pre-wrap; display: none; }
@@ -219,6 +222,24 @@
         .index-dot.stale { background: var(--warn); }
         .index-dot.error, .index-dot.unavailable { background: var(--danger); }
         .fw-card-index-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); }
+        /* ── Inline editable fields ── */
+        .field-editable { cursor: text; border-radius: 4px; padding: 3px 6px; margin: -3px -6px; transition: background 0.12s; }
+        .field-editable:hover { background: var(--bg-2); }
+        .field-editable:focus { background: var(--bg-2); outline: 1px solid var(--primary); }
+        /* ── Message item actions ── */
+        .msg-item-actions { display: none; gap: 4px; margin-top: 6px; }
+        .msg-item:hover .msg-item-actions { display: flex; }
+        /* ── Persona card actions ── */
+        .persona-card-actions { display: none; gap: 4px; margin-top: 10px; }
+        .card:hover .persona-card-actions { display: flex; }
+        /* ── Section block contenteditable ── */
+        .section-block-content[contenteditable="true"] { cursor: text; outline: 1px solid transparent; }
+        .section-block-content[contenteditable="true"]:focus { outline: 1px solid var(--primary); }
+        /* ── History tab ── */
+        .history-item { padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .history-item-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+        /* ── Tone check ── */
+        .tone-warning { padding: 8px 12px; background: var(--warn-dim); border: 1px solid rgba(251,191,36,0.3); border-radius: var(--radius); margin-bottom: 8px; font-size: 13px; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -257,7 +278,7 @@
                 Seed & Index
             </div>
         </nav>
-        <div class="sidebar-footer">v0.2 · msgstack MCP</div>
+        <div class="sidebar-footer">v0.3 · msgstack MCP</div>
     </aside>
 
     <!-- Main -->
@@ -359,18 +380,50 @@
                     <div class="tab" data-tab="detail-messages">Key Messages</div>
                     <div class="tab" data-tab="detail-personas">Personas</div>
                     <div class="tab" data-tab="detail-markdown">Source Doc</div>
+                    <div class="tab" data-tab="detail-history">History</div>
                 </div>
 
                 <div id="detail-overview" class="tab-content active">
                     <div class="card">
-                        <div class="form-row">
-                            <div class="form-group"><div class="form-label">Audience</div><div id="detail-audience" style="font-size:13.5px;color:var(--text)"></div></div>
-                            <div class="form-group"><div class="form-label">Tagline</div><div id="detail-tagline" style="font-size:13.5px;color:var(--text)"></div></div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                            <span style="font-size:11px;color:var(--text-3);">Click any field to edit · changes save on blur</span>
+                            <div style="display:flex;gap:6px;">
+                                <button class="btn btn-ghost btn-xs" onclick="snapshotHouse()" title="Save a snapshot before editing">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                                    Snapshot
+                                </button>
+                                <button class="btn btn-ghost btn-xs" id="check-tone-btn" onclick="checkTone()">
+                                    &#9670; Check Tone
+                                </button>
+                            </div>
                         </div>
-                        <div class="form-group"><div class="form-label">Positioning</div><div id="detail-positioning" style="font-size:13.5px;line-height:1.6;color:var(--text)"></div></div>
-                        <div class="form-group"><div class="form-label">Differentiation</div><div id="detail-differentiation" style="font-size:13.5px;line-height:1.6;color:var(--text)"></div></div>
-                        <div class="form-group"><div class="form-label">Brand Personality</div><div id="detail-brand-personality" style="font-size:13.5px;line-height:1.6;color:var(--text)"></div></div>
-                        <div class="form-group"><div class="form-label">Summary</div><div id="detail-summary" style="font-size:13.5px;line-height:1.6;color:var(--text)"></div></div>
+                        <div id="tone-result" style="display:none;margin-bottom:14px;"></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <div class="form-label">Audience</div>
+                                <div id="detail-audience" class="field-editable" contenteditable="true" data-field="audience" style="font-size:13.5px;color:var(--text);min-height:20px;"></div>
+                            </div>
+                            <div class="form-group">
+                                <div class="form-label">Tagline</div>
+                                <div id="detail-tagline" class="field-editable" contenteditable="true" data-field="tagline" style="font-size:13.5px;color:var(--text);min-height:20px;"></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="form-label">Positioning</div>
+                            <div id="detail-positioning" class="field-editable" contenteditable="true" data-field="positioning" style="font-size:13.5px;line-height:1.6;color:var(--text);min-height:20px;"></div>
+                        </div>
+                        <div class="form-group">
+                            <div class="form-label">Differentiation</div>
+                            <div id="detail-differentiation" class="field-editable" contenteditable="true" data-field="differentiation" style="font-size:13.5px;line-height:1.6;color:var(--text);min-height:20px;"></div>
+                        </div>
+                        <div class="form-group">
+                            <div class="form-label">Brand Personality</div>
+                            <div id="detail-brand-personality" class="field-editable" contenteditable="true" data-field="brand_personality" style="font-size:13.5px;line-height:1.6;color:var(--text);min-height:20px;"></div>
+                        </div>
+                        <div class="form-group">
+                            <div class="form-label">Summary</div>
+                            <div id="detail-summary" class="field-editable" contenteditable="true" data-field="summary" style="font-size:13.5px;line-height:1.6;color:var(--text);min-height:20px;"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -386,18 +439,42 @@
                 </div>
 
                 <div id="detail-personas" class="tab-content">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
                         <span style="color:var(--text-2);font-size:13px;" id="personas-count"></span>
-                        <button class="btn btn-ghost btn-sm" onclick="openPersonaModal()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Add Persona
-                        </button>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <input type="text" class="form-input" id="gen-persona-title" placeholder="e.g. VP of Engineering" style="width:200px;padding:5px 9px;font-size:12.5px;">
+                            <button class="btn btn-ghost btn-sm" id="gen-persona-btn" onclick="generatePersonaFromTitle()">
+                                ✦ Generate
+                            </button>
+                            <button class="btn btn-ghost btn-sm" onclick="openPersonaModal()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Add
+                            </button>
+                        </div>
                     </div>
                     <div id="detail-personas-list"></div>
                 </div>
 
                 <div id="detail-markdown" class="tab-content">
                     <div class="markdown-preview" id="detail-markdown-content"></div>
+                </div>
+
+                <div id="detail-history" class="tab-content">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                        <div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                <div style="font-size:13px;font-weight:600;color:var(--text);">Snapshots</div>
+                                <button class="btn btn-ghost btn-xs" onclick="snapshotHouse()">
+                                    + New Snapshot
+                                </button>
+                            </div>
+                            <div id="snapshots-list"><div style="color:var(--text-3);font-size:13px;">No snapshots yet</div></div>
+                        </div>
+                        <div>
+                            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;">Artifact History</div>
+                            <div id="artifact-history-list"><div style="color:var(--text-3);font-size:13px;">No artifacts generated yet</div></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -731,6 +808,37 @@
     </div>
 </div>
 
+<div class="modal-overlay" id="variant-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Generate Channel Variant</span>
+            <button class="modal-close" onclick="closeModal('variant-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group" style="padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;">
+                <div class="form-label">Original Message</div>
+                <div id="variant-msg-preview" style="font-size:13px;color:var(--text-2);"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Target Channel</label>
+                <select class="form-select" id="variant-channel">
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="email">Email</option>
+                    <option value="twitter">Twitter/X</option>
+                    <option value="paid">Paid Ads</option>
+                    <option value="landing">Landing Page</option>
+                    <option value="blog">Blog</option>
+                </select>
+            </div>
+            <div id="variant-result" style="display:none;margin-top:10px;padding:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;line-height:1.6;color:var(--text);"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('variant-modal')">Close</button>
+            <button class="btn btn-primary" onclick="generateVariant()">Generate</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -847,13 +955,20 @@ function renderHouses(houses) {
         </div>`;
         return;
     }
-    container.innerHTML = `<div class="grid-2">${houses.map(h => `
+    container.innerHTML = `<div class="grid-2">${houses.map(h => {
+        const score = h.completeness_score ?? 0;
+        const scoreColor = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warn)' : 'var(--danger)';
+        return `
         <div class="fw-card" onclick="viewHouse('${h.id}')">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
                 <div class="fw-card-name">${esc(h.name)}</div>
                 <span class="badge ${h.status === 'active' ? 'badge-success' : 'badge-warn'}">${esc(h.status)}</span>
             </div>
             <div class="fw-card-summary">${esc(h.summary)}</div>
+            <div class="fw-card-completeness">
+                <div class="completeness-bar"><div class="completeness-fill" style="width:${score}%;background:${scoreColor}"></div></div>
+                <div class="fw-card-score">${score}% complete</div>
+            </div>
             <div class="fw-card-meta">
                 <span>${h.message_count} messages</span>
                 <span>·</span>
@@ -868,7 +983,8 @@ function renderHouses(houses) {
                 <button class="btn btn-ghost btn-xs" id="idx-btn-${h.id}" onclick="indexHouse('${h.id}', this)">Re-index</button>
                 <button class="btn btn-ghost btn-xs" onclick="viewHouse('${h.id}')">Open →</button>
             </div>
-        </div>`).join('')}</div>`;
+        </div>`;
+    }).join('')}</div>`;
 
     // Load index status for each house asynchronously
     houses.forEach(h => fetchIndexStatus(h.id));
@@ -888,13 +1004,8 @@ async function fetchIndexStatus(houseId) {
 
 async function viewHouse(id) {
     currentHouseId = id;
-    // Reset tabs
-    document.querySelectorAll('#detail-tabs .tab').forEach((t, i) => {
-        t.classList.toggle('active', i === 0);
-    });
-    document.querySelectorAll('#house-detail .tab-content').forEach((c, i) => {
-        c.classList.toggle('active', i === 0);
-    });
+    document.querySelectorAll('#detail-tabs .tab').forEach((t, i) => t.classList.toggle('active', i === 0));
+    document.querySelectorAll('#house-detail .tab-content').forEach((c, i) => c.classList.toggle('active', i === 0));
 
     try {
         const house = await fetch(`${API}/houses/${id}`).then(r => r.json());
@@ -902,45 +1013,30 @@ async function viewHouse(id) {
         document.getElementById('detail-source').textContent = house.source;
         document.getElementById('detail-status').textContent = house.status;
         document.getElementById('detail-synced').textContent = house.last_synced ? `Synced ${new Date(house.last_synced).toLocaleDateString()}` : '';
-        document.getElementById('detail-summary').textContent = house.summary || '—';
-        document.getElementById('detail-audience').textContent = house.audience || '—';
-        document.getElementById('detail-positioning').textContent = house.positioning || '—';
-        document.getElementById('detail-tagline').textContent = house.tagline || '—';
-        document.getElementById('detail-differentiation').textContent = house.differentiation || '—';
-        document.getElementById('detail-brand-personality').textContent = house.brand_personality || '—';
         document.getElementById('messages-count').textContent = `${house.key_messages.length} messages`;
         document.getElementById('personas-count').textContent = `${house.personas.length} personas`;
 
-        const sectionLabels = {headline:'Headline',subhead:'Subhead',benefit:'Benefit',use_case:'Use Case',proof_point:'Proof Point',objection:'Objection',social_proof:'Social Proof',positioning:'Positioning'};
-        const grouped = {};
-        house.key_messages.forEach(m => { (grouped[m.section_type] = grouped[m.section_type] || []).push(m); });
-        const ml = document.getElementById('detail-messages-list');
-        ml.innerHTML = !house.key_messages.length
-            ? '<div class="empty"><div class="empty-title">No messages yet</div></div>'
-            : Object.entries(grouped).map(([st, msgs]) => `
-                <div style="margin-bottom:18px;">
-                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:8px;">${sectionLabels[st]||st}</div>
-                    ${msgs.sort((a,b)=>a.priority-b.priority).map(m=>`
-                        <div class="msg-item">
-                            <div class="msg-meta">
-                                <span class="badge badge-default">P${m.priority}</span>
-                                ${m.channels.map(c=>`<span class="badge badge-primary">${c}</span>`).join('')}
-                            </div>
-                            <div class="msg-content">${esc(m.content)}</div>
-                        </div>`).join('')}
-                </div>`).join('');
+        // Inline-editable fields
+        const editableFields = {
+            'detail-summary': house.summary || '',
+            'detail-audience': house.audience || '',
+            'detail-positioning': house.positioning || '',
+            'detail-tagline': house.tagline || '',
+            'detail-differentiation': house.differentiation || '',
+            'detail-brand-personality': house.brand_personality || '',
+        };
+        Object.entries(editableFields).forEach(([elId, val]) => {
+            const el = document.getElementById(elId);
+            if (el) { el.textContent = val || '—'; el.dataset.original = val; }
+        });
 
-        const pl = document.getElementById('detail-personas-list');
-        pl.innerHTML = !house.personas.length
-            ? '<div class="empty"><div class="empty-title">No personas yet</div></div>'
-            : `<div class="grid-2">${house.personas.map(p=>`
-                <div class="card">
-                    <div class="card-title" style="margin-bottom:8px;">${esc(p.name)}</div>
-                    <p style="color:var(--text-2);font-size:13px;margin-bottom:10px;line-height:1.5;">${esc(p.description||'')}</p>
-                    ${p.pain_points.length?`<div style="margin-bottom:8px;"><div class="form-label">Pain Points</div>${p.pain_points.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
-                    ${p.buying_triggers.length?`<div style="margin-bottom:8px;"><div class="form-label">Buying Triggers</div>${p.buying_triggers.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
-                    ${p.objections.length?`<div><div class="form-label">Objections</div>${p.objections.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
-                </div>`).join('')}</div>`;
+        // Wire up save-on-blur for all editable fields
+        document.querySelectorAll('#detail-overview .field-editable').forEach(el => {
+            el.onblur = () => saveFieldOnBlur(el);
+        });
+
+        renderMessages(house.key_messages);
+        renderPersonas(house.personas);
 
         try {
             const mdRes = await fetch(`${API}/frames/${id}/markdown`);
@@ -951,6 +1047,71 @@ async function viewHouse(id) {
     } catch (e) { toast('Failed to load framework: ' + e.message, 'error'); }
 }
 
+async function saveFieldOnBlur(el) {
+    if (!currentHouseId) return;
+    const field = el.dataset.field;
+    const value = el.textContent.trim();
+    if (value === (el.dataset.original || '') || value === '—') return;
+    try {
+        await fetch(`${API}/houses/${currentHouseId}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({[field]: value}),
+        });
+        el.dataset.original = value;
+        toast('Saved', 'success');
+    } catch (e) { toast('Save failed: ' + e.message, 'error'); }
+}
+
+function renderMessages(messages) {
+    const sectionLabels = {headline:'Headline',subhead:'Subhead',benefit:'Benefit',use_case:'Use Case',proof_point:'Proof Point',objection:'Objection',social_proof:'Social Proof',positioning:'Positioning',know_your_market:'Know Your Market'};
+    const grouped = {};
+    messages.forEach(m => { (grouped[m.section_type] = grouped[m.section_type] || []).push(m); });
+    const ml = document.getElementById('detail-messages-list');
+    ml.innerHTML = !messages.length
+        ? '<div class="empty"><div class="empty-title">No messages yet</div></div>'
+        : Object.entries(grouped).map(([st, msgs]) => `
+            <div style="margin-bottom:18px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:8px;">${sectionLabels[st]||st}</div>
+                ${msgs.sort((a,b)=>a.priority-b.priority).map(m=>`
+                    <div class="msg-item" id="msg-item-${m.id}">
+                        <div class="msg-meta">
+                            <span class="badge badge-default">P${m.priority}</span>
+                            ${m.channels.map(c=>`<span class="badge badge-primary">${c}</span>`).join('')}
+                            ${Object.keys(m.variants||{}).length ? `<span class="badge badge-default" title="Has variants">${Object.keys(m.variants).join(', ')} variants</span>` : ''}
+                        </div>
+                        <div class="msg-content">${esc(m.content)}</div>
+                        <div class="msg-item-actions">
+                            <button class="btn btn-ghost btn-xs" onclick="improveMessage('${m.id}')">✦ Improve</button>
+                            <button class="btn btn-ghost btn-xs" onclick="openVariantModal('${m.id}','${esc(m.content.slice(0,40))}')">+ Variant</button>
+                            <button class="btn btn-ghost btn-xs" onclick="editMessage('${m.id}')">Edit</button>
+                            <button class="btn btn-danger btn-xs" onclick="deleteMessage('${m.id}')">Delete</button>
+                        </div>
+                        <div id="improve-result-${m.id}" style="display:none;margin-top:8px;padding:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;line-height:1.6;"></div>
+                    </div>`).join('')}
+            </div>`).join('');
+}
+
+function renderPersonas(personas) {
+    const pl = document.getElementById('detail-personas-list');
+    pl.innerHTML = !personas.length
+        ? '<div class="empty"><div class="empty-title">No personas yet</div></div>'
+        : `<div class="grid-2">${personas.map(p=>`
+            <div class="card" id="persona-card-${p.id}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                    <div class="card-title">${esc(p.name)}</div>
+                    <div style="display:flex;gap:4px;">
+                        <button class="btn btn-ghost btn-xs" onclick="editPersona('${p.id}')">Edit</button>
+                        <button class="btn btn-danger btn-xs" onclick="deletePersona('${p.id}')">Delete</button>
+                    </div>
+                </div>
+                <p style="color:var(--text-2);font-size:13px;margin-bottom:10px;line-height:1.5;">${esc(p.description||'')}</p>
+                ${p.pain_points.length?`<div style="margin-bottom:8px;"><div class="form-label">Pain Points</div>${p.pain_points.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
+                ${p.buying_triggers.length?`<div style="margin-bottom:8px;"><div class="form-label">Buying Triggers</div>${p.buying_triggers.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
+                ${p.objections.length?`<div><div class="form-label">Objections</div>${p.objections.map(t=>`<div style="font-size:13px;margin-top:3px;">• ${esc(t)}</div>`).join('')}</div>`:''}
+            </div>`).join('')}</div>`;
+}
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
 document.querySelectorAll('#detail-tabs .tab').forEach(el => {
     el.addEventListener('click', () => {
@@ -959,6 +1120,7 @@ document.querySelectorAll('#detail-tabs .tab').forEach(el => {
         el.classList.add('active');
         const target = document.getElementById(el.dataset.tab);
         if (target) target.classList.add('active');
+        if (el.dataset.tab === 'detail-history' && currentHouseId) loadHistory(currentHouseId);
     });
 });
 
@@ -1040,18 +1202,32 @@ function openMessageModal() {
     openModal('message-modal');
 }
 async function saveMessage() {
+    const msgId = document.getElementById('message-id').value;
     const content = document.getElementById('message-content').value.trim();
     if (!content) { toast('Content is required', 'error'); return; }
-    await fetch(`${API}/messages`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-            message_house_id: currentHouseId,
-            section_type: document.getElementById('message-section').value,
-            priority: parseInt(document.getElementById('message-priority').value),
-            content,
-            channels: Array.from(document.getElementById('message-channels').selectedOptions).map(o=>o.value),
-        }),
-    });
+    if (msgId) {
+        // Update existing
+        await fetch(`${API}/messages/${msgId}`, {
+            method: 'PATCH', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                section_type: document.getElementById('message-section').value,
+                priority: parseInt(document.getElementById('message-priority').value),
+                content,
+                channels: Array.from(document.getElementById('message-channels').selectedOptions).map(o=>o.value),
+            }),
+        });
+    } else {
+        await fetch(`${API}/messages`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                message_house_id: currentHouseId,
+                section_type: document.getElementById('message-section').value,
+                priority: parseInt(document.getElementById('message-priority').value),
+                content,
+                channels: Array.from(document.getElementById('message-channels').selectedOptions).map(o=>o.value),
+            }),
+        });
+    }
     closeModal('message-modal');
     viewHouse(currentHouseId);
     toast('Message saved', 'success');
@@ -1063,18 +1239,27 @@ function openPersonaModal() {
     openModal('persona-modal');
 }
 async function savePersona() {
+    const personaId = document.getElementById('persona-id').value;
     const name = document.getElementById('persona-name').value.trim();
     if (!name) { toast('Name is required', 'error'); return; }
-    await fetch(`${API}/personas`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-            message_house_id: currentHouseId, name,
-            description: document.getElementById('persona-description').value,
-            pain_points: splitComma('persona-pain'),
-            buying_triggers: splitComma('persona-triggers'),
-            objections: splitComma('persona-objections'),
-        }),
-    });
+    const body = {
+        name,
+        description: document.getElementById('persona-description').value,
+        pain_points: splitComma('persona-pain'),
+        buying_triggers: splitComma('persona-triggers'),
+        objections: splitComma('persona-objections'),
+    };
+    if (personaId) {
+        await fetch(`${API}/personas/${personaId}`, {
+            method: 'PATCH', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(body),
+        });
+    } else {
+        await fetch(`${API}/personas`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({...body, message_house_id: currentHouseId}),
+        });
+    }
     closeModal('persona-modal');
     viewHouse(currentHouseId);
     toast('Persona saved', 'success');
@@ -1535,6 +1720,314 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
 function esc(str) {
     if (!str) return '';
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Message improve / variant / delete / edit ────────────────────────────────
+async function improveMessage(msgId) {
+    const resultEl = document.getElementById(`improve-result-${msgId}`);
+    if (!resultEl) return;
+    resultEl.textContent = 'Generating improved version…';
+    resultEl.style.display = 'block';
+    try {
+        const data = await fetch(`${API}/messages/${msgId}/improve`, {method:'POST'}).then(r=>r.json());
+        resultEl.innerHTML = `<div style="color:var(--text-3);font-size:11px;margin-bottom:4px;">IMPROVED</div>${esc(data.improved)}<div style="margin-top:8px;display:flex;gap:6px;"><button class="btn btn-success btn-xs" onclick="applyImprovedMessage('${msgId}', this)">Apply</button><button class="btn btn-ghost btn-xs" onclick="this.closest('[id^=improve-result]').style.display='none'">Dismiss</button></div>`;
+        resultEl.dataset.improved = data.improved;
+    } catch (e) { resultEl.textContent = 'Failed: ' + e.message; }
+}
+
+async function applyImprovedMessage(msgId, btn) {
+    const resultEl = document.getElementById(`improve-result-${msgId}`);
+    const improved = resultEl?.dataset.improved;
+    if (!improved) return;
+    await fetch(`${API}/messages/${msgId}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({content: improved}),
+    });
+    toast('Message updated', 'success');
+    viewHouse(currentHouseId);
+}
+
+async function deleteMessage(msgId) {
+    if (!confirm('Delete this message?')) return;
+    await fetch(`${API}/messages/${msgId}`, {method:'DELETE'});
+    document.getElementById(`msg-item-${msgId}`)?.remove();
+    toast('Message deleted', 'success');
+}
+
+function editMessage(msgId) {
+    const house = null; // will load in modal
+    fetch(`${API}/houses/${currentHouseId}`).then(r=>r.json()).then(h => {
+        const msg = h.key_messages.find(m => m.id === msgId);
+        if (!msg) return;
+        document.getElementById('message-id').value = msgId;
+        document.getElementById('message-content').value = msg.content;
+        document.getElementById('message-section').value = msg.section_type;
+        document.getElementById('message-priority').value = msg.priority;
+        openModal('message-modal');
+    });
+}
+
+// ── Variant modal ─────────────────────────────────────────────────────────────
+let _variantMsgId = null;
+function openVariantModal(msgId, preview) {
+    _variantMsgId = msgId;
+    document.getElementById('variant-msg-preview').textContent = preview + '…';
+    document.getElementById('variant-channel').value = 'linkedin';
+    document.getElementById('variant-result').style.display = 'none';
+    openModal('variant-modal');
+}
+
+async function generateVariant() {
+    if (!_variantMsgId) return;
+    const channel = document.getElementById('variant-channel').value;
+    const resultEl = document.getElementById('variant-result');
+    resultEl.textContent = 'Generating…';
+    resultEl.style.display = 'block';
+    try {
+        const fd = new FormData();
+        fd.append('channel', channel);
+        const data = await fetch(`${API}/messages/${_variantMsgId}/generate-variant`, {method:'POST',body:fd}).then(r=>r.json());
+        resultEl.innerHTML = `<div style="color:var(--text-3);font-size:11px;margin-bottom:6px;">${channel.toUpperCase()} VARIANT</div><div style="font-size:13px;line-height:1.6;">${esc(data.variant)}</div><div style="margin-top:8px;font-size:11px;color:var(--success);">✓ Saved to message variants</div>`;
+        toast(`${channel} variant generated`, 'success');
+    } catch (e) { resultEl.textContent = 'Failed: ' + e.message; }
+}
+
+// ── Persona delete / generate from title ─────────────────────────────────────
+async function deletePersona(personaId) {
+    if (!confirm('Delete this persona?')) return;
+    await fetch(`${API}/personas/${personaId}`, {method:'DELETE'});
+    document.getElementById(`persona-card-${personaId}`)?.remove();
+    toast('Persona deleted', 'success');
+}
+
+function editPersona(personaId) {
+    fetch(`${API}/houses/${currentHouseId}`).then(r=>r.json()).then(h => {
+        const p = h.personas.find(x => x.id === personaId);
+        if (!p) return;
+        document.getElementById('persona-id').value = personaId;
+        document.getElementById('persona-name').value = p.name;
+        document.getElementById('persona-description').value = p.description;
+        document.getElementById('persona-pain').value = (p.pain_points||[]).join(', ');
+        document.getElementById('persona-triggers').value = (p.buying_triggers||[]).join(', ');
+        document.getElementById('persona-objections').value = (p.objections||[]).join(', ');
+        openModal('persona-modal');
+    });
+}
+
+async function generatePersonaFromTitle() {
+    const title = document.getElementById('gen-persona-title').value.trim();
+    if (!title) { toast('Enter a job title first', 'error'); return; }
+    const btn = document.getElementById('gen-persona-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="border-top-color:var(--primary)"></span>';
+    try {
+        const data = await fetch(`${API}/generate-persona`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({house_id: currentHouseId, job_title: title}),
+        }).then(r=>r.json());
+        document.getElementById('gen-persona-title').value = '';
+        toast(`Generated persona: ${data.name}`, 'success');
+        viewHouse(currentHouseId);
+    } catch (e) { toast('Generation failed: ' + e.message, 'error'); }
+    btn.disabled = false;
+    btn.innerHTML = '✦ Generate';
+}
+
+// ── Tone check ────────────────────────────────────────────────────────────────
+async function checkTone() {
+    const btn = document.getElementById('check-tone-btn');
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    const resultEl = document.getElementById('tone-result');
+    try {
+        const data = await fetch(`${API}/houses/${currentHouseId}/check-tone`, {method:'POST'}).then(r=>r.json());
+        const scoreColor = data.score >= 80 ? 'var(--success)' : data.score >= 50 ? 'var(--warn)' : 'var(--danger)';
+        let html = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);">
+            <span style="font-size:20px;font-weight:700;color:${scoreColor}">${data.score}</span>
+            <div><div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;">Tone Alignment</div><div style="font-size:13px;color:var(--text-2);">${esc(data.summary)}</div></div>
+        </div>`;
+        if (data.warnings && data.warnings.length) {
+            html += data.warnings.map(w => `<div class="tone-warning">
+                <div style="font-size:11px;font-weight:600;color:var(--warn);margin-bottom:3px;">⚠ ${esc(w.message?.slice(0,60))}…</div>
+                <div style="margin-bottom:3px;">${esc(w.issue)}</div>
+                <div style="color:var(--success);font-size:12px;">→ ${esc(w.suggestion)}</div>
+            </div>`).join('');
+        }
+        resultEl.innerHTML = html;
+        resultEl.style.display = 'block';
+    } catch (e) { toast('Tone check failed: ' + e.message, 'error'); }
+    btn.disabled = false;
+    btn.textContent = '◇ Check Tone';
+}
+
+// ── Snapshots ─────────────────────────────────────────────────────────────────
+async function snapshotHouse() {
+    const label = prompt('Snapshot label (optional):', '') ?? null;
+    if (label === null) return;
+    try {
+        await fetch(`${API}/houses/${currentHouseId}/snapshots`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({label}),
+        });
+        toast('Snapshot saved', 'success');
+        // Refresh history tab if active
+        if (document.getElementById('detail-history')?.classList.contains('active')) {
+            loadHistory(currentHouseId);
+        }
+    } catch (e) { toast('Snapshot failed: ' + e.message, 'error'); }
+}
+
+async function loadHistory(houseId) {
+    const [snaps, arts] = await Promise.all([
+        fetch(`${API}/houses/${houseId}/snapshots`).then(r=>r.json()).catch(()=>[]),
+        fetch(`${API}/houses/${houseId}/artifacts`).then(r=>r.json()).catch(()=>[]),
+    ]);
+
+    const snapEl = document.getElementById('snapshots-list');
+    snapEl.innerHTML = !snaps.length ? '<div style="color:var(--text-3);font-size:13px;">No snapshots yet</div>'
+        : snaps.map(s => `
+            <div class="history-item">
+                <div>
+                    <div style="font-size:13px;font-weight:500;color:var(--text);">${esc(s.label || 'Snapshot')}</div>
+                    <div class="history-item-meta">${s.message_count} messages · ${s.persona_count} personas · ${new Date(s.created_at).toLocaleString()}</div>
+                </div>
+                <div style="display:flex;gap:4px;flex-shrink:0;">
+                    <button class="btn btn-ghost btn-xs" onclick="restoreSnapshot('${s.id}')">Restore</button>
+                    <button class="btn btn-danger btn-xs" onclick="deleteSnap('${s.id}')">Delete</button>
+                </div>
+            </div>`).join('');
+
+    const artEl = document.getElementById('artifact-history-list');
+    artEl.innerHTML = !arts.length ? '<div style="color:var(--text-3);font-size:13px;">No artifacts generated yet</div>'
+        : arts.map(a => `
+            <div class="history-item">
+                <div>
+                    <div style="font-size:13px;font-weight:500;color:var(--text);">${esc(a.skill_id.replace(/_/g,' '))}</div>
+                    <div class="history-item-meta">${a.section_count} sections · ${new Date(a.created_at).toLocaleString()}</div>
+                </div>
+                <div style="display:flex;gap:4px;flex-shrink:0;">
+                    <a class="btn btn-ghost btn-xs" href="${API.replace('/api','')}/api/artifacts/${a.id}/docx" download>DOCX</a>
+                    <button class="btn btn-ghost btn-xs" onclick="reopenArtifact('${a.id}')">Open</button>
+                </div>
+            </div>`).join('');
+}
+
+async function restoreSnapshot(snapId) {
+    if (!confirm('Restore this snapshot? Current state will be overwritten.')) return;
+    try {
+        await fetch(`${API}/snapshots/${snapId}/restore`, {method:'POST'});
+        toast('Framework restored from snapshot', 'success');
+        viewHouse(currentHouseId);
+    } catch (e) { toast('Restore failed: ' + e.message, 'error'); }
+}
+
+async function deleteSnap(snapId) {
+    if (!confirm('Delete this snapshot?')) return;
+    await fetch(`${API}/snapshots/${snapId}`, {method:'DELETE'});
+    toast('Snapshot deleted', 'success');
+    loadHistory(currentHouseId);
+}
+
+async function reopenArtifact(artId) {
+    const data = await fetch(`${API}/artifacts/${artId}`).then(r=>r.json()).catch(()=>null);
+    if (!data) { toast('Failed to load artifact', 'error'); return; }
+    showView('artifacts');
+    setTimeout(() => {
+        const sel = document.getElementById('artifact-house');
+        if (sel) { sel.value = data.house_id; onArtifactHouseChange(); }
+        // Show the sections
+        currentRawContent = data.raw_content || '';
+        document.getElementById('artifact-result-title').textContent = `${data.house_name} — ${data.skill_id.replace(/_/g,' ')}`;
+        const sectionsEl = document.getElementById('artifact-sections');
+        if (data.sections && Object.keys(data.sections).length) {
+            sectionsEl.innerHTML = Object.entries(data.sections).map(([k, v]) => `
+                <div class="section-block">
+                    <div class="section-block-label">${k.replace(/_/g,' ')}</div>
+                    <div class="section-block-content" contenteditable="true" data-section-key="${k}">${esc(v)}</div>
+                </div>`).join('');
+        }
+        document.getElementById('artifact-raw').textContent = currentRawContent;
+        document.getElementById('artifacts-empty').style.display = 'none';
+        document.getElementById('artifact-result').style.display = 'block';
+    }, 100);
+}
+
+// ── Artifact section inline edit / copy / DOCX ───────────────────────────────
+let _currentArtifactId = null;
+
+// Override generateArtifact to also store artifact_id and wire up section actions
+const _origGenerateArtifact = generateArtifact;
+generateArtifact = async function() {
+    const houseId = document.getElementById('artifact-house').value;
+    if (!houseId || !selectedSkillId) { toast('Select a framework and skill first', 'error'); return; }
+    const btn = document.getElementById('generate-btn');
+    const errEl = document.getElementById('artifact-error');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Generating…';
+    document.getElementById('artifacts-empty').style.display = 'none';
+    document.getElementById('artifact-result').style.display = 'none';
+    try {
+        const formData = new FormData();
+        formData.append('skill_id', selectedSkillId);
+        formData.append('house_id', houseId);
+        const res = await fetch(`${API}/generate`, {method:'POST', body:formData});
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Generation failed');
+
+        _currentArtifactId = data.artifact_id || null;
+        currentRawContent = data.raw_content || '';
+        document.getElementById('artifact-result-title').textContent = `${data.house_name} — ${(selectedSkillId||'').replace(/_/g,' ')}`;
+
+        const visualLink = document.getElementById('visual-link');
+        if (data.visual_url) {
+            visualLink.href = data.visual_url;
+            visualLink.textContent = `Open visual ${selectedSkillId.replace(/_/g,' ')} →`;
+            visualLink.style.display = 'flex';
+        } else { visualLink.style.display = 'none'; }
+
+        const sectionsEl = document.getElementById('artifact-sections');
+        if (data.sections && Object.keys(data.sections).length) {
+            sectionsEl.innerHTML = Object.entries(data.sections).map(([k, v]) => `
+                <div class="section-block">
+                    <div class="section-block-label" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span>${k.replace(/_/g,' ')}</span>
+                        <button class="btn btn-ghost btn-xs" onclick="copySectionContent(this)" style="font-size:10px;">Copy</button>
+                    </div>
+                    <div class="section-block-content" contenteditable="true" data-section-key="${k}">${esc(v)}</div>
+                </div>`).join('');
+        } else { sectionsEl.innerHTML = ''; }
+
+        // Add DOCX download button if artifact was saved
+        const headerEl = document.querySelector('.preview-pane-header div');
+        if (headerEl && _currentArtifactId) {
+            const existing = headerEl.querySelector('.docx-dl');
+            if (!existing) {
+                const dlBtn = document.createElement('a');
+                dlBtn.className = 'btn btn-ghost btn-xs docx-dl';
+                dlBtn.href = `${API}/artifacts/${_currentArtifactId}/docx`;
+                dlBtn.download = '';
+                dlBtn.textContent = '↓ DOCX';
+                headerEl.appendChild(dlBtn);
+            }
+        }
+
+        document.getElementById('artifact-raw').textContent = currentRawContent;
+        document.getElementById('artifact-result').style.display = 'block';
+        toast('Generated', 'success');
+    } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+        document.getElementById('artifacts-empty').style.display = 'flex';
+        toast('Generation failed: ' + e.message, 'error');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Generate';
+};
+
+function copySectionContent(btn) {
+    const content = btn.closest('.section-block')?.querySelector('.section-block-content')?.textContent || '';
+    navigator.clipboard.writeText(content).then(() => toast('Copied', 'success'));
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
