@@ -11,9 +11,10 @@ from typing import Optional
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 load_dotenv()
@@ -33,6 +34,7 @@ from src.pipeline.skills import SkillManager
 from src.rate_limit import extract_limiter, generate_limiter
 
 app = FastAPI(title="MsgStack Admin", version="0.5.0", redirect_slashes=False)
+templates = Jinja2Templates(directory="src/web")
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,7 +60,7 @@ _oai_client = _oai_mod.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 @app.on_event("startup")
 async def startup_event():
-    """Ensure Pinecone index exists on startup."""
+    """Ensure Pinecone index exists on startup, seed if no houses."""
     from src.grounding.search import GroundingEngine
     try:
         engine = GroundingEngine(
@@ -72,6 +74,16 @@ async def startup_event():
         log.info("Pinecone index ensured on startup")
     except Exception as e:
         log.warning("Pinecone index creation skipped: %s", e)
+
+    # Auto-seed if no houses exist
+    if not store.list_houses():
+        log.info("No houses found, running seed...")
+        from seed_data.seed import seed as run_seed
+        try:
+            run_seed()
+            log.info("Auto-seed complete")
+        except Exception as e:
+            log.warning("Auto-seed skipped: %s", e)
 
 def _check_token_budget(workspace_id: str) -> None:
     """Raise HTTP 402 if workspace token budget is exhausted."""
@@ -112,11 +124,14 @@ async def log_requests(request: Request, call_next):
     response = await call_next(request)
     elapsed_ms = (time.perf_counter() - start) * 1000
     path = request.url.path
-    log.info(
-        "%s %s → %d  (%.1fms)",
-        request.method, path, response.status_code, elapsed_ms,
-        extra={"endpoint": path, "latency_ms": round(elapsed_ms, 1), "status": response.status_code},
-    )
+    try:
+        log.info(
+            "%s %s -> %d  (%.1fms)",
+            request.method, path, response.status_code, elapsed_ms,
+            extra={"endpoint": path, "latency_ms": round(elapsed_ms, 1), "status": response.status_code},
+        )
+    except Exception:
+        pass  # Avoid logging failures
     # Accumulate metrics
     key = f"{request.method} {path}"
     _metrics[key]["requests"] += 1
@@ -2211,7 +2226,7 @@ def _render_email_sequence(house, messages: list) -> str:
 
 
 @app.get("/api/preview/{skill_id}/{house_id}")
-def get_artifact_preview(skill_id: str, house_id: str):
+def get_artifact_preview(skill_id: str, house_id: str, request: Request):
     """Get Prefab preview HTML for an artifact."""
     from src.pipeline.generator import ArtifactGenerator
     from src.artifacts.prefab_generator import build_artifact_preview
@@ -2221,16 +2236,82 @@ def get_artifact_preview(skill_id: str, house_id: str):
     try:
         artifact = generator.generate(skill_id, house_id, {})
         prefab_app = build_artifact_preview(skill_id, artifact.sections, artifact.house_name, artifact.house_id)
+        
+        # Check if it's an HTMX request
+        if request.headers.get("HX-Request"):
+            return HTMLResponse(content=prefab_app.html())
+            
         return {"html": prefab_app.html()}
     except Exception as e:
+        log.error("Preview generation failed: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/artifacts/{artifact_id}/image")
+def get_artifact_image(artifact_id: str):
+    """Generate a high-fidelity PNG image using Satori + resvg-python."""
+    import subprocess
+    from resvg_py import render_svg
+    from src.pipeline.generator import ArtifactGenerator
+    
+    record = store.get_artifact(UUID(artifact_id))
+    if not record:
+        raise HTTPException(404, "Artifact not found")
+
+    # Minimal Tailwind HTML for Satori
+    # We'll use a simple card layout for now
+    html_content = f"""
+    <div style="display: flex; flex-direction: column; width: 100%; height: 100%; background-color: white; padding: 40px; font-family: 'WorkSans';">
+        <div style="display: flex; align-items: center; margin-bottom: 20px;">
+            <div style="width: 40px; height: 40px; background-color: #6366f1; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 20px; margin-right: 15px;">M</div>
+            <div style="font-size: 24px; font-weight: 700; color: #1e293b;">{record['house_name']}</div>
+        </div>
+        <div style="font-size: 48px; font-weight: 800; color: #0f172a; margin-bottom: 10px; line-height: 1.1;">{record['skill_id'].replace('_', ' ').title()}</div>
+        <div style="font-size: 20px; color: #64748b; margin-bottom: 30px;">Generated via MsgStack MCP</div>
+        <div style="flex: 1; display: flex; flex-direction: column; background-color: #f8fafc; border-radius: 12px; padding: 30px; border: 1px solid #e2e8f0;">
+            <div style="font-size: 18px; color: #475569; line-height: 1.6;">{record['raw_content'][:500]}...</div>
+        </div>
+    </div>
+    """
+
+    try:
+        # 1. Run Node.js bridge to get SVG
+        cmd = ["node", "src/artifacts/render.js", html_content]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        svg_data = result.stdout
+
+        # 2. Rasterize SVG to PNG
+        png_data = render_svg(svg_data)
+        
+        return HTMLResponse(content=png_data, media_type="image/png")
+    except Exception as e:
+        log.error("Image generation failed: %s", e)
+        raise HTTPException(500, f"Failed to generate image: {str(e)}")
+@app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)
+def view_artifact(artifact_type: str, house_id: str, request: Request):
+    """Visual view of an artifact with Paged.js support."""
+    from src.pipeline.generator import ArtifactGenerator
+    generator = ArtifactGenerator(store, skills)
+    
+    try:
+        artifact = generator.generate(artifact_type, house_id, {})
+        return templates.TemplateResponse("artifact_visual.html", {
+            "request": request,
+            "artifact": artifact,
+            "type": artifact_type,
+            "house_name": artifact.house_name
+        })
+    except Exception as e:
+        log.error("Visual generation failed: %s", e)
         raise HTTPException(500, str(e))
 
 
 # --- Frontend ---
 
 @app.get("/", response_class=HTMLResponse)
-def index():
-    return HTMLResponse(open("src/web/index.html", encoding="utf-8").read(), media_type="text/html; charset=utf-8")
+def index(request: Request):
+    p = Path("src/web/dashboard.html")
+    return HTMLResponse(content=p.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

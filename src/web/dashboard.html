@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}MsgStack — Dashboard{% endblock %}
+
+{% block content %}
+<div id="toast-container" class="toast-container"></div>
+
+<!-- ── Dashboard ── -->
+<section id="dashboard" class="section active">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Dashboard</div>
+                <div class="page-subtitle">Overview of your messaging frameworks and generated assets</div>
+            </div>
+            <div style="display:flex;gap:10px;">
+                <button class="btn btn-ghost" onclick="loadDashboard()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Refresh
+                </button>
+                <button class="btn btn-primary" onclick="showSection('upload')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    New Framework
+                </button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="stat-houses">—</div>
+                <div class="stat-label">Frameworks</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="stat-messages">—</div>
+                <div class="stat-label">Key Messages</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="stat-artifacts">—</div>
+                <div class="stat-label">Artifacts</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="stat-tokens">—</div>
+                <div class="stat-label">Tokens Used</div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Recent Frameworks</span>
+                    <button class="btn btn-ghost btn-xs" onclick="showSection('frameworks')">View All</button>
+                </div>
+                <div id="recent-houses"><div style="color:var(--text-3);font-size:13px;">Loading…</div></div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Latest Artifacts</span>
+                    <button class="btn btn-ghost btn-xs" onclick="showSection('artifacts')">Generator</button>
+                </div>
+                <div id="latest-artifacts"><div style="color:var(--text-3);font-size:13px;">Loading…</div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Frameworks ── -->
+<section id="frameworks" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Messaging Frameworks</div>
+                <div class="page-subtitle">Your library of structured brand and product messaging</div>
+            </div>
+        </div>
+        <div id="houses-list" class="grid-2"></div>
+    </div>
+</section>
+
+<!-- ── House Detail (Inner) ── -->
+<section id="house-detail" class="section">
+    <div class="page">
+        <div id="house-detail-content"></div>
+    </div>
+</section>
+
+<!-- ── Upload ── -->
+<section id="upload" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Upload Source</div>
+                <div class="page-subtitle">Extract a message house from a PDF, DOCX, or TXT document</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="upload-zone" id="upload-zone">
+                <svg class="upload-zone-icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <div style="font-size:15px;font-weight:500;margin-bottom:4px;">Drop a file or click to upload</div>
+                <div style="font-size:12px;color:var(--text-2);">PDF, DOCX, TXT · up to 10MB</div>
+                <input type="file" id="file-input" accept=".pdf,.docx,.doc,.txt,.md" style="display:none;">
+            </div>
+        </div>
+
+        <div id="upload-preview-card" style="display:none;" class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title" id="upload-filename"></div>
+                    <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="upload-stats"></div>
+                </div>
+                <div id="process-status" style="font-size:12px;color:var(--text-2);display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+                    <div style="display:flex;align-items:center;gap:6px;"><span class="spinner"></span> Structuring with AI...</div>
+                    <div class="structuring-timer" id="structuring-timer"></div>
+                </div>
+            </div>
+            <div class="markdown-preview" id="upload-preview-text" style="max-height:150px;"></div>
+        </div>
+
+        <div id="extraction-error" style="display:none;" class="card">
+            <div class="error-box">
+                <div class="error-box-stage" id="err-stage"></div>
+                <div class="error-box-msg" id="err-msg"></div>
+                <div class="error-box-detail" id="err-detail"></div>
+            </div>
+            <div style="margin-top:12px;">
+                <button class="btn btn-ghost btn-sm" onclick="resetUpload()">Try again</button>
+            </div>
+        </div>
+
+        <div id="structure-preview" style="display:none;">
+            <div class="card">
+                <div class="card-header" style="margin-bottom:14px;">
+                    <div>
+                        <div class="card-title" id="preview-name"></div>
+                        <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="preview-meta"></div>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-ghost btn-sm" onclick="resetUpload()">Discard</button>
+                        <button class="btn btn-primary btn-sm" id="confirm-save-btn" onclick="confirmSave()">
+                            Save Framework →
+                        </button>
+                    </div>
+                </div>
+                <div class="completeness-bar"><div class="completeness-fill" id="preview-completeness-fill" style="width:0%"></div></div>
+                <div style="font-size:12px;color:var(--text-2);margin-bottom:16px;" id="preview-completeness-label"></div>
+                <div id="preview-sections"></div>
+            </div>
+        </div>
+
+        <div id="extraction-result" style="display:none;">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title" id="extraction-name"></div>
+                        <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="extraction-meta"></div>
+                    </div>
+                    <button class="btn btn-success btn-sm" onclick="viewExtractedHouse()">View Framework →</button>
+                </div>
+                <div class="completeness-bar"><div class="completeness-fill" id="completeness-fill" style="width:0%"></div></div>
+                <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;" id="completeness-label"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Artifacts ── -->
+<section id="artifacts" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Artifact Generator</div>
+                <div class="page-subtitle">Generate grounded marketing content from a framework</div>
+            </div>
+        </div>
+        <div class="artifact-layout">
+            <div class="artifact-sidebar">
+                <div class="card" style="margin-bottom:0">
+                    <div class="card-title" style="margin-bottom:10px">Framework</div>
+                    <select class="form-select" id="artifact-house" onchange="onArtifactHouseChange()">
+                        <option value="">Select…</option>
+                    </select>
+                </div>
+                <div class="card" style="margin-bottom:0">
+                    <div class="card-title" style="margin-bottom:10px">Artifact Type</div>
+                    <div id="artifact-skills-list">
+                        <div style="color:var(--text-3);font-size:13px;">Select a framework first</div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="generate-btn" onclick="generateArtifact()" style="width:100%;" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    Generate
+                </button>
+            </div>
+
+            <div id="artifact-area">
+                <!-- HTMX will load the preview here -->
+                <div id="artifact-preview-container" class="min-h-[400px]">
+                    <div id="artifacts-empty" class="empty border border-[var(--border)] rounded-[var(--radius-lg)]">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        <div class="empty-title">Select a framework and skill to generate</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Modals -->
+<div class="modal-overlay" id="house-modal">
+    <!-- Existing house modal content -->
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const API = '/api';
+    let currentHouseId = null;
+    let selectedSkillId = null;
+    let currentRawContent = '';
+
+    async function generateArtifact() {
+        const houseId = document.getElementById('artifact-house').value;
+        if (!houseId || !selectedSkillId) { 
+            toast('Select a framework and skill first', 'error'); 
+            return; 
+        }
+        
+        const container = document.getElementById('artifact-preview-container');
+        container.innerHTML = '<div class="flex items-center justify-center p-20"><span class="spinner"></span><span class="ml-3 text-slate-400">Generating with AI...</span></div>';
+        
+        // Use HTMX to load the preview snippet
+        htmx.ajax('GET', `/api/preview/${selectedSkillId}/${houseId}`, {
+            target: '#artifact-preview-container',
+            swap: 'innerHTML'
+        }).then(() => {
+            toast('Artifact Generated', 'success');
+        });
+    }
+
+    function showSection(id) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        if (id === 'dashboard') loadDashboard();
+        if (id === 'frameworks') loadHouses();
+        if (id === 'artifacts') loadArtifactHouses();
+        if (id === 'settings') loadSettings();
+    }
+
+    // Helper functions
+    function toast(msg, type = 'success') {
+        const t = document.createElement('div');
+        t.className = `toast toast-${type}`;
+        t.textContent = msg;
+        document.getElementById('toast-container').appendChild(t);
+        setTimeout(() => t.classList.add('show'), 10);
+        setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3000);
+    }
+
+    function esc(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Load initial data
+    async function loadDashboard() {
+        try {
+            const data = await fetch(`${API}/stats`).then(r => r.json());
+            document.getElementById('stat-houses').textContent = data.houses || 0;
+            document.getElementById('stat-messages').textContent = data.messages || 0;
+            document.getElementById('stat-artifacts').textContent = data.artifacts || 0;
+            document.getElementById('stat-tokens').textContent = (data.tokens || 0).toLocaleString();
+        } catch (e) { console.error('Dashboard load failed', e); }
+    }
+
+    async function loadArtifactHouses() {
+        const houses = await fetch(`${API}/houses`).then(r => r.json());
+        const sel = document.getElementById('artifact-house');
+        sel.innerHTML = '<option value="">Select a framework…</option>' +
+            houses.map(h => `<option value="${h.id}">${esc(h.name)}</option>`).join('');
+    }
+
+    async function onArtifactHouseChange() {
+        const houseId = document.getElementById('artifact-house').value;
+        if (!houseId) return;
+        const skills = await fetch(`${API}/skills`).then(r => r.json());
+        document.getElementById('artifact-skills-list').innerHTML = skills.map(s => `
+            <div class="skill-opt" id="skill-opt-${s.id}" onclick="selectSkill('${s.id}')">
+                <div class="skill-opt-name">${esc(s.name)}</div>
+                <div class="skill-opt-desc">${esc(s.description)}</div>
+            </div>`).join('');
+    }
+
+    function selectSkill(id) {
+        selectedSkillId = id;
+        document.querySelectorAll('.skill-opt').forEach(el => el.classList.remove('active'));
+        document.getElementById(`skill-opt-${id}`)?.classList.add('active');
+        document.getElementById('generate-btn').disabled = false;
+    }
+
+    // Init
+    loadDashboard();
+</script>
+{% endblock %}

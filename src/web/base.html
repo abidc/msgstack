@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MsgStack{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #0c0c10;
+            --bg-1: #131318;
+            --bg-2: #1a1a21;
+            --bg-3: #222230;
+            --border: #2c2c3a;
+            --border-light: #3a3a4a;
+            --text: #f0f0f5;
+            --text-2: #a0a0b5;
+            --text-3: #606075;
+            --primary: #7c6af7;
+            --primary-dim: rgba(124,106,247,0.15);
+            --primary-hover: #9585f9;
+            --success: #34d399;
+            --success-dim: rgba(52,211,153,0.12);
+            --warn: #fbbf24;
+            --warn-dim: rgba(251,191,36,0.12);
+            --danger: #f87171;
+            --danger-dim: rgba(248,113,113,0.12);
+            --radius: 8px;
+            --radius-lg: 12px;
+        }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+        .app { display: flex; height: 100vh; overflow: hidden; }
+
+        /* Sidebar Styles (Simplified from index.html) */
+        .sidebar { width: 216px; background: var(--bg-1); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; flex-shrink: 0; }
+        .logo { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 24px; padding: 0 8px; display: flex; align-items: center; gap: 8px; }
+        .logo-icon { width: 26px; height: 26px; background: var(--primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; }
+        .nav-section { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); padding: 0 8px; margin: 16px 0 6px; }
+        .nav-item { padding: 7px 8px; border-radius: var(--radius); cursor: pointer; color: var(--text-2); transition: all 0.12s; margin-bottom: 1px; display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 500; }
+        .nav-item:hover { background: var(--bg-2); color: var(--text); }
+        .nav-item.active { background: var(--primary-dim); color: var(--primary); }
+        
+        .main { flex: 1; overflow-y: auto; background: var(--bg); }
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">M</div>
+                <span>MsgStack</span>
+            </div>
+            
+            <div class="nav-section">Management</div>
+            <div class="nav-item active" onclick="showSection('dashboard')">Dashboard</div>
+            <div class="nav-item" onclick="showSection('frameworks')">Frameworks</div>
+            <div class="nav-item" onclick="showSection('upload')">Upload</div>
+            
+            <div class="nav-section">Execution</div>
+            <div class="nav-item" onclick="showSection('artifacts')">Artifacts</div>
+            <div class="nav-item" onclick="showSection('skills')">Skills</div>
+            
+            <div class="nav-section">System</div>
+            <div class="nav-item" onclick="showSection('settings')">Settings</div>
+            
+            <div class="sidebar-footer">v0.6.0</div>
+        </aside>
+        
+        <main class="main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>
