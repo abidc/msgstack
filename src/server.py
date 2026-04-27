@@ -176,18 +176,29 @@ def generate_artifact(
     house_name: Optional[str] = None,
     custom_context: Optional[dict] = None,
 ) -> str:
-    """MANDATORY tool for generating any marketing copy (One-Pager, Email, Post, etc).
+    """Generate marketing content from a message house framework using an AI skill.
 
-    USE THIS TOOL whenever the user asks to "generate", "write", "create", or "draft" 
-    a document. DO NOT attempt to write the document yourself based on house data.
+    ALWAYS use this tool when the user asks to:
+    - "build", "make", "create", "generate", "write", "draft", "produce", or "put together"
+      any of: one-pager, one pager, battlecard, battle card, email, LinkedIn post, blog post,
+      press release, FAQ, talk track, objection handler, executive summary, partner brief,
+      event brief, or any other marketing document or copy.
+    - "show me", "give me", "can you make" a one pager / battlecard / email etc.
+
+    NEVER write the content yourself. ALWAYS call this tool instead.
+
+    The tool runs the AI generator and returns the full content PLUS a visual link.
+    For battlecard, you MUST also pass custom_context={"competitor": "<name>"}.
+    For email_template, optionally pass custom_context={"stage": "awareness|consideration|decision"}.
 
     Args:
-        skill_id: The type of content to generate. MUST be one of the IDs 
-                  returned by list_skills (e.g., 'one_pager', 'linkedin_post', 
-                  'email_template', 'battlecard').
-        house_id: UUID of the message house (preferred).
-        house_name: Exact name of the message house.
-        custom_context: Optional context like {"stage": "decision", "competitor": "X"}.
+        skill_id: Content type — one of: one_pager, linkedin_post, email_template,
+                  battlecard, press_release, blog_post, faq_document, talk_track,
+                  objection_handler, event_brief, executive_summary, partner_brief.
+        house_id: UUID of the message house (preferred over house_name).
+        house_name: Exact name of the message house (used if house_id not available).
+        custom_context: Extra context dict, e.g. {"competitor": "Salesforce"} for battlecard
+                        or {"stage": "decision"} for email_template.
     """
     from src.pipeline.generator import ArtifactGenerator
     from src.pipeline.skills import SkillManager
@@ -241,27 +252,23 @@ def generate_artifact(
         workspace_id=workspace_id,
     )
 
-    # Automatically append a visual link if this artifact type supports a UI view
-    # Supported skills: one_pager, linkedin_post, email_template, battlecard, 
-    # blog_post, press_release, faq_document, talk_track, objection_handler, 
-    # event_brief, executive_summary, partner_brief
-    
     base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
-    url = f"{base_url}/artifact/{skill_id}/{house.id}"
-    
-    # Add stage/channel context to URL if available
-    if custom_context:
+    visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
+
+    content = artifact.raw_content
+    if skill_id in visual_types:
+        url = f"{base_url}/artifact/{skill_id}/{house.id}"
         params = []
-        if skill_id == "email_template" and "stage" in custom_context:
-            params.append(f"stage={custom_context['stage']}")
-        elif skill_id == "linkedin_post" and "channels" in custom_context:
-            ch = custom_context["channels"]
+        if skill_id == "battlecard" and provided.get("competitor"):
+            params.append(f"competitor={provided['competitor']}")
+        elif skill_id == "email_template" and provided.get("stage"):
+            params.append(f"stage={provided['stage']}")
+        elif skill_id in ("social_posts", "linkedin_post") and provided.get("channels"):
+            ch = provided["channels"]
             params.append(f"channels={','.join(ch) if isinstance(ch, list) else ch}")
         if params:
             url += "?" + "&".join(params)
-
-    content = artifact.raw_content
-    content += f"\n\n---\n\n**Visual Version:** {url}"
+        content += f"\n\n---\n\n**Visual Version:** {url}"
 
     return content
 
@@ -274,14 +281,17 @@ def build_ui_artifact(
     stage: Optional[str] = None,
     channels: Optional[list[str]] = None,
 ) -> str:
-    """Generate a visual/HTML link for a marketing artifact.
+    """Return a visual HTML page URL for a message house — does NOT run the AI generator.
 
-    USE THIS TOOL when the user wants a "link", "page", "visual version", 
-    or "web view" of an artifact.
+    Use this ONLY when the user asks for a "link", "page", "visual", or "web view"
+    of a framework that already exists — NOT to generate new content.
+
+    To actually generate content (one-pager, email, battlecard, etc.), use
+    generate_artifact instead.
 
     Args:
-        artifact_type: one_pager | social_posts | email_template
-        house_id: UUID of the message house (optional if house_name provided).
+        artifact_type: one_pager | social_posts | email_template | battlecard
+        house_id: UUID of the message house (preferred).
         house_name: Exact name of the message house.
         stage: For email_template only: awareness | consideration | decision
         channels: For social_posts only: e.g. ["linkedin"]
