@@ -314,15 +314,16 @@ def build_ui_artifact(
     stage: Optional[str] = None,
     channels: Optional[list[str]] = None,
 ) -> str:
-    """Build a visual UI artifact and return a public URL to open it in a browser.
+    """Build a visual artifact page and return a public URL to open in a browser.
 
-    Present the URL as a clickable link. The page renders a full interactive
-    Prefab UI with messaging cards, personas, and action buttons.
+    You do NOT need to call list_message_houses first — pass house_name directly
+    (e.g. house_name="Clarity CMS") and the server resolves it automatically.
+    Present the returned URL as a clickable link for the user to open.
 
     Args:
         artifact_type: one_pager | social_posts | email_template
-        house_id: UUID of the message house.
-        house_name: Name of the message house (alternative to house_id).
+        house_id: UUID of the message house (optional if house_name provided).
+        house_name: Exact name of the message house — use this to skip list_message_houses.
         stage: For email_template only: awareness | consideration | decision
         channels: For social_posts only: e.g. ["linkedin"]
     """
