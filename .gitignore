@@ -3,9 +3,15 @@ __pycache__/
 *.db
 .env
 .venv/
+venv/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
 dist/
 build/
 *.egg
+data/
+server.log
+server_err.log
+check_db.py
+test_init.json

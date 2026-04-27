@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SectionType(str, Enum):
@@ -37,6 +37,8 @@ class HouseStatus(str, Enum):
 
 
 class MessageHouse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     id: UUID = Field(default_factory=uuid4)
     name: str
     source: str = "manual"
@@ -50,11 +52,10 @@ class MessageHouse(BaseModel):
     status: HouseStatus = HouseStatus.ACTIVE
     last_synced: datetime | None = None
 
-    class Config:
-        use_enum_values = True
-
 
 class KeyMessage(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     id: UUID = Field(default_factory=uuid4)
     message_house_id: UUID
     section_type: SectionType
@@ -64,9 +65,6 @@ class KeyMessage(BaseModel):
     personas: list[str] = Field(default_factory=list)
     channels: list[Channel] = Field(default_factory=lambda: [Channel.ALL])
     source_chunk_id: str | None = None
-
-    class Config:
-        use_enum_values = True
 
 
 class Persona(BaseModel):
@@ -80,6 +78,8 @@ class Persona(BaseModel):
 
 
 class GroundingChunk(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     id: str
     message_house_id: UUID
     key_message_id: UUID | None = None
@@ -91,9 +91,6 @@ class GroundingChunk(BaseModel):
     house_name: str = ""
     house_summary: str = ""
     last_synced: datetime | None = None
-
-    class Config:
-        use_enum_values = True
 
 
 class GroundingResult(BaseModel):

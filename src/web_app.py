@@ -34,11 +34,10 @@ from src.rate_limit import extract_limiter, generate_limiter
 
 app = FastAPI(title="MsgStack Admin", version="0.5.0", redirect_slashes=False)
 
-_cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_credentials=_cors_origins != ["*"],
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -52,6 +51,24 @@ store = init_store()
 
 skills = SkillManager(skills_dir=str(DATA_DIR / "skills"))
 structurer = HouseStructurer()
+
+import openai as _oai_mod
+_oai_client = _oai_mod.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+def _check_token_budget(workspace_id: str) -> None:
+    """Raise HTTP 402 if workspace token budget is exhausted."""
+    ws = store.get_workspace(workspace_id)
+    if not ws or ws.get("max_token_budget", 0) == 0:
+        return
+    usage = store.get_token_usage_summary(workspace_id=workspace_id)
+    used = usage.get("total_input_tokens", 0) + usage.get("total_output_tokens", 0)
+    if used >= ws["max_token_budget"]:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Token budget exhausted ({used:,} / {ws['max_token_budget']:,} tokens used). "
+                   "Increase max_token_budget via PATCH /api/workspaces/{id}.",
+        )
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -140,30 +157,30 @@ def _house_response(house: MessageHouse) -> dict:
 @app.get("/api/houses")
 def list_houses(query: Optional[str] = None, auth: AuthContext = Depends(get_auth_context)):
     workspace_filter = auth.workspace_id if settings.auth_enabled else None
-    houses = store.list_houses(workspace_id=workspace_filter)
+    rows = store.list_houses_with_counts(workspace_id=workspace_filter)
     result = []
-    for h in houses:
+    for row in rows:
+        h = row["house"]
         summary = h.summary or ""
         if query and query.lower() not in h.name.lower() and query.lower() not in summary.lower():
             continue
-        msgs = store.get_key_messages(h.id)
-        personas = store.get_personas(h.id)
-        completeness = _completeness_score_fast(h, msgs, personas)
+        mc, pc = row["message_count"], row["persona_count"]
+        completeness = _completeness_score_fast(h, mc, pc)
         result.append({
             "id": str(h.id),
             "name": h.name,
             "source": h.source,
             "status": h.status,
             "summary": summary[:150] + ("..." if len(summary) > 150 else ""),
-            "persona_count": len(personas),
-            "message_count": len(msgs),
+            "persona_count": pc,
+            "message_count": mc,
             "last_synced": h.last_synced.isoformat() if h.last_synced else None,
             "completeness_score": completeness,
         })
     return result
 
 
-def _completeness_score_fast(house, messages, personas) -> int:
+def _completeness_score_fast(house, message_count, persona_count) -> int:
     score = 0
     if house.name: score += 10
     if house.summary: score += 10
@@ -172,11 +189,9 @@ def _completeness_score_fast(house, messages, personas) -> int:
     if house.positioning: score += 15
     if house.tagline: score += 10
     if house.differentiation: score += 10
-    headlines = [m for m in messages if str(m.section_type).endswith("headline")]
-    if headlines: score += 10
-    benefits = [m for m in messages if str(m.section_type).endswith("benefit")]
-    if benefits: score += 10
-    if personas: score += 5
+    if message_count >= 3: score += 10
+    if message_count >= 6: score += 10
+    if persona_count >= 1: score += 5
     return min(score, 100)
 
 
@@ -401,6 +416,8 @@ async def extract_upload(
 
     Returns structured error JSON on failure with which stage failed.
     """
+    _check_token_budget(auth.workspace_id if settings.auth_enabled else "default")
+
     file_path = UPLOAD_DIR / file.filename
     save_upload(file.file, file_path)
 
@@ -416,13 +433,25 @@ async def extract_upload(
         source_name = Path(file.filename).stem
 
     try:
-        structured = structurer.structure(text, source_name=source_name)
+        structured, llm_usage = structurer.structure(text, source_name=source_name)
     except Exception as e:
         log.error("LLM structuring failed for %s: %s", file.filename, e)
         return JSONResponse(status_code=500, content={
             "status": "failed",
             "error": {"stage": "llm_structuring", "message": "LLM structuring failed", "detail": str(e)},
         })
+
+    try:
+        store.record_token_usage(
+            workspace_id=auth.workspace_id if settings.auth_enabled else "default",
+            endpoint="extract",
+            model="gpt-4o-mini",
+            input_tokens=llm_usage["input_tokens"],
+            output_tokens=llm_usage["output_tokens"],
+            cost_usd=estimate_cost_usd("gpt-4o-mini", llm_usage["input_tokens"], llm_usage["output_tokens"]),
+        )
+    except Exception:
+        pass
 
     try:
         house, indexed, markdown = _commit_structured_house(structured, file.filename)
@@ -474,13 +503,25 @@ async def preview_structure(
         source_name = Path(file.filename).stem
 
     try:
-        structured = structurer.structure(text, source_name=source_name)
+        structured, llm_usage = structurer.structure(text, source_name=source_name)
     except Exception as e:
         log.error("LLM structuring failed for %s: %s", file.filename, e)
         return JSONResponse(status_code=500, content={
             "status": "failed",
             "error": {"stage": "llm_structuring", "message": "LLM structuring failed", "detail": str(e)},
         })
+
+    try:
+        store.record_token_usage(
+            workspace_id=auth.workspace_id if settings.auth_enabled else "default",
+            endpoint="preview-structure",
+            model="gpt-4o-mini",
+            input_tokens=llm_usage["input_tokens"],
+            output_tokens=llm_usage["output_tokens"],
+            cost_usd=estimate_cost_usd("gpt-4o-mini", llm_usage["input_tokens"], llm_usage["output_tokens"]),
+        )
+    except Exception:
+        pass
 
     _evict_preview_cache()
     token = str(_uuid.uuid4())
@@ -870,6 +911,20 @@ def generate_artifact(
         artifact_type = skill_id if skill_id in visual_types else None
         visual_url = f"{settings.base_url}/artifact/{artifact_type}/{house_id}" if artifact_type else None
 
+        # Record token usage
+        if artifact.input_tokens or artifact.output_tokens:
+            try:
+                store.record_token_usage(
+                    workspace_id=auth.workspace_id if settings.auth_enabled else "default",
+                    endpoint="generate",
+                    model="gpt-4o-mini",
+                    input_tokens=artifact.input_tokens,
+                    output_tokens=artifact.output_tokens,
+                    cost_usd=estimate_cost_usd("gpt-4o-mini", artifact.input_tokens, artifact.output_tokens),
+                )
+            except Exception:
+                pass
+
         # Auto-save to artifact history
         try:
             saved = store.save_artifact(
@@ -929,8 +984,7 @@ def generate_section(house_id: str = Form(...), section: str = Form(...)):
         positioning=h.positioning or h.summary or "",
     )
 
-    import openai as _oai
-    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    client = _oai_client
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -962,8 +1016,7 @@ def improve_message(msg_id: str):
     house = store.get_house(msg.message_house_id)
     positioning = house.positioning if house else ""
 
-    import openai as _oai
-    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    client = _oai_client
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1001,8 +1054,7 @@ def generate_variant(msg_id: str, channel: str = Form(...)):
     }
     guidance = channel_guidance.get(channel, f"{channel} version")
 
-    import openai as _oai
-    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    client = _oai_client
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1045,8 +1097,7 @@ def generate_persona(data: GeneratePersonaRequest):
     if not house:
         raise HTTPException(404, "House not found")
 
-    import openai as _oai
-    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    client = _oai_client
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1117,9 +1168,8 @@ def check_tone(house_id: str):
 
     samples = [m.content for m in messages[:12]]
 
-    import openai as _oai
     import json as _json
-    client = _oai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    client = _oai_client
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1495,8 +1545,17 @@ def cost_estimate(model: str = "gpt-4o-mini", input_tokens: int = 0, output_toke
 
 
 @app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)
-def serve_artifact(artifact_type: str, house_id: str, stage: str = "awareness", channels: str = "linkedin", competitor: str = ""):
+def serve_artifact(
+    artifact_type: str,
+    house_id: str,
+    stage: str = "awareness",
+    channels: str = "linkedin",
+    competitor: str = "",
+    auth: AuthContext = Depends(get_auth_context),
+):
     """Serve a standalone HTML artifact page for a message house."""
+    if settings.auth_enabled and "read" not in auth.scopes:
+        raise HTTPException(403, "Read scope required to view artifacts.")
     try:
         hid = UUID(house_id)
     except ValueError:

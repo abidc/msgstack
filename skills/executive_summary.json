@@ -1,0 +1,37 @@
+{
+  "id": "executive_summary",
+  "name": "Executive Summary",
+  "description": "C-level briefing format \u2014 business case, strategic fit, and decision criteria.",
+  "channels": [
+    "all"
+  ],
+  "sections": [
+    {
+      "key": "situation",
+      "label": "Situation",
+      "required": true
+    },
+    {
+      "key": "complication",
+      "label": "Complication / Risk",
+      "required": true
+    },
+    {
+      "key": "resolution",
+      "label": "Resolution / Recommendation",
+      "required": true
+    },
+    {
+      "key": "business_case",
+      "label": "Business Case",
+      "required": true
+    },
+    {
+      "key": "next_steps",
+      "label": "Next Steps",
+      "required": true
+    }
+  ],
+  "prompt_template": "Write an executive summary for {house_name} targeted at C-level decision makers.\n\nGrounded in: {positioning}\nKey proof points: {key_messages}\nTarget executive persona: {persona}\n\nUse the SCR (Situation-Complication-Resolution) framework:\n1. Situation (1 paragraph): The current state \u2014 what is the executive already dealing with?\n2. Complication (1 paragraph): What's the problem or risk if nothing changes?\n3. Resolution (1 paragraph): How {house_name} addresses it specifically\n4. Business case (bullet points): 3 quantified outcomes or ROI data points\n5. Next steps: 2-3 low-friction action items with owners and timeline\n\nRules:\n- No jargon, no product feature lists\n- Lead with business outcomes, not capabilities\n- Under 400 words total\n- Each section starts with a bold topic sentence",
+  "prefab_template": "executive_summary"
+}

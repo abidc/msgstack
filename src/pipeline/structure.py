@@ -143,18 +143,21 @@ class HouseStructurer:
         self.client = OpenAI(api_key=openai_api_key or os.environ.get("OPENAI_API_KEY"))
         self.model = model
 
-    def structure(self, text: str, source_name: str = "Untitled Source") -> StructuredHouse:
-        """Run the structurer LLM on raw text and return a StructuredHouse.
+    def structure(self, text: str, source_name: str = "Untitled Source") -> "tuple[StructuredHouse, dict]":
+        """Run the structurer LLM on raw text and return (StructuredHouse, usage_dict).
 
+        usage_dict has keys: input_tokens, output_tokens.
         For documents >24k chars, splits into overlapping chunks, structures each,
         then merges results.
         """
+        self._usage: dict = {"input_tokens": 0, "output_tokens": 0}
         if len(text) <= self.MAX_SINGLE_CHUNK:
-            return self._structure_single_chunk(text, source_name)
-
-        chunks = self._split_text(text)
-        houses = [self._structure_single_chunk(chunk, source_name) for chunk in chunks]
-        return self._merge_structures(houses, source_name)
+            house = self._structure_single_chunk(text, source_name)
+        else:
+            chunks = self._split_text(text)
+            houses = [self._structure_single_chunk(chunk, source_name) for chunk in chunks]
+            house = self._merge_structures(houses, source_name)
+        return house, dict(self._usage)
 
     def _split_text(self, text: str) -> list[str]:
         """Split text at paragraph boundaries into ~CHUNK_SIZE char chunks."""
@@ -200,14 +203,16 @@ class HouseStructurer:
                     max_tokens=4000,
                     timeout=90,
                 )
+                if hasattr(self, "_usage") and response.usage:
+                    self._usage["input_tokens"] += response.usage.prompt_tokens
+                    self._usage["output_tokens"] += response.usage.completion_tokens
                 return response.choices[0].message.content
             except (APITimeoutError, RateLimitError) as e:
                 last_exc = e
                 if attempt < max_retries - 1:
                     time.sleep(delay)
                     delay *= 2
-            except APIError as e:
-                # Non-retryable API errors (bad request, auth, etc.)
+            except APIError:
                 raise
         raise last_exc
 

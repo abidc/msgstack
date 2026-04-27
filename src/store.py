@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -104,12 +105,12 @@ class HouseModel(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str] = mapped_column(String(50), default="manual")
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    summary: Mapped[str] = mapped_column(String(1000), default="")
-    audience: Mapped[str] = mapped_column(String(500), default="")
-    brand_personality: Mapped[str] = mapped_column(String(1000), default="")
-    positioning: Mapped[str] = mapped_column(String(2000), default="")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    audience: Mapped[str] = mapped_column(Text, default="")
+    brand_personality: Mapped[str] = mapped_column(Text, default="")
+    positioning: Mapped[str] = mapped_column(Text, default="")
     tagline: Mapped[str] = mapped_column(String(500), default="")
-    differentiation: Mapped[str] = mapped_column(String(1000), default="")
+    differentiation: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="active")
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -130,7 +131,7 @@ class KeyMessageModel(Base):
     )
     section_type: Mapped[str] = mapped_column(String(30), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
-    content: Mapped[str] = mapped_column(String(2000), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
     variants: Mapped[dict] = mapped_column(JSON, default=dict)
     personas: Mapped[list] = mapped_column(JSON, default=list)
     channels: Mapped[list] = mapped_column(JSON, default=["all"])
@@ -178,6 +179,16 @@ class ArtifactHistoryModel(Base):
     sections_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     raw_content: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+# Performance indexes on high-cardinality FK / filter columns
+Index("ix_km_house_id", KeyMessageModel.message_house_id)
+Index("ix_persona_house_id", PersonaModel.message_house_id)
+Index("ix_snapshot_house_id", SnapshotModel.house_id)
+Index("ix_artifact_house_id", ArtifactHistoryModel.house_id)
+Index("ix_token_usage_workspace", TokenUsageModel.workspace_id)
+Index("ix_api_key_workspace", ApiKeyModel.workspace_id)
+Index("ix_house_workspace", HouseModel.workspace_id)
 
 
 class Store:
@@ -614,6 +625,40 @@ class Store:
                 q = q.filter(HouseModel.workspace_id == workspace_id)
             rows = q.all()
             return [_house_from_row(r) for r in rows]
+
+    def list_houses_with_counts(self, workspace_id: str | None = None) -> list[dict]:
+        """Return houses with pre-aggregated message/persona counts — avoids N+1."""
+        from sqlalchemy import func
+        with self.session() as s:
+            msg_counts = (
+                s.query(KeyMessageModel.message_house_id, func.count().label("cnt"))
+                .group_by(KeyMessageModel.message_house_id)
+                .subquery()
+            )
+            persona_counts = (
+                s.query(PersonaModel.message_house_id, func.count().label("cnt"))
+                .group_by(PersonaModel.message_house_id)
+                .subquery()
+            )
+            q = (
+                s.query(
+                    HouseModel,
+                    func.coalesce(msg_counts.c.cnt, 0).label("message_count"),
+                    func.coalesce(persona_counts.c.cnt, 0).label("persona_count"),
+                )
+                .outerjoin(msg_counts, HouseModel.id == msg_counts.c.message_house_id)
+                .outerjoin(persona_counts, HouseModel.id == persona_counts.c.message_house_id)
+            )
+            if workspace_id and workspace_id != "all":
+                q = q.filter(HouseModel.workspace_id == workspace_id)
+            return [
+                {
+                    "house": _house_from_row(row),
+                    "message_count": int(mc),
+                    "persona_count": int(pc),
+                }
+                for row, mc, pc in q.all()
+            ]
 
 
 def _house_from_row(row: HouseModel) -> MessageHouse:

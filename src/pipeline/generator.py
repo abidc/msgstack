@@ -25,6 +25,8 @@ class GeneratedArtifact(BaseModel):
     sections: dict
     raw_content: str
     grounded_messages: list[str]
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class ArtifactGenerator:
@@ -70,7 +72,6 @@ class ArtifactGenerator:
 
         raw = response.choices[0].message.content
         sections = self._parse_sections(raw, skill)
-
         grounded = [m.content for m in messages[:5]]
 
         return GeneratedArtifact(
@@ -80,6 +81,8 @@ class ArtifactGenerator:
             sections=sections,
             raw_content=raw,
             grounded_messages=grounded,
+            input_tokens=response.usage.prompt_tokens if response.usage else 0,
+            output_tokens=response.usage.completion_tokens if response.usage else 0,
         )
 
     def _build_context(

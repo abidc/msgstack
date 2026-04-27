@@ -277,6 +277,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v8M8 12h8"/></svg>
                 Seed & Index
             </div>
+            <div class="nav-item" data-view="settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41-1.41-2.12 1.22a7 7 0 0 0-1.73-.73L13.5 2h-3l-.31 1.97a7 7 0 0 0-1.73.73L6.34 3.52 4.93 4.93 6.15 7.05a7 7 0 0 0-.73 1.73L3.5 9.06v3l1.97.31a7 7 0 0 0 .73 1.73L4.93 16.24l1.41 1.41 2.12-1.22a7 7 0 0 0 1.73.73L10.5 19h3l.31-1.97a7 7 0 0 0 1.73-.73l2.12 1.22 1.41-1.41-1.22-2.12a7 7 0 0 0 .73-1.73l1.97-.31v-3l-1.97-.31a7 7 0 0 0-.73-1.73z"/></svg>
+                Settings
+            </div>
         </nav>
         <div class="sidebar-footer">v0.3 · msgstack MCP</div>
     </aside>
@@ -689,6 +693,104 @@
             </div>
         </section>
 
+        <!-- ── Settings ── -->
+        <section id="settings" class="section">
+            <div class="page">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">Settings</div>
+                        <div class="page-subtitle">API keys, token usage, and workspace management</div>
+                    </div>
+                </div>
+
+                <!-- API Keys -->
+                <div class="card" style="margin-bottom:24px;">
+                    <div class="card-header">
+                        <span class="card-title">API Keys</span>
+                    </div>
+                    <form onsubmit="createApiKey(event)" style="margin-bottom:20px;">
+                        <div class="form-row" style="margin-bottom:14px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Key Name</label>
+                                <input class="form-input" id="apikey-name" type="text" placeholder="e.g. production-key" required>
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Workspace</label>
+                                <input class="form-input" id="apikey-workspace" type="text" placeholder="default" value="default">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Scopes</label>
+                            <div style="display:flex;gap:16px;margin-top:4px;">
+                                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);cursor:pointer;">
+                                    <input type="checkbox" id="scope-read" value="read" checked style="accent-color:var(--primary);"> read
+                                </label>
+                                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);cursor:pointer;">
+                                    <input type="checkbox" id="scope-write" value="write" style="accent-color:var(--primary);"> write
+                                </label>
+                                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);cursor:pointer;">
+                                    <input type="checkbox" id="scope-admin" value="admin" style="accent-color:var(--primary);"> admin
+                                </label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Create API Key
+                        </button>
+                    </form>
+                    <div id="apikey-created-box" style="display:none;margin-bottom:18px;">
+                        <div style="padding:14px 16px;background:var(--warn-dim);border:1px solid rgba(251,191,36,0.35);border-radius:var(--radius);margin-bottom:8px;">
+                            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warn);margin-bottom:6px;">Copy now — won't be shown again</div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <code id="apikey-created-value" style="flex:1;font-family:'SF Mono','Fira Code',monospace;font-size:12.5px;color:var(--text);word-break:break-all;"></code>
+                                <button class="btn btn-ghost btn-sm" onclick="copyCreatedKey()">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+                    <hr class="divider">
+                    <div id="apikeys-list"><div style="font-size:13px;color:var(--text-3);padding:8px 0;">Loading…</div></div>
+                </div>
+
+                <!-- Token Usage -->
+                <div class="card" style="margin-bottom:24px;">
+                    <div class="card-header">
+                        <span class="card-title">Token Usage</span>
+                        <button class="btn btn-ghost btn-sm" onclick="loadTokenUsage()">Refresh</button>
+                    </div>
+                    <div id="token-usage-content"><div style="font-size:13px;color:var(--text-3);padding:8px 0;">Loading…</div></div>
+                </div>
+
+                <!-- Workspaces -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Workspaces</span>
+                    </div>
+                    <form onsubmit="createWorkspace(event)" style="margin-bottom:20px;">
+                        <div class="form-row" style="margin-bottom:14px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Slug</label>
+                                <input class="form-input" id="ws-slug" type="text" placeholder="e.g. acme-q2" required>
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Name</label>
+                                <input class="form-input" id="ws-name" type="text" placeholder="e.g. Acme Q2 2026" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Max Token Budget <span style="text-transform:none;font-weight:400;">(0 = unlimited)</span></label>
+                            <input class="form-input" id="ws-budget" type="number" min="0" value="0" style="max-width:180px;">
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Create Workspace
+                        </button>
+                    </form>
+                    <hr class="divider">
+                    <div id="workspaces-list"><div style="font-size:13px;color:var(--text-3);padding:8px 0;">Loading…</div></div>
+                </div>
+            </div>
+        </section>
+
     </main>
 </div>
 
@@ -869,6 +971,7 @@ function showView(viewId) {
     if (viewId === 'upload') resetUpload();
     if (viewId === 'skills') loadSkills();
     if (viewId === 'artifacts') loadArtifactHouses();
+    if (viewId === 'settings') { loadSettings(); loadTokenUsage(); }
 }
 
 // ── Toast ────────────────────────────────────────────────────────────────────
@@ -2028,6 +2131,182 @@ generateArtifact = async function() {
 function copySectionContent(btn) {
     const content = btn.closest('.section-block')?.querySelector('.section-block-content')?.textContent || '';
     navigator.clipboard.writeText(content).then(() => toast('Copied', 'success'));
+}
+
+// ── Settings helpers ──────────────────────────────────────────────────────────
+function _authHeaders() {
+    const key = localStorage.getItem('msgstack_api_key');
+    const h = { 'Content-Type': 'application/json' };
+    if (key) h['Authorization'] = `Bearer ${key}`;
+    return h;
+}
+
+async function loadSettings() {
+    const el = document.getElementById('apikeys-list');
+    if (!el) return;
+    try {
+        const res = await fetch(`${API}/api-keys`, { headers: _authHeaders() });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const keys = Array.isArray(data) ? data : (data.items || data.keys || []);
+        if (!keys.length) {
+            el.innerHTML = '<div style="font-size:13px;color:var(--text-3);padding:8px 0;">No API keys yet.</div>';
+            return;
+        }
+        el.innerHTML = `<table class="table">
+            <thead><tr>
+                <th>Name</th><th>Workspace</th><th>Scopes</th><th>Active</th><th>Last Used</th><th></th>
+            </tr></thead>
+            <tbody>${keys.map(k => `<tr>
+                <td style="font-size:13px;">${k.name || '—'}</td>
+                <td style="font-size:13px;">${k.workspace_id || '—'}</td>
+                <td>${(k.scopes || []).map(s => `<span class="badge badge-default" style="margin-right:3px;">${s}</span>`).join('')}</td>
+                <td>${k.is_active ? '<span class="badge badge-success">active</span>' : '<span class="badge badge-danger">revoked</span>'}</td>
+                <td style="font-size:12px;color:var(--text-3);">${k.last_used_at ? new Date(k.last_used_at).toLocaleString() : 'Never'}</td>
+                <td><button class="btn btn-danger btn-xs" onclick="revokeApiKey('${k.id}')">Revoke</button></td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+    } catch (e) {
+        el.innerHTML = `<div style="font-size:13px;color:var(--danger);">Failed to load keys: ${e.message}</div>`;
+    }
+    loadWorkspaces();
+}
+
+async function createApiKey(evt) {
+    evt.preventDefault();
+    const name = document.getElementById('apikey-name').value.trim();
+    const workspace_id = document.getElementById('apikey-workspace').value.trim() || 'default';
+    const scopes = ['read', 'write', 'admin']
+        .filter(s => document.getElementById(`scope-${s}`)?.checked);
+    const btn = evt.target.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+        const res = await fetch(`${API}/api-keys`, {
+            method: 'POST',
+            headers: _authHeaders(),
+            body: JSON.stringify({ name, workspace_id, scopes })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const rawKey = data.key || data.api_key || data.token || '';
+        if (rawKey) {
+            localStorage.setItem('msgstack_api_key', rawKey);
+            const box = document.getElementById('apikey-created-box');
+            document.getElementById('apikey-created-value').textContent = rawKey;
+            box.style.display = 'block';
+        }
+        evt.target.reset();
+        document.getElementById('apikey-workspace').value = 'default';
+        document.getElementById('scope-read').checked = true;
+        toast('API key created', 'success');
+        await loadSettings();
+    } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+    }
+    btn.disabled = false;
+}
+
+function copyCreatedKey() {
+    const val = document.getElementById('apikey-created-value').textContent;
+    navigator.clipboard.writeText(val).then(() => toast('Copied to clipboard', 'success'));
+}
+
+async function revokeApiKey(id) {
+    if (!confirm('Revoke this API key? This cannot be undone.')) return;
+    try {
+        const res = await fetch(`${API}/api-keys/${id}`, {
+            method: 'DELETE',
+            headers: _authHeaders()
+        });
+        if (!res.ok) throw new Error(await res.text());
+        toast('Key revoked', 'success');
+        await loadSettings();
+    } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+    }
+}
+
+async function loadTokenUsage() {
+    const el = document.getElementById('token-usage-content');
+    if (!el) return;
+    try {
+        const res = await fetch(`${API}/token-usage`, { headers: _authHeaders() });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const totalIn = data.total_input_tokens ?? 0;
+        const totalOut = data.total_output_tokens ?? 0;
+        const totalCost = data.total_cost_usd ?? 0;
+        const byEndpoint = data.by_endpoint || [];
+        el.innerHTML = `
+            <div class="stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+                <div class="stat"><div class="stat-value" style="font-size:22px;">${totalIn.toLocaleString()}</div><div class="stat-label">Input Tokens</div></div>
+                <div class="stat"><div class="stat-value" style="font-size:22px;">${totalOut.toLocaleString()}</div><div class="stat-label">Output Tokens</div></div>
+                <div class="stat"><div class="stat-value" style="font-size:22px;">$${Number(totalCost).toFixed(6)}</div><div class="stat-label">Total Cost (USD)</div></div>
+            </div>
+            ${byEndpoint.length ? `<table class="table">
+                <thead><tr><th>Endpoint</th><th>Calls</th><th>Input Tokens</th><th>Output Tokens</th><th>Cost</th></tr></thead>
+                <tbody>${byEndpoint.map(r => `<tr>
+                    <td style="font-size:13px;font-family:'SF Mono','Fira Code',monospace;">${r.endpoint || r.name || '—'}</td>
+                    <td style="font-size:13px;">${(r.calls ?? r.count ?? 0).toLocaleString()}</td>
+                    <td style="font-size:13px;">${(r.input_tokens ?? 0).toLocaleString()}</td>
+                    <td style="font-size:13px;">${(r.output_tokens ?? 0).toLocaleString()}</td>
+                    <td style="font-size:13px;">$${Number(r.cost_usd ?? r.cost ?? 0).toFixed(6)}</td>
+                </tr>`).join('')}</tbody>
+            </table>` : '<div style="font-size:13px;color:var(--text-3);">No endpoint data yet.</div>'}`;
+    } catch (e) {
+        el.innerHTML = `<div style="font-size:13px;color:var(--danger);">Failed to load usage: ${e.message}</div>`;
+    }
+}
+
+async function loadWorkspaces() {
+    const el = document.getElementById('workspaces-list');
+    if (!el) return;
+    try {
+        const res = await fetch(`${API}/workspaces`, { headers: _authHeaders() });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const workspaces = Array.isArray(data) ? data : (data.items || data.workspaces || []);
+        if (!workspaces.length) {
+            el.innerHTML = '<div style="font-size:13px;color:var(--text-3);padding:8px 0;">No workspaces yet.</div>';
+            return;
+        }
+        el.innerHTML = `<table class="table">
+            <thead><tr><th>Slug</th><th>Name</th><th>Max Budget</th><th>Houses</th><th>Total Cost</th></tr></thead>
+            <tbody>${workspaces.map(w => `<tr>
+                <td><span class="inline-code">${w.slug || '—'}</span></td>
+                <td style="font-size:13px;">${w.name || '—'}</td>
+                <td style="font-size:13px;">${w.max_token_budget ? Number(w.max_token_budget).toLocaleString() : 'Unlimited'}</td>
+                <td style="font-size:13px;">${w.house_count ?? '—'}</td>
+                <td style="font-size:13px;">${w.token_usage?.total_cost_usd != null ? '$' + Number(w.token_usage.total_cost_usd).toFixed(6) : '—'}</td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+    } catch (e) {
+        el.innerHTML = `<div style="font-size:13px;color:var(--danger);">Failed to load workspaces: ${e.message}</div>`;
+    }
+}
+
+async function createWorkspace(evt) {
+    evt.preventDefault();
+    const slug = document.getElementById('ws-slug').value.trim();
+    const name = document.getElementById('ws-name').value.trim();
+    const max_token_budget = parseInt(document.getElementById('ws-budget').value || '0', 10);
+    const btn = evt.target.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+        const res = await fetch(`${API}/workspaces`, {
+            method: 'POST',
+            headers: _authHeaders(),
+            body: JSON.stringify({ slug, name, max_token_budget })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        evt.target.reset();
+        document.getElementById('ws-budget').value = '0';
+        toast('Workspace created', 'success');
+        await loadWorkspaces();
+    } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+    }
+    btn.disabled = false;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
