@@ -29,6 +29,14 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - Workspace "invites" still manual via API
 - Static visual artifacts (interactive React-based artifacts in backlog)
 
+**Latest updates (April 2026):**
+- Drag-to-reorder key messages in UI
+- Bulk CSV import for messages
+- Snapshot diff view
+- Completion milestone toast notifications
+- PDF download for artifacts
+- QA review: workspace isolation, API consistency, security hardening
+
 ---
 
 ## v0.2 — Hardening & Quality
@@ -83,7 +91,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - [x] "Generate missing section" for all required fields
 - [x] "Improve" button per key message — suggest a stronger version via LLM
 - [x] "Generate persona" from a job title input
-- [ ] "Check tone" — analyze a message against the framework's `brand_personality`
+- [x] "Check tone" — analyze a message against the framework's `brand_personality`
 
 ### Framework Versioning
 - [x] Snapshot a framework before making changes (store as JSON blob)
@@ -94,7 +102,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 ### Completeness Improvements
 - [x] Completeness score visible in framework list (badge/progress bar per row)
 - [ ] "Fix it" quick actions from the completeness checker — jump directly to missing section
-- [ ] Completion milestone notifications
+- [x] Completion milestone notifications
 
 ### Key Message Variants
 - [x] UI for adding channel-specific variants per message (LinkedIn, email, paid, Twitter)
