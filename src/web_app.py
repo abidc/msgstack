@@ -4,34 +4,41 @@ import logging
 import os
 import time
 import uuid as _uuid
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
+load_dotenv()
 
+from src.config import settings, estimate_cost_usd
+from src.logging_config import configure_logging
+configure_logging()
+
+log = logging.getLogger(__name__)
+
+from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
 from src.models import Channel, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
-from src.store import Store
+from src.store import init_store
 from src.pipeline.extract import ExtractionError, extract_text, chunk_text, save_upload
 from src.pipeline.structure import HouseStructurer, StructuredHouse
 from src.pipeline.skills import SkillManager
+from src.rate_limit import extract_limiter, generate_limiter
 
-load_dotenv()
+app = FastAPI(title="MsgStack Admin", version="0.5.0", redirect_slashes=False)
 
-app = FastAPI(title="MsgStack Admin", version="0.1.0", redirect_slashes=False)
-
+_cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -41,15 +48,27 @@ DATA_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-store = Store("msgstack.db")
-store.init()
+store = init_store()
 
 skills = SkillManager(skills_dir=str(DATA_DIR / "skills"))
 structurer = HouseStructurer()
 
-# In-memory cache for preview-structure → confirm-structure flow
-# Maps preview_token → (StructuredHouse, source_name, original_file_path)
+def _now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+# In-memory cache for preview-structure → confirm-structure flow (token → (structured, name, path, ts))
 _preview_cache: dict[str, tuple] = {}
+_PREVIEW_TTL = 3600  # 1 hour
+
+def _evict_preview_cache() -> None:
+    cutoff = time.time() - _PREVIEW_TTL
+    stale = [k for k, v in _preview_cache.items() if len(v) > 3 and v[3] < cutoff]
+    for k in stale:
+        del _preview_cache[k]
+
+# In-memory metrics accumulator
+_metrics: dict = defaultdict(lambda: {"requests": 0, "errors": 0, "total_ms": 0.0})
+_start_time = time.time()
 
 
 @app.middleware("http")
@@ -57,7 +76,18 @@ async def log_requests(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     elapsed_ms = (time.perf_counter() - start) * 1000
-    log.info("%s %s → %d  (%.1fms)", request.method, request.url.path, response.status_code, elapsed_ms)
+    path = request.url.path
+    log.info(
+        "%s %s → %d  (%.1fms)",
+        request.method, path, response.status_code, elapsed_ms,
+        extra={"endpoint": path, "latency_ms": round(elapsed_ms, 1), "status": response.status_code},
+    )
+    # Accumulate metrics
+    key = f"{request.method} {path}"
+    _metrics[key]["requests"] += 1
+    _metrics[key]["total_ms"] += elapsed_ms
+    if response.status_code >= 400:
+        _metrics[key]["errors"] += 1
     return response
 
 
@@ -108,28 +138,28 @@ def _house_response(house: MessageHouse) -> dict:
 # --- Houses ---
 
 @app.get("/api/houses")
-def list_houses(query: Optional[str] = None):
-    houses = store.list_houses()
+def list_houses(query: Optional[str] = None, auth: AuthContext = Depends(get_auth_context)):
+    workspace_filter = auth.workspace_id if settings.auth_enabled else None
+    houses = store.list_houses(workspace_id=workspace_filter)
     result = []
     for h in houses:
+        summary = h.summary or ""
+        if query and query.lower() not in h.name.lower() and query.lower() not in summary.lower():
+            continue
         msgs = store.get_key_messages(h.id)
         personas = store.get_personas(h.id)
         completeness = _completeness_score_fast(h, msgs, personas)
-        item = {
+        result.append({
             "id": str(h.id),
             "name": h.name,
             "source": h.source,
             "status": h.status,
-            "summary": h.summary[:150] + ("..." if len(h.summary) > 150 else ""),
+            "summary": summary[:150] + ("..." if len(summary) > 150 else ""),
             "persona_count": len(personas),
             "message_count": len(msgs),
             "last_synced": h.last_synced.isoformat() if h.last_synced else None,
             "completeness_score": completeness,
-        }
-        if query:
-            if query.lower() not in h.name.lower() and query.lower() not in h.summary.lower():
-                continue
-        result.append(item)
+        })
     return result
 
 
@@ -185,7 +215,7 @@ def create_house(data: HouseCreate):
         tagline=data.tagline,
         differentiation=data.differentiation,
         status=HouseStatus(data.status),
-        last_synced=datetime.utcnow(),
+        last_synced=_now(),
     )
     store.upsert_house(house)
     return {"id": str(house.id), "name": house.name}
@@ -364,6 +394,8 @@ async def upload_source(file: UploadFile = File(...)):
 async def extract_upload(
     file: UploadFile = File(...),
     source_name: str = Form(""),
+    _rl: None = Depends(extract_limiter),
+    auth: AuthContext = Depends(require_write),
 ):
     """Upload a file, extract text, structure it, and save as a MessageHouse.
 
@@ -419,6 +451,8 @@ async def extract_upload(
 async def preview_structure(
     file: UploadFile = File(...),
     source_name: str = Form(""),
+    _rl: None = Depends(extract_limiter),
+    auth: AuthContext = Depends(require_write),
 ):
     """Extract and structure a file but do NOT save to DB.
 
@@ -448,8 +482,9 @@ async def preview_structure(
             "error": {"stage": "llm_structuring", "message": "LLM structuring failed", "detail": str(e)},
         })
 
+    _evict_preview_cache()
     token = str(_uuid.uuid4())
-    _preview_cache[token] = (structured, source_name, str(file_path))
+    _preview_cache[token] = (structured, source_name, str(file_path), time.time())
 
     return {
         "status": "preview",
@@ -481,7 +516,7 @@ async def confirm_structure(data: dict):
     if not token or token not in _preview_cache:
         raise HTTPException(400, "Invalid or expired preview_token")
 
-    structured, source_name, file_path_str = _preview_cache.pop(token)
+    structured, source_name, file_path_str, *_ = _preview_cache.pop(token)
 
     # Apply any user edits to top-level fields
     edits = data.get("edits", {})
@@ -529,7 +564,7 @@ def _commit_structured_house(structured: StructuredHouse, filename: str) -> tupl
         tagline=structured.tagline,
         differentiation=structured.differentiation,
         status=HouseStatus.ACTIVE,
-        last_synced=datetime.utcnow(),
+        last_synced=_now(),
     )
     store.upsert_house(house)
 
@@ -778,7 +813,6 @@ def get_house_index_status(house_id: str):
         # Check staleness: compare last_synced in vector metadata vs house.last_synced
         meta_synced_str = matches[0].get("metadata", {}).get("last_synced")
         if meta_synced_str and house.last_synced:
-            from datetime import timezone
             meta_dt = datetime.fromisoformat(meta_synced_str)
             house_dt = house.last_synced
             # Make both offset-naive for comparison
@@ -802,33 +836,17 @@ def get_house_index_status(house_id: str):
 # --- Internal helpers ---
 
 def _find_message(msg_id: str) -> Optional[KeyMessage]:
-    for h in store.list_houses():
-        for m in store.get_key_messages(h.id):
-            if str(m.id) == msg_id:
-                return m
-    return None
+    try:
+        return store.get_key_message(UUID(msg_id))
+    except (ValueError, Exception):
+        return None
 
 
 def _find_persona(persona_id: str) -> Optional[Persona]:
-    for h in store.list_houses():
-        for p in store.get_personas(h.id):
-            if str(p.id) == persona_id:
-                return p
-    return None
-
-
-def _delete_message(msg_id: str) -> bool:
     try:
-        return store.delete_key_message(UUID(msg_id))
-    except Exception:
-        return False
-
-
-def _delete_persona(persona_id: str) -> bool:
-    try:
-        return store.delete_persona(UUID(persona_id))
-    except Exception:
-        return False
+        return store.get_persona(UUID(persona_id))
+    except (ValueError, Exception):
+        return None
 
 
 # --- Artifact Generation & Preview ---
@@ -838,6 +856,8 @@ def generate_artifact(
     skill_id: str = Form(...),
     house_id: str = Form(...),
     custom_context: Optional[dict] = Form(None),
+    _rl: None = Depends(generate_limiter),
+    auth: AuthContext = Depends(require_read),
 ):
     """Generate an artifact using a skill and return content for preview."""
     from src.pipeline.generator import ArtifactGenerator
@@ -848,8 +868,7 @@ def generate_artifact(
         artifact = generator.generate(skill_id, house_id, custom_context or {})
         visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
         artifact_type = skill_id if skill_id in visual_types else None
-        base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
-        visual_url = f"{base_url}/artifact/{artifact_type}/{house_id}" if artifact_type else None
+        visual_url = f"{settings.base_url}/artifact/{artifact_type}/{house_id}" if artifact_type else None
 
         # Auto-save to artifact history
         try:
@@ -921,6 +940,14 @@ def generate_section(house_id: str = Form(...), section: str = Form(...)):
         temperature=0.5,
         max_tokens=600,
     )
+    store.record_token_usage(
+        workspace_id="default",
+        endpoint="generate-section",
+        model="gpt-4o-mini",
+        input_tokens=resp.usage.prompt_tokens,
+        output_tokens=resp.usage.completion_tokens,
+        cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
+    )
     return {"section": section, "content": resp.choices[0].message.content.strip()}
 
 
@@ -932,8 +959,7 @@ def improve_message(msg_id: str):
     msg = _find_message(msg_id)
     if not msg:
         raise HTTPException(404, "Message not found")
-    houses = store.list_houses()
-    house = next((h for h in houses if any(str(m.id) == msg_id for m in store.get_key_messages(h.id))), None)
+    house = store.get_house(msg.message_house_id)
     positioning = house.positioning if house else ""
 
     import openai as _oai
@@ -946,6 +972,14 @@ def improve_message(msg_id: str):
         ],
         temperature=0.6,
         max_tokens=300,
+    )
+    store.record_token_usage(
+        workspace_id="default",
+        endpoint="improve-message",
+        model="gpt-4o-mini",
+        input_tokens=resp.usage.prompt_tokens,
+        output_tokens=resp.usage.completion_tokens,
+        cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
     )
     return {"original": msg.content, "improved": resp.choices[0].message.content.strip()}
 
@@ -979,6 +1013,14 @@ def generate_variant(msg_id: str, channel: str = Form(...)):
         max_tokens=200,
     )
     variant_text = resp.choices[0].message.content.strip()
+    store.record_token_usage(
+        workspace_id="default",
+        endpoint="generate-variant",
+        model="gpt-4o-mini",
+        input_tokens=resp.usage.prompt_tokens,
+        output_tokens=resp.usage.completion_tokens,
+        cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
+    )
 
     # Save the variant back to the message
     variants = dict(msg.variants or {})
@@ -1025,6 +1067,14 @@ Return JSON:
         response_format={"type": "json_object"},
         temperature=0.5,
         max_tokens=400,
+    )
+    store.record_token_usage(
+        workspace_id="default",
+        endpoint="generate-persona",
+        model="gpt-4o-mini",
+        input_tokens=resp.usage.prompt_tokens,
+        output_tokens=resp.usage.completion_tokens,
+        cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
     )
     try:
         import json as _json
@@ -1091,6 +1141,14 @@ Identify which messages (if any) are inconsistent with the brand personality. Re
         response_format={"type": "json_object"},
         temperature=0.3,
         max_tokens=600,
+    )
+    store.record_token_usage(
+        workspace_id="default",
+        endpoint="check-tone",
+        model="gpt-4o-mini",
+        input_tokens=resp.usage.prompt_tokens,
+        output_tokens=resp.usage.completion_tokens,
+        cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
     )
     try:
         result = _json.loads(resp.choices[0].message.content)
@@ -1280,6 +1338,160 @@ def _completeness_score(house: MessageHouse) -> int:
     if benefits: score += 10
     if personas: score += 5
     return min(score, 100)
+
+
+# --- Health + Metrics ---
+
+@app.get("/health")
+def health():
+    """Production health check — returns 200 when the DB is reachable."""
+    try:
+        store.list_workspaces()
+        db_ok = True
+    except Exception:
+        db_ok = False
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "db": "ok" if db_ok else "error",
+        "uptime_seconds": round(time.time() - _start_time),
+        "version": "0.5.0",
+        "auth_enabled": settings.auth_enabled,
+    }
+
+
+@app.get("/api/metrics")
+def get_metrics(auth: AuthContext = Depends(require_read)):
+    """Request metrics + token usage summary."""
+    top = sorted(_metrics.items(), key=lambda x: x[1]["requests"], reverse=True)[:20]
+    return {
+        "uptime_seconds": round(time.time() - _start_time),
+        "endpoints": [
+            {
+                "path": k,
+                "requests": v["requests"],
+                "errors": v["errors"],
+                "avg_latency_ms": round(v["total_ms"] / max(v["requests"], 1), 1),
+            }
+            for k, v in top
+        ],
+        "token_usage": store.get_token_usage_summary(
+            workspace_id=auth.workspace_id if settings.auth_enabled else None
+        ),
+    }
+
+
+# --- Workspaces ---
+
+class WorkspaceCreate(BaseModel):
+    slug: str
+    name: str
+    max_token_budget: int = 0
+
+
+@app.get("/api/workspaces")
+def list_workspaces(auth: AuthContext = Depends(require_read)):
+    workspaces = store.list_workspaces()
+    for ws in workspaces:
+        ws["token_usage"] = store.get_token_usage_summary(workspace_id=ws["id"])
+        houses = store.list_houses(workspace_id=ws["id"])
+        ws["house_count"] = len(houses)
+    return workspaces
+
+
+@app.post("/api/workspaces")
+def create_workspace(data: WorkspaceCreate, auth: AuthContext = Depends(require_write)):
+    if not data.slug.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(400, "Slug must be alphanumeric with hyphens/underscores only")
+    existing = store.get_workspace(data.slug)
+    if existing:
+        raise HTTPException(409, f"Workspace slug '{data.slug}' already exists")
+    return store.create_workspace(data.slug, data.name, data.max_token_budget)
+
+
+@app.get("/api/workspaces/{workspace_id}")
+def get_workspace(workspace_id: str, auth: AuthContext = Depends(require_read)):
+    ws = store.get_workspace(workspace_id)
+    if not ws:
+        raise HTTPException(404, "Workspace not found")
+    ws["token_usage"] = store.get_token_usage_summary(workspace_id=ws["id"])
+    ws["house_count"] = len(store.list_houses(workspace_id=ws["id"]))
+    return ws
+
+
+class WorkspaceUpdate(BaseModel):
+    name: Optional[str] = None
+    max_token_budget: Optional[int] = None
+
+
+@app.patch("/api/workspaces/{workspace_id}")
+def update_workspace(workspace_id: str, data: WorkspaceUpdate, auth: AuthContext = Depends(require_write)):
+    updates = data.model_dump(exclude_none=True)
+    result = store.update_workspace(workspace_id, **updates)
+    if not result:
+        raise HTTPException(404, "Workspace not found")
+    return result
+
+
+# --- API Key Management ---
+
+class ApiKeyCreate(BaseModel):
+    name: str
+    workspace_id: str = "default"
+    scopes: list[str] = ["read", "write"]
+
+
+@app.post("/api/api-keys")
+def create_api_key(data: ApiKeyCreate, auth: AuthContext = Depends(require_write)):
+    valid_scopes = {"read", "write", "admin"}
+    bad = set(data.scopes) - valid_scopes
+    if bad:
+        raise HTTPException(400, f"Invalid scopes: {bad}. Use: {valid_scopes}")
+    plaintext, key_hash = generate_api_key()
+    record = store.create_api_key(
+        key_hash=key_hash,
+        name=data.name,
+        workspace_id=data.workspace_id,
+        scopes=data.scopes,
+    )
+    # Return plaintext key ONCE — it won't be shown again
+    record["key"] = plaintext
+    record["warning"] = "Save this key now — it will not be shown again."
+    return record
+
+
+@app.get("/api/api-keys")
+def list_api_keys(workspace_id: Optional[str] = None, auth: AuthContext = Depends(require_read)):
+    wid = workspace_id or (auth.workspace_id if settings.auth_enabled else None)
+    return store.list_api_keys(workspace_id=wid)
+
+
+@app.delete("/api/api-keys/{key_id}")
+def revoke_api_key(key_id: str, auth: AuthContext = Depends(require_write)):
+    if not store.revoke_api_key(key_id):
+        raise HTTPException(404, "API key not found")
+    return {"ok": True, "revoked": key_id}
+
+
+# --- Token Usage ---
+
+@app.get("/api/token-usage")
+def get_token_usage(workspace_id: Optional[str] = None, auth: AuthContext = Depends(require_read)):
+    wid = workspace_id or (auth.workspace_id if settings.auth_enabled else None)
+    return store.get_token_usage_summary(workspace_id=wid)
+
+
+@app.get("/api/cost-estimate")
+def cost_estimate(model: str = "gpt-4o-mini", input_tokens: int = 0, output_tokens: int = 0):
+    """Return a cost estimate for a given token count before running LLM."""
+    cost = estimate_cost_usd(model, input_tokens, output_tokens)
+    rates = settings.pricing.get(model, {})
+    return {
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "estimated_cost_usd": round(cost, 6),
+        "rates_per_1m": rates,
+    }
 
 
 @app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)

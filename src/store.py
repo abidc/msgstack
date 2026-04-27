@@ -1,13 +1,15 @@
-"""SQLite-backed message house storage."""
+"""SQLite / PostgreSQL-backed message house storage."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Self
+from typing import Optional, Self
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -25,6 +27,30 @@ from sqlalchemy.orm import (
 
 from src.models import Channel, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+# Module-level singleton — set by init_store() called from web_app startup
+_store_instance: "Store | None" = None
+
+
+def get_store() -> "Store":
+    """Return the global Store singleton (must call init_store first)."""
+    if _store_instance is None:
+        raise RuntimeError("Store not initialized — call init_store() first")
+    return _store_instance
+
+
+def init_store(db_url: str | None = None) -> "Store":
+    """Create and initialize the global Store singleton."""
+    global _store_instance
+    from src.config import settings
+    url = db_url or settings.database_url
+    _store_instance = Store(url)
+    _store_instance.init()
+    return _store_instance
+
 
 def _to_db(data: dict) -> dict:
     return {k: str(v) if isinstance(v, UUID) else v for k, v in data.items()}
@@ -34,10 +60,47 @@ class Base(DeclarativeBase):
     pass
 
 
+class WorkspaceModel(Base):
+    __tablename__ = "workspaces"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    max_token_budget: Mapped[int] = mapped_column(Integer, default=0)  # 0 = unlimited
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class ApiKeyModel(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    scopes: Mapped[list] = mapped_column(JSON, default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class TokenUsageModel(Base):
+    __tablename__ = "token_usage"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    endpoint: Mapped[str] = mapped_column(String(255), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
 class HouseModel(Base):
     __tablename__ = "message_houses"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str] = mapped_column(String(50), default="manual")
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -118,25 +181,47 @@ class ArtifactHistoryModel(Base):
 
 
 class Store:
-    def __init__(self, db_path: str | Path = "msgstack.db"):
-        self.engine = create_engine(f"sqlite:///{db_path}", echo=False)
+    def __init__(self, db_url: str | Path = "sqlite:///msgstack.db"):
+        # Accept either a full SQLAlchemy URL or a bare file path (back-compat)
+        url = str(db_url)
+        if not url.startswith(("sqlite", "postgresql", "mysql", "postgres")):
+            url = f"sqlite:///{url}"
+        connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+        self.engine = create_engine(url, echo=False, connect_args=connect_args)
         self.session_factory = sessionmaker(bind=self.engine)
 
     def init(self) -> None:
         Base.metadata.create_all(self.engine)
+        self._ensure_default_workspace()
+
+    def _ensure_default_workspace(self) -> None:
+        with self.session() as s:
+            existing = s.query(WorkspaceModel).filter(WorkspaceModel.slug == "default").first()
+            if not existing:
+                s.add(WorkspaceModel(
+                    id="default",
+                    slug="default",
+                    name="Default Workspace",
+                    max_token_budget=0,
+                    created_at=_now(),
+                ))
+                s.commit()
 
     def session(self) -> Session:
         return self.session_factory()
 
-    def upsert_house(self, house: MessageHouse) -> None:
+    def upsert_house(self, house: MessageHouse, workspace_id: str = "default") -> None:
         with self.session() as s:
             existing = s.get(HouseModel, str(house.id))
             if existing:
                 for k, v in _to_db(house.model_dump()).items():
                     if k != "id":
                         setattr(existing, k, v)
+                # Don't change workspace on update unless explicitly passed
             else:
-                s.add(HouseModel(**_to_db(house.model_dump())))
+                data = _to_db(house.model_dump())
+                data["workspace_id"] = workspace_id
+                s.add(HouseModel(**data))
             s.commit()
 
     def get_house(self, house_id: UUID) -> MessageHouse | None:
@@ -152,11 +237,6 @@ class Store:
             if not row:
                 return None
             return _house_from_row(row)
-
-    def list_houses(self) -> list[MessageHouse]:
-        with self.session() as s:
-            rows = s.query(HouseModel).all()
-            return [_house_from_row(r) for r in rows]
 
     def upsert_key_message(self, msg: KeyMessage) -> None:
         with self.session() as s:
@@ -178,6 +258,16 @@ class Store:
                 .all()
             )
             return [_msg_from_row(r) for r in rows]
+
+    def get_key_message(self, msg_id: UUID) -> KeyMessage | None:
+        with self.session() as s:
+            row = s.get(KeyMessageModel, str(msg_id))
+            return _msg_from_row(row) if row else None
+
+    def get_persona(self, persona_id: UUID) -> Persona | None:
+        with self.session() as s:
+            row = s.get(PersonaModel, str(persona_id))
+            return _persona_from_row(row) if row else None
 
     def upsert_persona(self, persona: Persona) -> None:
         with self.session() as s:
@@ -272,7 +362,7 @@ class Store:
             ],
         }
         snap_id = str(uuid4())
-        now = datetime.utcnow()
+        now = _now()
         with self.session() as s:
             s.add(SnapshotModel(
                 id=snap_id,
@@ -331,7 +421,7 @@ class Store:
     def save_artifact(self, house_id: UUID, skill_id: str, house_name: str,
                       sections: dict, raw_content: str = "") -> dict:
         art_id = str(uuid4())
-        now = datetime.utcnow()
+        now = _now()
         with self.session() as s:
             s.add(ArtifactHistoryModel(
                 id=art_id,
@@ -379,6 +469,151 @@ class Store:
                 "raw_content": row.raw_content,
                 "created_at": row.created_at.isoformat(),
             }
+
+
+    # --- Workspaces ---
+
+    def list_workspaces(self) -> list[dict]:
+        with self.session() as s:
+            rows = s.query(WorkspaceModel).all()
+            return [{"id": r.id, "slug": r.slug, "name": r.name,
+                     "max_token_budget": r.max_token_budget,
+                     "created_at": r.created_at.isoformat()} for r in rows]
+
+    def get_workspace(self, workspace_id: str) -> dict | None:
+        with self.session() as s:
+            row = s.get(WorkspaceModel, workspace_id)
+            if not row:
+                row = s.query(WorkspaceModel).filter(WorkspaceModel.slug == workspace_id).first()
+            if not row:
+                return None
+            return {"id": row.id, "slug": row.slug, "name": row.name,
+                    "max_token_budget": row.max_token_budget,
+                    "created_at": row.created_at.isoformat()}
+
+    def create_workspace(self, slug: str, name: str, max_token_budget: int = 0) -> dict:
+        ws_id = str(uuid4())
+        now = _now()
+        with self.session() as s:
+            s.add(WorkspaceModel(id=ws_id, slug=slug, name=name,
+                                 max_token_budget=max_token_budget, created_at=now))
+            s.commit()
+        return {"id": ws_id, "slug": slug, "name": name,
+                "max_token_budget": max_token_budget, "created_at": now.isoformat()}
+
+    def update_workspace(self, workspace_id: str, **kwargs) -> dict | None:
+        with self.session() as s:
+            row = s.get(WorkspaceModel, workspace_id)
+            if not row:
+                return None
+            for k, v in kwargs.items():
+                if hasattr(row, k):
+                    setattr(row, k, v)
+            s.commit()
+            return {"id": row.id, "slug": row.slug, "name": row.name,
+                    "max_token_budget": row.max_token_budget}
+
+    # --- API Keys ---
+
+    def create_api_key(self, key_hash: str, name: str, workspace_id: str,
+                       scopes: list[str]) -> dict:
+        key_id = str(uuid4())
+        now = _now()
+        with self.session() as s:
+            s.add(ApiKeyModel(id=key_id, key_hash=key_hash, name=name,
+                              workspace_id=workspace_id, scopes=scopes,
+                              is_active=True, created_at=now))
+            s.commit()
+        return {"id": key_id, "name": name, "workspace_id": workspace_id,
+                "scopes": scopes, "is_active": True, "created_at": now.isoformat()}
+
+    def list_api_keys(self, workspace_id: str | None = None) -> list[dict]:
+        with self.session() as s:
+            q = s.query(ApiKeyModel)
+            if workspace_id:
+                q = q.filter(ApiKeyModel.workspace_id == workspace_id)
+            rows = q.order_by(ApiKeyModel.created_at.desc()).all()
+            return [{"id": r.id, "name": r.name, "workspace_id": r.workspace_id,
+                     "scopes": r.scopes, "is_active": r.is_active,
+                     "created_at": r.created_at.isoformat(),
+                     "last_used_at": r.last_used_at.isoformat() if r.last_used_at else None}
+                    for r in rows]
+
+    def get_api_key_by_hash(self, key_hash: str) -> dict | None:
+        with self.session() as s:
+            row = s.query(ApiKeyModel).filter(ApiKeyModel.key_hash == key_hash).first()
+            if not row:
+                return None
+            return {"id": row.id, "name": row.name, "workspace_id": row.workspace_id,
+                    "scopes": row.scopes, "is_active": row.is_active,
+                    "key_hash": row.key_hash}
+
+    def revoke_api_key(self, key_id: str) -> bool:
+        with self.session() as s:
+            row = s.get(ApiKeyModel, key_id)
+            if not row:
+                return False
+            row.is_active = False
+            s.commit()
+            return True
+
+    def touch_api_key(self, key_id: str) -> None:
+        with self.session() as s:
+            row = s.get(ApiKeyModel, key_id)
+            if row:
+                row.last_used_at = _now()
+                s.commit()
+
+    # --- Token Usage ---
+
+    def record_token_usage(self, workspace_id: str, endpoint: str, model: str,
+                           input_tokens: int, output_tokens: int, cost_usd: float) -> None:
+        with self.session() as s:
+            s.add(TokenUsageModel(
+                id=str(uuid4()),
+                workspace_id=workspace_id,
+                endpoint=endpoint,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost_usd,
+                created_at=_now(),
+            ))
+            s.commit()
+
+    def get_token_usage_summary(self, workspace_id: str | None = None) -> dict:
+        with self.session() as s:
+            q = s.query(TokenUsageModel)
+            if workspace_id:
+                q = q.filter(TokenUsageModel.workspace_id == workspace_id)
+            rows = q.all()
+            total_input = sum(r.input_tokens for r in rows)
+            total_output = sum(r.output_tokens for r in rows)
+            total_cost = sum(r.cost_usd for r in rows)
+            by_endpoint: dict[str, dict] = {}
+            for r in rows:
+                ep = by_endpoint.setdefault(r.endpoint, {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "calls": 0})
+                ep["input_tokens"] += r.input_tokens
+                ep["output_tokens"] += r.output_tokens
+                ep["cost_usd"] += r.cost_usd
+                ep["calls"] += 1
+            return {
+                "total_input_tokens": total_input,
+                "total_output_tokens": total_output,
+                "total_cost_usd": round(total_cost, 6),
+                "total_calls": len(rows),
+                "by_endpoint": by_endpoint,
+            }
+
+    # --- Workspace-scoped house list ---
+
+    def list_houses(self, workspace_id: str | None = None) -> list[MessageHouse]:
+        with self.session() as s:
+            q = s.query(HouseModel)
+            if workspace_id and workspace_id != "all":
+                q = q.filter(HouseModel.workspace_id == workspace_id)
+            rows = q.all()
+            return [_house_from_row(r) for r in rows]
 
 
 def _house_from_row(row: HouseModel) -> MessageHouse:

@@ -1,0 +1,40 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql://msgstack:msgstack@db:5432/msgstack
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-""}
+      PINECONE_INDEX: ${PINECONE_INDEX:-""}
+      MSGSTACK_AUTH_ENABLED: ${MSGSTACK_AUTH_ENABLED:-false}
+      MSGSTACK_ADMIN_TOKEN: ${MSGSTACK_ADMIN_TOKEN:-""}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RATE_LIMIT_EXTRACT: ${RATE_LIMIT_EXTRACT:-10}
+      RATE_LIMIT_GENERATE: ${RATE_LIMIT_GENERATE:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: msgstack
+      POSTGRES_PASSWORD: msgstack
+      POSTGRES_DB: msgstack
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U msgstack"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:

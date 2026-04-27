@@ -179,7 +179,7 @@ def mock_engine(tmp_path):
     """GroundingEngine with mocked Pinecone and a real Store."""
     from src.store import Store
     from src.models import MessageHouse, KeyMessage, SectionType, HouseStatus
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     store = Store(str(tmp_path / "search_test.db"))
     store.init()
@@ -190,7 +190,7 @@ def mock_engine(tmp_path):
         tagline="Ship fast",
         differentiation="Only automated solution",
         status=HouseStatus.ACTIVE,
-        last_synced=datetime.utcnow(),
+        last_synced=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     store.upsert_house(house)
     msg = KeyMessage(
