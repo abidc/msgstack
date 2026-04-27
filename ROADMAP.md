@@ -139,7 +139,13 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ## v0.6 — Governance & Marketing Operations
 
-**Goal:** Bridge the gap between AI generation and marketing department workflows.
+**Goal:** Bridge the gap between AI generation and marketing department workflows using a "High-Impact" architecture (HTMX + Paged.js + Satori).
+
+### High-Impact Artifact Generation
+- [ ] **Interactive Interface (HTMX + Tailwind):** Refactor Admin UI to use Jinja2 + HTMX for instant, no-reload artifact previews and inline editing.
+- [ ] **Print-First Documents (Paged.js):** Professional typeset PDFs for One-Pagers and Battlecards with real margins, page numbers, and bleed.
+- [ ] **Design-as-Code Visuals (Satori):** Generate high-fidelity PNG social cards and email headers using the Satori WASM engine + `resvg-python`.
+- [ ] **Inline Polish Editor:** Rich-text editor (TinyMCE/Quill) in the UI to tweak AI drafts before final save.
 
 ### Messaging Governance
 - [ ] **Approval Workflow:** Mark Key Messages as `Draft` or `Approved` (Grounding search prioritizes `Approved`).
