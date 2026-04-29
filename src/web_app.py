@@ -1576,6 +1576,11 @@ def save_artifact(data: dict):
     return record
 
 
+@app.get("/api/recent-artifacts")
+def list_recent_artifacts(limit: int = Query(5, le=20)):
+    return store.list_recent_artifacts(limit=limit)
+
+
 @app.get("/api/houses/{house_id}/artifacts")
 def list_house_artifacts(house_id: str):
     return store.list_artifacts(UUID(house_id))

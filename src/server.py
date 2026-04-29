@@ -8,7 +8,7 @@ from fastmcp import FastMCP
 
 from src.grounding import tools as grounding_tools
 from src.grounding.session import reset_session
-from src.store import Store
+from src.store import Store, get_store
 
 load_dotenv()
 
@@ -143,8 +143,7 @@ def _resolve_house(store, house_id: Optional[str], house_name: Optional[str] = N
 
 def generate_one_pager_data(messaging_house_id: str) -> dict:
     """Internal helper to get structured data for a one-pager."""
-    store = Store()
-    store.init()
+    store = get_store()
     house = _resolve_house(store, messaging_house_id)
     if not house:
         return {"error": f"House not found."}
@@ -204,8 +203,7 @@ def generate_artifact(
     from src.pipeline.skills import SkillManager
     from src.grounding.session import get_session
 
-    store = Store()
-    store.init()
+    store = get_store()
 
     house = None
     if house_id:
@@ -223,7 +221,7 @@ def generate_artifact(
         names = ", ".join(h.name for h in all_houses)
         return f"House not found. Call list_message_houses to see valid options. Available: {names}"
 
-    skills = SkillManager()
+    skills = SkillManager(skills_dir="data/skills")
 
     # Check required context inputs before running the generator
     from src.pipeline.skills import SKILL_CONTEXT_INPUTS
@@ -296,8 +294,7 @@ def build_ui_artifact(
         stage: For email_template only: awareness | consideration | decision
         channels: For social_posts only: e.g. ["linkedin"]
     """
-    store = Store()
-    store.init()
+    store = get_store()
     house = _resolve_house(store, house_id, house_name)
     if not house:
         all_houses = store.list_houses()
@@ -326,7 +323,7 @@ def list_skills() -> dict:
     Each skill returned can be used as 'skill_id' in 'generate_artifact'.
     """
     from src.pipeline.skills import SkillManager
-    skills = SkillManager()
+    skills = SkillManager(skills_dir="data/skills")
     return {
         "available_artifacts": [
             {

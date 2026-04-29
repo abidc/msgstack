@@ -1,9 +1,19 @@
+networks:
+  mcp_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.200.0/24
+
 services:
   msgstack-mcp:
     build: .
     container_name: msgstack-mcp
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "8001:8001"
+    networks:
+      - mcp_net
     volumes:
       - ./data:/app/data
       - ./skills:/app/skills

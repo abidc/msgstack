@@ -542,6 +542,25 @@ class Store:
                 for r in rows
             ]
 
+    def list_recent_artifacts(self, limit: int = 5) -> list[dict]:
+        with self.session() as s:
+            rows = (
+                s.query(ArtifactHistoryModel)
+                .order_by(ArtifactHistoryModel.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "house_id": r.house_id,
+                    "skill_id": r.skill_id,
+                    "house_name": r.house_name,
+                    "created_at": r.created_at.isoformat(),
+                }
+                for r in rows
+            ]
+
     def get_artifact(self, artifact_id: UUID) -> dict | None:
         with self.session() as s:
             row = s.get(ArtifactHistoryModel, str(artifact_id))

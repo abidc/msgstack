@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SectionType(str, Enum):
@@ -61,6 +61,14 @@ class KeyMessage(BaseModel):
     section_type: SectionType
     priority: int = Field(ge=1, le=5)
     content: str
+
+    @field_validator('priority', mode='before')
+    @classmethod
+    def clamp_priority(cls, v):
+        try:
+            return max(1, min(5, int(v)))
+        except (TypeError, ValueError):
+            return 3
     variants: dict[str, str] = Field(default_factory=dict)
     personas: list[str] = Field(default_factory=list)
     channels: list[Channel] = Field(default_factory=lambda: [Channel.ALL])

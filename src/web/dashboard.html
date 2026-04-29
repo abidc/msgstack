@@ -310,13 +310,16 @@
 
     async function loadDashboard() {
         try {
-            const data = await fetch(`${API}/stats`).then(r => r.json());
+            const [data, houses, artifacts] = await Promise.all([
+                fetch(`${API}/stats`).then(r => r.json()),
+                fetch(`${API}/houses`).then(r => r.json()),
+                fetch(`${API}/recent-artifacts?limit=5`).then(r => r.json()),
+            ]);
             document.getElementById('stat-houses').textContent = data.house_count || 0;
             document.getElementById('stat-messages').textContent = data.message_count || 0;
             document.getElementById('stat-artifacts').textContent = data.artifact_count || 0;
             document.getElementById('stat-tokens').textContent = (data.token_count || 0).toLocaleString();
 
-            const houses = await fetch(`${API}/houses`).then(r => r.json());
             const recentEl = document.getElementById('recent-houses');
             if (houses.length) {
                 recentEl.innerHTML = houses.slice(0,4).map(h => `
@@ -331,6 +334,22 @@
                     </div>`).join('');
             } else {
                 recentEl.innerHTML = '<div style="font-size:13px;color:var(--text-3);">No frameworks yet. Upload a document to get started.</div>';
+            }
+
+            const artEl = document.getElementById('latest-artifacts');
+            if (artifacts.length) {
+                artEl.innerHTML = artifacts.map(a => `
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius);">
+                        <div style="width:30px;height:30px;background:var(--bg-3);color:var(--text-2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;">
+                            ${esc((a.skill_id||'?').slice(0,2).toUpperCase())}
+                        </div>
+                        <div style="min-width:0;flex:1;">
+                            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(a.skill_id.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}</div>
+                            <div style="font-size:11px;color:var(--text-3);">${esc(a.house_name)} · ${new Date(a.created_at).toLocaleDateString()}</div>
+                        </div>
+                    </div>`).join('');
+            } else {
+                artEl.innerHTML = '<div style="font-size:13px;color:var(--text-3);">No artifacts generated yet.</div>';
             }
         } catch(e) { console.error('Dashboard load failed', e); }
     }
@@ -602,7 +621,7 @@
         if (!content) { toast('Content required','error'); return; }
         try {
             const res = await fetch(`${API}/messages`,{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({message_house_id:houseId,section_type,content,priority:99})});
+                body:JSON.stringify({message_house_id:houseId,section_type,content,priority:3})});
             if (!res.ok) throw new Error(await res.text());
             closeModal(); toast('Message added','success');
             const house = await fetch(`${API}/houses/${houseId}`).then(r=>r.json());
@@ -897,18 +916,80 @@
     async function editSkill(id) {
         try {
             const skill = await fetch(`${API}/skills/${id}`).then(r=>r.json());
-            const newName = prompt('Skill Name:', skill.name);
-            if (newName===null) return;
-            const newDesc = prompt('Description:', skill.description);
-            if (newDesc===null) return;
-            const newSectionsRaw = prompt('Sections (JSON):', JSON.stringify(skill.sections, null, 2));
-            if (newSectionsRaw===null) return;
-            let newSections;
-            try { newSections = JSON.parse(newSectionsRaw); } catch(e) { alert('Invalid JSON'); return; }
+
+            // Build a wide inline overlay (not the standard small modal)
+            let overlay = document.getElementById('skill-edit-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'skill-edit-overlay';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;';
+                overlay.onclick = e => { if (e.target===overlay) overlay.style.display='none'; };
+                document.body.appendChild(overlay);
+            }
+
+            const fieldStyle = 'width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;box-sizing:border-box;transition:border-color .12s;';
+            const labelStyle = 'display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;';
+
+            overlay.style.display = 'flex';
+            overlay.innerHTML = `
+                <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius-lg);width:min(860px,95vw);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;">
+                    <div style="padding:20px 24px 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+                        <div style="font-size:16px;font-weight:700;">Edit Skill: ${esc(skill.name)}</div>
+                        <button onclick="document.getElementById('skill-edit-overlay').style.display='none'"
+                            style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:20px;line-height:1;padding:4px;">✕</button>
+                    </div>
+                    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;flex:1;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                            <div>
+                                <label style="${labelStyle}">Skill Name</label>
+                                <input id="se-name" type="text" value="${esc(skill.name)}"
+                                    style="${fieldStyle}resize:none;"
+                                    onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor=''">
+                            </div>
+                            <div>
+                                <label style="${labelStyle}">Description</label>
+                                <input id="se-desc" type="text" value="${esc(skill.description)}"
+                                    style="${fieldStyle}resize:none;"
+                                    onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor=''">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="${labelStyle}">Prompt Template</label>
+                            <textarea id="se-template" rows="14"
+                                style="${fieldStyle}"
+                                onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor=''">${esc(skill.prompt_template||'')}</textarea>
+                        </div>
+                        <div>
+                            <label style="${labelStyle}">Sections (JSON)</label>
+                            <textarea id="se-sections" rows="8"
+                                style="${fieldStyle}font-family:monospace;font-size:12px;"
+                                onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor=''">${esc(JSON.stringify(skill.sections||[], null, 2))}</textarea>
+                        </div>
+                    </div>
+                    <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;">
+                        <button class="btn btn-ghost" onclick="document.getElementById('skill-edit-overlay').style.display='none'">Cancel</button>
+                        <button class="btn btn-primary" onclick="submitSkillEdit('${id}')">Save Skill</button>
+                    </div>
+                </div>`;
+        } catch(e) { toast('Failed to load skill: '+e.message,'error'); }
+    }
+
+    async function submitSkillEdit(id) {
+        const name = document.getElementById('se-name')?.value?.trim();
+        const description = document.getElementById('se-desc')?.value?.trim();
+        const templateVal = document.getElementById('se-template')?.value;
+        const sectionsRaw = document.getElementById('se-sections')?.value;
+        if (!name) { toast('Name is required','error'); return; }
+        let sections;
+        try { sections = JSON.parse(sectionsRaw); } catch(e) { toast('Sections: invalid JSON — '+e.message,'error'); return; }
+        try {
+            const skill = await fetch(`${API}/skills/${id}`).then(r=>r.json());
             const res = await fetch(`${API}/skills/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({...skill,name:newName,description:newDesc,sections:newSections})});
-            if (res.ok) { toast('Skill updated','success'); loadSkills(); }
-            else throw new Error(await res.text());
+                body:JSON.stringify({...skill,name,description,prompt_template:templateVal,sections})});
+            if (!res.ok) throw new Error(await res.text());
+            document.getElementById('skill-edit-overlay').style.display = 'none';
+            toast('Skill updated','success');
+            loadSkills();
         } catch(e) { toast('Update failed: '+e.message,'error'); }
     }
 
