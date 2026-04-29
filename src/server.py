@@ -394,8 +394,7 @@ def check_framework_completeness(house_id: Optional[str] = None, house_name: Opt
     """
     from src.models import COMPLETE_FRAMEWORK_SPEC, SectionType
 
-    store = Store()
-    store.init()
+    store = get_store()
     house = _resolve_house(store, house_id, house_name)
     if not house:
         return {"error": "House not found. Use list_message_houses to find valid IDs."}
@@ -468,9 +467,85 @@ def seed_database() -> dict:
     return {"message": "Database seeded with sample messaging content."}
 
 
+# ── MCP Prompts ──────────────────────────────────────────────────────────────
+# Clients that support prompts/list (OpenWebUI, Claude Desktop, etc.) will
+# discover these and can inject them as system messages automatically.
+
+@mcp.prompt()
+def system_instructions() -> str:
+    """Complete operating guide for MsgStack tools. Inject at conversation start."""
+    return """You are connected to MsgStack, a marketing messaging intelligence server.
+
+## Tool Selection Rules
+
+**GENERATE content** — call `generate_artifact` immediately. NEVER write the content yourself.
+Triggers: "build", "make", "create", "generate", "write", "draft", "give me", "show me",
+"put together", "can you make" + any of: one-pager, battlecard, email, LinkedIn post,
+blog post, press release, FAQ, talk track, objection handler, executive summary,
+partner brief, event brief, or any other marketing document.
+
+**SEARCH for messaging** — call `search_messaging` when:
+- User asks what messaging exists for a topic, persona, or channel
+- You need grounding before writing any copy yourself
+- User asks for headlines, proof points, objections, or talking points
+
+**LIST / BROWSE** — use `list_message_houses` when the user hasn't specified a framework,
+and `list_skills` when they haven't specified an artifact type.
+
+**RESEARCH a framework** — call `get_message_house` when the user wants to understand
+a brand's positioning, personas, or full messaging structure.
+
+## Output Rules
+
+- When `generate_artifact` returns content, paste it **verbatim and in full**. Do not
+  summarize, paraphrase, or describe it. The user wants the actual document.
+- When `search_messaging` returns results, quote the messaging chunks directly.
+- Always include visual links when returned by the tool.
+
+## Standard Generation Workflow
+
+1. If no framework is specified → call `list_message_houses` and ask the user to pick one.
+2. If no artifact type is specified → call `list_skills` and ask which they want.
+3. Call `generate_artifact` with `skill_id` + `house_id` (+ `custom_context` if needed).
+4. Paste the full returned content. Done.
+
+## Required context_inputs per skill
+
+- battlecard: `custom_context={"competitor": "<name>"}` — REQUIRED
+- blog_post: `custom_context={"topic": "<topic>"}` — REQUIRED
+- press_release: `custom_context={"announcement": "<summary>"}` — REQUIRED
+- event_brief: `custom_context={"event_name": "<name>"}` — REQUIRED
+- email_template: `custom_context={"stage": "awareness|consideration|decision"}` — optional
+"""
+
+
+@mcp.prompt()
+def quick_start() -> str:
+    """One-paragraph quick-start guide shown to users new to MsgStack."""
+    from src.store import get_store as _get_store
+    try:
+        store = _get_store()
+        houses = store.list_houses()
+        names = ", ".join(h.name for h in houses[:5])
+        house_line = f"Available frameworks: {names}{'...' if len(houses) > 5 else ''}."
+    except Exception:
+        house_line = "Use list_message_houses to see available frameworks."
+
+    return f"""MsgStack gives you AI-generated marketing artifacts grounded in your brand messaging.
+
+{house_line}
+
+**To generate a document**, just say what you want and which brand, e.g.:
+- "Write a one-pager for Apex Financial Analytics"
+- "Build a battlecard for Helix HR vs Workday"
+- "Draft a LinkedIn post for the Forge DevOps framework"
+
+Available artifact types: one-pager, battlecard, email template, LinkedIn post, blog post,
+press release, FAQ, talk track, objection handler, executive summary, partner brief, event brief.
+"""
+
+
 def main():
-    store = Store()
-    store.init()
     mcp.run()
 
 
