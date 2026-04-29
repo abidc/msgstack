@@ -116,6 +116,10 @@ class ArtifactGenerator:
             "primary_message": messages[0].content if messages else "",
             "persona": personas[0].name if personas else "",
             "objections": ", ".join(personas[0].objections[:3]) if personas and personas[0].objections else "",
+            # defaults for optional context variables used in some skill templates
+            "target_length": "800-1200",
+            "tone": "professional",
+            "event_name": "the event",
         }
         context.update(custom)
         return context

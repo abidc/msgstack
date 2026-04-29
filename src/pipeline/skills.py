@@ -363,9 +363,14 @@ SKILL_CONTEXT_INPUTS: dict[str, list[dict]] = {
     ],
     "blog_post": [
         {"key": "topic", "label": "Blog Topic", "placeholder": "e.g. AI in enterprise software", "required": True},
+        {"key": "target_length", "label": "Word Count", "options": ["500", "800", "1200", "1500"], "required": False, "default": "800"},
+        {"key": "tone", "label": "Tone", "options": ["professional", "conversational", "technical", "thought-leadership"], "required": False, "default": "professional"},
     ],
     "press_release": [
         {"key": "announcement", "label": "Announcement Summary", "placeholder": "e.g. Series B funding round", "required": True},
+    ],
+    "event_brief": [
+        {"key": "event_name", "label": "Event Name", "placeholder": "e.g. Dreamforce 2025", "required": True},
     ],
 }
 
