@@ -18,6 +18,24 @@ class SectionType(str, Enum):
     SOCIAL_PROOF = "social_proof"
     POSITIONING = "positioning"
     KNOW_YOUR_MARKET = "know_your_market"
+    BRAND_VOICE = "brand_voice"
+    STYLE_RULE = "style_rule"
+    WORD_LIST = "word_list"
+    COMPETITOR_STRENGTH = "competitor_strength"
+    COMPETITOR_WEAKNESS = "competitor_weakness"
+    COMPETITIVE_RESPONSE = "competitive_response"
+    NARRATIVE_PILLAR = "narrative_pillar"
+    COMPANY_VALUE = "company_value"
+    FOUNDING_STORY = "founding_story"
+    PERSONA_DETAIL = "persona_detail"
+
+
+class DocumentType(str, Enum):
+    MESSAGE_HOUSE = "message_house"
+    BRAND_GUIDE = "brand_guide"
+    COMPETITIVE_BRIEF = "competitive_brief"
+    CORP_NARRATIVE = "corp_narrative"
+    PERSONA_LIBRARY = "persona_library"
 
 
 class Channel(str, Enum):
@@ -43,6 +61,7 @@ class MessageHouse(BaseModel):
     name: str
     source: str = "manual"
     source_id: str | None = None
+    document_type: DocumentType = DocumentType.MESSAGE_HOUSE
     summary: str = ""
     audience: str = ""
     brand_personality: str = ""
@@ -58,6 +77,7 @@ class KeyMessage(BaseModel):
 
     id: UUID = Field(default_factory=uuid4)
     message_house_id: UUID
+    pillar_id: int | None = None
     section_type: SectionType
     priority: int = Field(ge=1, le=5)
     content: str
@@ -75,6 +95,26 @@ class KeyMessage(BaseModel):
     source_chunk_id: str | None = None
 
 
+class Pillar(BaseModel):
+    id: int
+    house_id: str
+    name: str
+    description: str | None = None
+    display_order: int = 0
+
+
+class PillarCreate(BaseModel):
+    name: str
+    description: str | None = None
+    display_order: int = 0
+
+
+class PillarUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    display_order: int | None = None
+
+
 class Persona(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     message_house_id: UUID
@@ -83,6 +123,25 @@ class Persona(BaseModel):
     pain_points: list[str] = Field(default_factory=list)
     buying_triggers: list[str] = Field(default_factory=list)
     objections: list[str] = Field(default_factory=list)
+
+
+class PainPoint(BaseModel):
+    id: int
+    persona_id: str
+    content: str
+
+
+class BuyingTrigger(BaseModel):
+    id: int
+    persona_id: str
+    content: str
+
+
+class Objection(BaseModel):
+    id: int
+    persona_id: str
+    statement: str
+    response: str | None = None
 
 
 class GroundingChunk(BaseModel):

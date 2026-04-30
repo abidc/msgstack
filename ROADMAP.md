@@ -179,6 +179,57 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ---
 
+## v0.7 — Hybrid Knowledge Graph + Vector RAG
+
+**Goal:** Introduce a two-layer retrieval architecture that separates semantic search from deterministic governance. Vector search finds *thematically relevant* messaging; graph traversal returns *verbatim approved* messaging via deterministic relationship queries. Taglines, approved headlines, and locked proof points should be retrieved exactly — not approximated by nearest-neighbor search.
+
+### Knowledge Graph Integration
+- [ ] **Graph Schema:** MessageHouse, KeyMessage, Persona, Channel nodes with typed relationships
+- [ ] **Relationship Mapping:** CONTAINS (House→Message), TARGETS (House→Persona), APPLIES_TO (Message→Channel), ADDRESSES (Message→Persona)
+- [ ] **Graph Store:** SQLite-based adjacency tables as initial implementation; Neo4j migration path for scale
+- [ ] **Hybrid Query Routing:** Route queries between vector (exploratory), graph (governance), and keyword (filtered) paths based on query type and message lock status
+
+### Multimodal Document Processing
+- [ ] **Vision Model Fallback:** Detect pages with high graphical element ratio (>40% images) and route to GPT-4V for layout extraction
+- [ ] **Unified Indexing:** Route text chunks to Pinecone; store entity relationships in the graph store simultaneously on ingest
+
+### Graph-Enhanced Search
+- [ ] **Exploratory Path:** Vector search first, then graph traversal to surface contextually related messages
+- [ ] **Governance Path:** Direct graph traversal for deterministic retrieval of approved/locked messages — bypasses vector approximation
+- [ ] **Path Discovery:** Find related messages through persona → message → channel relationship chains
+
+### Multi-Content-Type Foundation
+- [ ] **DocumentType Discriminator:** Add `document_type` column to `message_houses` table with a `DocumentType` enum: `message_house`, `brand_guide`, `competitive_brief`, `corp_narrative`, `persona_library`. Backward-compatible — all existing rows default to `message_house`.
+- [ ] **SectionType Expansion:** Extend `SectionType` enum with content-type-specific variants: `brand_voice`, `style_rule`, `word_list`, `narrative_pillar`, `company_value`, `founding_story`, `competitor_strength`, `competitor_weakness`, `competitive_response`, `persona_detail`.
+- [ ] **Channel as DB Entity:** Promote `Channel` from a code enum to a `ChannelModel` SQLAlchemy table with full CRUD endpoints. Seed with defaults: `all`, `email`, `linkedin`, `twitter`, `paid_ads`, `landing_page`, `sales_deck`. Enables user-defined channels without code changes.
+
+---
+
+## v0.8 — Advanced Graph Operations & Visualization
+
+**Goal:** Enable graph-powered insights and visual exploration of messaging relationships.
+
+### Graph Visualization
+- [ ] **Knowledge Graph Explorer:** Interactive UI to visualize MessageHouse → KeyMessage → Persona relationships
+- [ ] **Relationship Browser:** Click through CONTAINS/TARGETS/APPLIES_TO/ADDRESSES edges
+- [ ] **Path Finder:** Visualize paths between entities (e.g., "how does this message reach this persona?")
+
+### Graph-Powered Queries
+- [ ] **Persona Coverage Analysis:** Which messages address which personas? Identify gaps.
+- [ ] **Channel Reachability:** Which channels can a message reach through APPLIES_TO relationships?
+- [ ] **Cross-Framework Comparison:** Compare messaging relationships across multiple houses
+
+### Graph Maintenance
+- [ ] **Sync Pipeline:** Keep graph in sync with SQLite/PostgreSQL changes
+- [ ] **Conflict Resolution:** Handle concurrent edits to graph entities
+- [ ] **Backup & Restore:** Include graph data in snapshot system
+
+### Cross-Document Intelligence
+- [ ] **GroundingCollection:** Bundle multiple documents (e.g., brand guide + message house + persona library) into a named collection. MCP tools can target the entire collection for search and artifact generation.
+- [ ] **INFORMS Edge:** `(GroundingDocument) -[:INFORMS]-> (GroundingDocument)` cross-document relationship. Graph traversal can follow `INFORMS` edges to surface the source-of-truth document behind a message (e.g., "this tagline is governed by the brand guide").
+
+---
+
 ## v1.0 — Platform & Ecosystem
 
 **Goal:** MsgStack as a platform other tools and workflows integrate with.

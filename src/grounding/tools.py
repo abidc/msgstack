@@ -52,6 +52,7 @@ def search_messaging(
     min_priority: Optional[int] = None,
     min_confidence: Optional[float] = None,
     workspace_id: Optional[str] = None,
+    retrieval_mode: str = "hybrid",
 ) -> GroundingResponse:
     """Search messaging frameworks for relevant content.
 
@@ -88,6 +89,7 @@ def search_messaging(
         query=query,
         filters=filters,
         active_house_id=session.active_house_id,
+        retrieval_mode=retrieval_mode,
     )
 
     session.update_from_search(response.results, response.grounding_context)

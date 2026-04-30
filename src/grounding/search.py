@@ -121,8 +121,15 @@ class GroundingEngine:
         filters: Optional[SearchFilters] = None,
         top_k: int = 8,
         active_house_id: Optional[UUID] = None,
+        retrieval_mode: str = "hybrid",
     ) -> GroundingResponse:
         filters = filters or SearchFilters()
+
+        if retrieval_mode == "graph" and active_house_id:
+            return self._graph_search(active_house_id, filters)
+        if retrieval_mode == "keyword":
+            return self._fallback_search(query, filters)
+
         inferred = self._query_to_filters(query)
         for key, val in inferred.items():
             attr = f"{key}_types" if key == "section" else key
@@ -269,6 +276,42 @@ class GroundingEngine:
             return 0.7 * vec_score + 0.3 * overlap
 
         return sorted(matches, key=_score, reverse=True)[:top_k]
+
+    def _graph_search(self, house_id: UUID, filters: SearchFilters) -> GroundingResponse:
+        """Deterministic graph retrieval — bypasses vector approximation."""
+        from src.grounding.graph import get_graph_engine
+        engine = get_graph_engine()
+        persona = (filters.personas or [None])[0] if filters.personas else None
+        channel = (filters.channels or [None])[0] if filters.channels else None
+        chunks = engine.get_connections(str(house_id), persona=persona, channel=channel)
+
+        results = []
+        for chunk in chunks:
+            if filters.section_types and chunk.get("section_type") not in filters.section_types:
+                continue
+            results.append(GroundingResult(
+                chunk_id=chunk.get("id", ""),
+                content=chunk.get("content", ""),
+                section_type=chunk.get("section_type", "positioning"),
+                priority=chunk.get("priority", 3),
+                persona=persona,
+                channel=channel or "all",
+                channel_variants={},
+                source={"house_id": str(house_id), "house_name": ""},
+                confidence=1.0,
+                rerank_reason="graph:deterministic",
+            ))
+
+        house = self.store.get_house(house_id)
+        return GroundingResponse(
+            results=results[:8],
+            grounding_context=GroundingContext(
+                active_house_id=house_id,
+                house_name=house.name if house else "",
+                house_summary=house.summary if house else "",
+                confidence="high" if results else "low",
+            ),
+        )
 
     def _fallback_search(self, query: str, filters: SearchFilters) -> GroundingResponse:
         all_houses = self.store.list_houses()

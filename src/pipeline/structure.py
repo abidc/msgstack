@@ -1,6 +1,7 @@
 """LLM-based MessageHouse structuring: raw text → structured markdown."""
 
 import json
+import logging
 import os
 import re
 import time
@@ -8,6 +9,8 @@ from typing import Optional
 
 from openai import OpenAI, APITimeoutError, RateLimitError, APIError
 from pydantic import BaseModel, Field
+
+log = logging.getLogger(__name__)
 
 
 class StructuredHouse(BaseModel):
@@ -20,94 +23,238 @@ class StructuredHouse(BaseModel):
     differentiation: str
     key_messages: list[dict]
     personas: list[dict]
+    pillars: list[dict] = Field(default_factory=list)
+    ungrouped_chunks: list[dict] = Field(default_factory=list)
     know_your_market: str = Field(default="")
     missing_sections: list[str] = Field(default_factory=list)
 
 REQUIRED_SECTIONS = ["summary", "audience", "positioning", "tagline", "differentiation"]
 REQUIRED_MESSAGE_TYPES = ["headline", "benefit", "proof_point"]
 
-STRUCTURER_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete MessageHouse in markdown format.
+_STRUCTURE_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete MessageHouse.
 
-The document may use a variety of section names and structures. Common patterns include:
-- "Know Your Market" or "Know Your Customer" — pre-section research (Vision, Audience, Before/After, Problem, Solution, Credibility, FOMO, Competition, CTA)
-- "Umbrella Message Headline" → tagline
-- "Top 3 Value Pillars" or "Value Pillars" → benefits
-- "What It Does", "Elevator Pitch", "One-Paragraph Product Description" → summary/positioning
-- "Key Use Cases", "Top Use Cases" → use cases
-- "Customer Proof Points" → proof points
-- Explicit messaging house sections (Summary, Audience, Positioning, Differentiation, etc.)
-
-Follow this EXACT output structure:
-
-```markdown
-# PRODUCT NAME
-
-## Know Your Market
-**Vision:** WHY WAS THIS BUILT
-**Audience:** BUYERS AND USERS
-**Before:** STATE WITHOUT THIS SOLUTION
-**After:** STATE WITH THIS SOLUTION
-**Key Problem:** THE ONE CORE PROBLEM
-**Solution:** HOW IT IS DIFFERENT
-**Credibility:** STATS AND PROOF
-**FOMO:** URGENCY IF THEY DONT BUY
-**Competition:** COMPETITORS
-**The Win:** THE BIG OUTCOME
-**Call to Action:** CTA 3 WORDS OR FEWER
-
-## Summary
-2-3 SENTENCE OVERVIEW FROM WHAT IT DOES / ELEVATOR PITCH / PRODUCT DESCRIPTION
-
-## Target Audience
-WHO THIS IS FOR - BUYER TITLES USER ROLES CHARACTERISTICS
-
-## Brand Personality
-TONE VOICE WORD CHOICES
-
-## Positioning
-CORE POSITIONING STATEMENT
-
-## Tagline
-ONE PUNCHY TAGLINE 7 WORDS OR FEWER
-
-## Differentiation
-WHAT SETS THIS APART FROM COMPETITORS
-
-## Key Messages
-
-### Headlines (Priority 1-2)
-- FROM UMBRELLA MESSAGE HEADLINE OR STRONGEST HEADLINE
-
-### Benefits (Priority 1-3)
-- FROM TOP VALUE PILLARS ONE PER PILLAR
-
-### Use Cases (Priority 1-3)
-- FROM KEY USE CASES TABLE CAPABILITY NAME PLUS CUSTOMER BENEFIT
-
-### Proof Points (Priority 1-3)
-- FROM CUSTOMER PROOF POINTS TABLE CUSTOMER PLUS RESULT WITH METRIC
-
-### Objections (Priority 1-2)
-- COMMON OBJECTIONS FROM FOMO OR COMPETITION SECTIONS WITH REBUTTAL
-
-## Personas
-
-### PERSONA NAME
-**Role:** JOB TITLE FROM AUDIENCE SECTION
-**Pain Points:** FROM BEFORE STATE OR PROBLEM SECTION
-**Buying Triggers:** FROM WIN OR CREDIBILITY SECTIONS
-**Objections:** FROM FOMO OR COMPETITION SECTIONS
-```
+Return a JSON object matching this schema:
+{
+  "name": "Product or brand name",
+  "summary": "2-3 sentence overview",
+  "audience": "Target audience definition",
+  "brand_personality": "Tone and voice descriptors",
+  "positioning": "Core positioning statement",
+  "tagline": "One punchy tagline (7 words or fewer)",
+  "differentiation": "Key differentiators",
+  "know_your_market": "Extract 'Know Your Market' fields if present (Vision, Audience, Before, After, etc.)",
+  "pillars": [
+    {
+      "name": "Pillar name (1-4 words, e.g. Speed, Security, Scale)",
+      "description": "One sentence summary of the pillar",
+      "chunks": [
+        {
+          "section_type": "headline | benefit | use_case | proof_point | objection | social_proof | subhead",
+          "priority": 1-5,
+          "content": "Message content",
+          "personas": [],
+          "channels": ["all"],
+          "addresses_pain_points": [],
+          "resolves_objections": []
+        }
+      ]
+    }
+  ],
+  "ungrouped_chunks": [
+    {
+      "section_type": "headline | benefit | use_case | proof_point | objection | social_proof | subhead",
+      "priority": 1-5,
+      "content": "Message content that doesn't fit in a pillar",
+      "personas": [],
+      "channels": ["all"],
+      "addresses_pain_points": [],
+      "resolves_objections": []
+    }
+  ],
+  "personas": [
+    {
+      "name": "Persona name",
+      "description": "Role description",
+      "pain_points": [
+        "They struggle with X",
+        "Manual Y process wastes 3 days per week"
+      ],
+      "buying_triggers": [
+        "Upcoming compliance audit",
+        "Board mandate to reduce operational costs"
+      ],
+      "objections": [
+        {
+          "statement": "This is too expensive for our budget",
+          "response": "Customers typically recover the cost in 6 months through a 40% reduction in operational overhead"
+        },
+        {
+          "statement": "We already have a solution for this",
+          "response": "Our customers find we complement existing tools by handling the workflow automation layer they lack"
+        }
+      ]
+    }
+  ],
+  "missing_sections": []
+}
 
 Rules:
-- Extract REAL content from the document verbatim or very close. Do not invent messaging.
-- If a "Know Your Market" or similar pre-section exists, extract ALL its fields.
-- Map Umbrella Message Headline → Tagline (and also to Headlines key message)
-- Map each Value Pillar → one Benefit key message, include its proof point inline
-- Map each Use Case row → one Use Case key message
-- Map each Customer Proof Point row → one Proof Point key message
-- Infer Personas from the Audience section (create one persona per buyer/user role)
-- If information is missing, mark as "[Not found in source]" — do not fabricate
+- Identify 3-5 main messaging pillars that organize the content (e.g., "Speed", "Security", "Scale", "Support")
+- Group related key messages under their appropriate pillar
+- Messages that don't fit a pillar go in "ungrouped_chunks"
+- Map Umbrella Message Headline -> Tagline
+- Map Value Pillars -> Benefits (but also create a pillar if distinct)
+- Map Use Cases -> Use Case messages
+- Map Proof Points -> Proof Point messages
+- Map Objections -> Objection messages
+- For each chunk, populate "addresses_pain_points" with the verbatim text of any pain
+  point (from the personas list) that this message directly speaks to.
+- Populate "resolves_objections" with the verbatim statement text of any objection this
+  message helps overcome.
+- Leave both arrays empty [] if the chunk is general and not specific to a pain/objection.
+
+SOURCE DOCUMENT:
+{content}
+"""
+
+_BRAND_GUIDE_PROMPT = """You are extracting brand and style guidelines from a document.
+
+Return a JSON object matching this schema:
+{
+  "name": "Brand name or document title",
+  "summary": "1-2 sentence overview of what this brand guide covers",
+  "audience": "Internal teams this guide is intended for (e.g., marketing, content, design)",
+  "positioning": "The brand's core positioning or mission statement if present",
+  "tagline": "Official tagline or brand slogan if present",
+  "differentiation": "What makes this brand's voice/style distinctive",
+  "brand_personality": "Voice and tone descriptors extracted from the guide",
+  "key_messages": [
+    {
+      "section_type": "brand_voice | style_rule | word_list",
+      "priority": 1-5,
+      "content": "The guideline or rule text verbatim or closely paraphrased",
+      "personas": [],
+      "channels": ["all"]
+    }
+  ],
+  "personas": [],
+  "missing_sections": ["list any major sections you couldn't extract"]
+}
+
+Rules:
+- Use section_type "brand_voice" for tone/personality descriptions
+- Use section_type "style_rule" for specific writing rules (capitalization, punctuation, grammar)
+- Use section_type "word_list" for approved/banned word lists
+- Preserve exact wording for rules — do not paraphrase style_rule or word_list entries
+- Set priority 1-2 for mandatory rules, 3-5 for guidance/suggestions
+
+SOURCE DOCUMENT:
+{content}
+"""
+
+_COMPETITIVE_BRIEF_PROMPT = """You are extracting competitive intelligence from a document.
+
+Return a JSON object matching this schema:
+{
+  "name": "Competitor name or document title",
+  "summary": "1-2 sentence summary of this competitive brief",
+  "audience": "Sales, marketing, or product teams this brief is for",
+  "positioning": "How we position against this competitor",
+  "tagline": "Our differentiated tagline vs this competitor (if present)",
+  "differentiation": "Our key advantages over this competitor",
+  "brand_personality": "",
+  "key_messages": [
+    {
+      "section_type": "competitor_strength | competitor_weakness | competitive_response",
+      "priority": 1-5,
+      "content": "The intelligence or response message",
+      "personas": [],
+      "channels": ["all"]
+    }
+  ],
+  "personas": [],
+  "missing_sections": []
+}
+
+Rules:
+- Use "competitor_strength" for things this competitor does well
+- Use "competitor_weakness" for gaps, limitations, or vulnerabilities
+- Use "competitive_response" for how we respond to this competitor's claims (our counter-messaging)
+- Priority 1-2 for the most decisive competitive factors
+
+SOURCE DOCUMENT:
+{content}
+"""
+
+_CORP_NARRATIVE_PROMPT = """You are extracting a company's narrative, values, and founding story from a document.
+
+Return a JSON object matching this schema:
+{
+  "name": "Company name",
+  "summary": "1-2 sentence company overview",
+  "audience": "Audiences this narrative is for (investors, employees, customers)",
+  "positioning": "Core company positioning or mission statement",
+  "tagline": "Company tagline or motto if present",
+  "differentiation": "What makes this company's story distinct",
+  "brand_personality": "Company personality and cultural values",
+  "key_messages": [
+    {
+      "section_type": "narrative_pillar | company_value | founding_story",
+      "priority": 1-5,
+      "content": "The narrative element",
+      "personas": [],
+      "channels": ["all"]
+    }
+  ],
+  "personas": [],
+  "missing_sections": []
+}
+
+Rules:
+- Use "narrative_pillar" for the core strategic themes of the company story
+- Use "company_value" for stated company values or cultural principles
+- Use "founding_story" for origin story elements, key milestones, or the "why we exist" narrative
+
+SOURCE DOCUMENT:
+{content}
+"""
+
+_PERSONA_LIBRARY_PROMPT = """You are extracting buyer and user persona profiles from a document.
+
+Return a JSON object matching this schema:
+{
+  "name": "Persona library name or document title",
+  "summary": "Brief description of what personas are covered",
+  "audience": "Teams these personas are for (sales, marketing, product)",
+  "positioning": "",
+  "tagline": "",
+  "differentiation": "",
+  "brand_personality": "",
+  "key_messages": [
+    {
+      "section_type": "persona_detail",
+      "priority": 1-3,
+      "content": "A specific insight about this persona — a key pain point, buying trigger, or objection in one sentence",
+      "personas": ["<persona name>"],
+      "channels": ["all"]
+    }
+  ],
+  "personas": [
+    {
+      "name": "Role title (e.g., CISO, VP Sales)",
+      "description": "Who they are and what they own",
+      "pain_points": ["specific frustration 1", "..."],
+      "buying_triggers": ["event or pressure that makes them evaluate", "..."],
+      "objections": ["reason they hesitate to buy", "..."]
+    }
+  ],
+  "missing_sections": []
+}
+
+Rules:
+- Each persona should appear both as a full Persona object AND as key_messages with section_type "persona_detail"
+- key_messages for personas should be atomic, quotable insights (one per message), not summaries
+- Set priority 1 for the primary persona, 2-3 for secondary
 
 SOURCE DOCUMENT:
 {content}
@@ -139,11 +286,19 @@ class HouseStructurer:
     CHUNK_SIZE = 20000
     CHUNK_OVERLAP = 1000
 
+    _PROMPT_MAP = {
+        "message_house": _STRUCTURE_PROMPT,
+        "brand_guide": _BRAND_GUIDE_PROMPT,
+        "competitive_brief": _COMPETITIVE_BRIEF_PROMPT,
+        "corp_narrative": _CORP_NARRATIVE_PROMPT,
+        "persona_library": _PERSONA_LIBRARY_PROMPT,
+    }
+
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
         self.client = OpenAI(api_key=openai_api_key or os.environ.get("OPENAI_API_KEY"))
         self.model = model
 
-    def structure(self, text: str, source_name: str = "Untitled Source") -> "tuple[StructuredHouse, dict]":
+    def structure(self, text: str, source_name: str = "Untitled Source", document_type: str = "message_house") -> "tuple[StructuredHouse, dict]":
         """Run the structurer LLM on raw text and return (StructuredHouse, usage_dict).
 
         usage_dict has keys: input_tokens, output_tokens.
@@ -151,11 +306,13 @@ class HouseStructurer:
         then merges results.
         """
         self._usage: dict = {"input_tokens": 0, "output_tokens": 0}
+        prompt_template = self._PROMPT_MAP.get(document_type, _STRUCTURE_PROMPT)
+
         if len(text) <= self.MAX_SINGLE_CHUNK:
-            house = self._structure_single_chunk(text, source_name)
+            house = self._structure_single_chunk(text, source_name, prompt_template)
         else:
             chunks = self._split_text(text)
-            houses = [self._structure_single_chunk(chunk, source_name) for chunk in chunks]
+            houses = [self._structure_single_chunk(chunk, source_name, prompt_template) for chunk in chunks]
             house = self._merge_structures(houses, source_name)
         return house, dict(self._usage)
 
@@ -178,13 +335,22 @@ class HouseStructurer:
             start = max(split_at - self.CHUNK_OVERLAP, split_at)
         return [c for c in chunks if c.strip()]
 
-    def _structure_single_chunk(self, text: str, source_name: str) -> StructuredHouse:
+    def _structure_single_chunk(self, text: str, source_name: str, prompt_template: str) -> StructuredHouse:
         """Structure one text chunk with retry on transient OpenAI errors."""
-        prompt = STRUCTURER_PROMPT.format(content=text)
-        raw = self._llm_call_with_retry(prompt)
-        return self._parse_markdown(raw, source_name)
+        prompt = prompt_template.format(content=text)
+        raw = self._llm_call_with_retry(prompt, response_format={"type": "json_object"})
+        try:
+            data = json.loads(raw)
+            # Ensure name is set if missing in LLM response
+            if not data.get("name") or data["name"] in ("Product name", "Brand name", "Company name"):
+                data["name"] = source_name
+            return StructuredHouse(**data)
+        except (json.JSONDecodeError, Exception) as e:
+            # Fallback to markdown parser if JSON fails (though unlikely with response_format)
+            log.warning("JSON parsing failed, falling back to markdown parser: %s", e)
+            return self._parse_markdown(raw, source_name)
 
-    def _llm_call_with_retry(self, prompt: str, max_retries: int = 3) -> str:
+    def _llm_call_with_retry(self, prompt: str, max_retries: int = 3, response_format: dict = None) -> str:
         """Call the structuring LLM with exponential backoff on timeout/rate-limit."""
         delay = 2.0
         last_exc: Exception = RuntimeError("unreachable")
@@ -202,6 +368,7 @@ class HouseStructurer:
                     temperature=0.3,
                     max_tokens=4000,
                     timeout=90,
+                    response_format=response_format,
                 )
                 if hasattr(self, "_usage") and response.usage:
                     self._usage["input_tokens"] += response.usage.prompt_tokens

@@ -26,7 +26,7 @@ configure_logging()
 log = logging.getLogger(__name__)
 
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
-from src.models import Channel, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
+from src.models import Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
 from src.store import init_store
 from src.pipeline.extract import ExtractionError, extract_text, chunk_text, save_upload
 from src.pipeline.structure import HouseStructurer, StructuredHouse
@@ -204,6 +204,7 @@ def list_houses(query: Optional[str] = None, auth: AuthContext = Depends(get_aut
             "name": h.name,
             "source": h.source,
             "status": h.status,
+            "document_type": str(h.document_type) if h.document_type else "message_house",
             "summary": summary[:150] + ("..." if len(summary) > 150 else ""),
             "persona_count": pc,
             "message_count": mc,
@@ -239,6 +240,98 @@ def get_house(house_id: str):
     return _house_response(house)
 
 
+# --- Pillars ---
+
+from src.models import PillarCreate, PillarUpdate
+
+
+@app.get("/api/houses/{house_id}/pillars")
+def list_pillars(house_id: str):
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(404, "Invalid house ID")
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+    pillars = store.list_pillars(house_uuid)
+    return [p.model_dump() for p in pillars]
+
+
+@app.post("/api/houses/{house_id}/pillars", status_code=201)
+def create_pillar(house_id: str, data: PillarCreate):
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(404, "Invalid house ID")
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+    pillar_id = store.create_pillar(house_uuid, data.name, data.description, data.display_order)
+    return {"id": pillar_id, "name": data.name, "description": data.description, "display_order": data.display_order}
+
+
+@app.patch("/api/houses/{house_id}/pillars/{pillar_id}")
+def update_pillar(house_id: str, pillar_id: int, data: PillarUpdate):
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(404, "Invalid house ID")
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+    # Build update dict
+    update_dict = {}
+    if data.name is not None:
+        update_dict["name"] = data.name
+    if data.description is not None:
+        update_dict["description"] = data.description
+    if data.display_order is not None:
+        update_dict["display_order"] = data.display_order
+    if not update_dict:
+        raise HTTPException(400, "No fields to update")
+    success = store.update_pillar(pillar_id, **update_dict)
+    if not success:
+        raise HTTPException(404, "Pillar not found")
+    # Return updated pillar
+    pillars = store.list_pillars(house_uuid)
+    for p in pillars:
+        if p.id == pillar_id:
+            return p.model_dump()
+    raise HTTPException(404, "Pillar not found")
+
+
+@app.delete("/api/houses/{house_id}/pillars/{pillar_id}", status_code=204)
+def delete_pillar(house_id: str, pillar_id: int):
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(404, "Invalid house ID")
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+    success = store.delete_pillar(pillar_id)
+    if not success:
+        raise HTTPException(404, "Pillar not found")
+    return None
+
+
+class ChunkPillarAssign(BaseModel):
+    pillar_id: int | None = None
+
+
+@app.patch("/api/chunks/{chunk_id}/pillar")
+def assign_chunk_pillar(chunk_id: str, data: ChunkPillarAssign):
+    try:
+        chunk_uuid = UUID(chunk_id)
+    except Exception:
+        raise HTTPException(404, "Invalid chunk ID")
+    success = store.assign_chunk_to_pillar(chunk_uuid, data.pillar_id)
+    if not success:
+        raise HTTPException(404, "Chunk not found")
+    return {"assigned": data.pillar_id}
+
+
 class HouseCreate(BaseModel):
     name: str
     summary: str = ""
@@ -249,6 +342,7 @@ class HouseCreate(BaseModel):
     differentiation: str = ""
     source: str = "manual"
     status: str = "active"
+    document_type: str = "message_house"
 
 
 @app.post("/api/houses")
@@ -263,6 +357,7 @@ def create_house(data: HouseCreate):
         tagline=data.tagline,
         differentiation=data.differentiation,
         status=HouseStatus(data.status),
+        document_type=DocumentType(data.document_type),
         last_synced=_now(),
     )
     store.upsert_house(house)
@@ -278,6 +373,7 @@ class HouseUpdate(BaseModel):
     tagline: Optional[str] = None
     differentiation: Optional[str] = None
     status: Optional[str] = None
+    document_type: Optional[str] = None
 
 
 @app.patch("/api/houses/{house_id}")
@@ -286,7 +382,10 @@ def update_house(house_id: str, data: HouseUpdate):
     if not house:
         raise HTTPException(404, "House not found")
     for k, v in data.model_dump(exclude_none=True).items():
-        setattr(house, k, v)
+        if k == "document_type":
+            setattr(house, k, DocumentType(v))
+        else:
+            setattr(house, k, v)
     store.upsert_house(house)
     return {"ok": True, "updated_id": house_id}
 
@@ -511,6 +610,7 @@ async def upload_source(file: UploadFile = File(...)):
 async def extract_upload(
     file: UploadFile = File(...),
     source_name: str = Form(""),
+    document_type: str = Form("message_house"),
     _rl: None = Depends(extract_limiter),
     auth: AuthContext = Depends(require_write),
 ):
@@ -535,7 +635,7 @@ async def extract_upload(
         source_name = Path(file.filename).stem
 
     try:
-        structured, llm_usage = structurer.structure(text, source_name=source_name)
+        structured, llm_usage = structurer.structure(text, source_name=source_name, document_type=document_type)
     except Exception as e:
         log.error("LLM structuring failed for %s: %s", file.filename, e)
         return JSONResponse(status_code=500, content={
@@ -556,7 +656,7 @@ async def extract_upload(
         pass
 
     try:
-        house, indexed, markdown = _commit_structured_house(structured, file.filename)
+        house, indexed, markdown = _commit_structured_house(structured, file.filename, document_type=document_type)
     except Exception as e:
         log.error("DB commit failed for %s: %s", file.filename, e)
         return JSONResponse(status_code=500, content={
@@ -582,6 +682,7 @@ async def extract_upload(
 async def preview_structure(
     file: UploadFile = File(...),
     source_name: str = Form(""),
+    document_type: str = Form("message_house"),
     _rl: None = Depends(extract_limiter),
     auth: AuthContext = Depends(require_write),
 ):
@@ -605,7 +706,7 @@ async def preview_structure(
         source_name = Path(file.filename).stem
 
     try:
-        structured, llm_usage = structurer.structure(text, source_name=source_name)
+        structured, llm_usage = structurer.structure(text, source_name=source_name, document_type=document_type)
     except Exception as e:
         log.error("LLM structuring failed for %s: %s", file.filename, e)
         return JSONResponse(status_code=500, content={
@@ -627,7 +728,7 @@ async def preview_structure(
 
     _evict_preview_cache()
     token = str(_uuid.uuid4())
-    _preview_cache[token] = (structured, source_name, str(file_path), time.time())
+    _preview_cache[token] = (structured, source_name, str(file_path), time.time(), document_type)
 
     return {
         "status": "preview",
@@ -659,17 +760,22 @@ async def confirm_structure(data: dict):
     if not token or token not in _preview_cache:
         raise HTTPException(400, "Invalid or expired preview_token")
 
-    structured, source_name, file_path_str, *_ = _preview_cache.pop(token)
+    cache_entry = _preview_cache.pop(token)
+    structured, source_name, file_path_str, timestamp = cache_entry[:4]
+    document_type = cache_entry[4] if len(cache_entry) > 4 else "message_house"
 
     # Apply any user edits to top-level fields
     edits = data.get("edits", {})
     for field in ("name", "summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"):
         if field in edits and edits[field]:
             setattr(structured, field, edits[field])
+    
+    if "document_type" in edits:
+        document_type = edits["document_type"]
 
     try:
         filename = Path(file_path_str).name
-        house, indexed, markdown = _commit_structured_house(structured, filename)
+        house, indexed, markdown = _commit_structured_house(structured, filename, document_type=document_type)
     except Exception as e:
         log.error("DB commit failed during confirm-structure: %s", e)
         return JSONResponse(status_code=500, content={
@@ -691,7 +797,7 @@ async def confirm_structure(data: dict):
     }
 
 
-def _commit_structured_house(structured: StructuredHouse, filename: str) -> tuple:
+def _commit_structured_house(structured: StructuredHouse, filename: str, document_type: str = "message_house") -> tuple:
     """Save a StructuredHouse to DB, write markdown, and index to Pinecone.
 
     Returns (house, indexed_bool, markdown_str).
@@ -700,6 +806,7 @@ def _commit_structured_house(structured: StructuredHouse, filename: str) -> tupl
         name=structured.name,
         source="upload",
         source_id=filename,
+        document_type=DocumentType(document_type),
         summary=structured.summary,
         audience=structured.audience,
         brand_personality=structured.brand_personality,
@@ -711,21 +818,9 @@ def _commit_structured_house(structured: StructuredHouse, filename: str) -> tupl
     )
     store.upsert_house(house)
 
-    for km in structured.key_messages:
-        try:
-            section_type = SectionType(km["section_type"])
-        except ValueError:
-            section_type = SectionType.POSITIONING
-        msg = KeyMessage(
-            message_house_id=house.id,
-            section_type=section_type,
-            priority=km.get("priority", 3),
-            content=km["content"],
-            variants=km.get("variants", {}),
-            personas=km.get("personas", []),
-            channels=[Channel(c) for c in km.get("channels", ["all"])],
-        )
-        store.upsert_key_message(msg)
+    # ── Phase 2: Create personas + sub-attrs FIRST (needed for chunk linking) ──
+    pain_point_map: dict = {}    # content.lower() → id
+    objection_map: dict = {}     # statement.lower() → id
 
     for p in structured.personas:
         persona = Persona(
@@ -737,6 +832,106 @@ def _commit_structured_house(structured: StructuredHouse, filename: str) -> tupl
             objections=p.get("objections", []),
         )
         store.upsert_persona(persona)
+
+        persona_obj = store.get_persona_by_name(house.id, p["name"])
+        if persona_obj:
+            store.delete_persona_sub_attrs(str(persona_obj.id))
+
+            store.bulk_create_pain_points(
+                str(persona_obj.id),
+                [pt if isinstance(pt, str) else pt.get("content", str(pt))
+                 for pt in p.get("pain_points", [])]
+            )
+            store.bulk_create_buying_triggers(
+                str(persona_obj.id),
+                [t if isinstance(t, str) else t.get("content", str(t))
+                 for t in p.get("buying_triggers", [])]
+            )
+            ob_items = []
+            for ob in p.get("objections", []):
+                if isinstance(ob, dict):
+                    ob_items.append({"statement": ob.get("statement", ""), "response": ob.get("response")})
+                else:
+                    ob_items.append({"statement": str(ob), "response": None})
+            store.bulk_create_objections(str(persona_obj.id), ob_items)
+
+            for pp in store.list_pain_points(str(persona_obj.id)):
+                pain_point_map[pp.content.strip().lower()] = pp.id
+            for ob in store.list_objections(str(persona_obj.id)):
+                objection_map[ob.statement.strip().lower()] = ob.id
+
+    # ── Pillars ──────────────────────────────────────────────────────────
+    pillar_map = {}  # pillar name -> pillar_id
+    for pillar in structured.pillars:
+        pillar_id = store.create_pillar(
+            house_id=house.id,
+            name=pillar["name"],
+            description=pillar.get("description", ""),
+        )
+        pillar_map[pillar["name"]] = pillar_id
+
+    # ── Chunks (with Phase 2 linking) ────────────────────────────────
+    def _resolve_chunk(chunk_data: dict, pillar_id=None):
+        try:
+            section_type = SectionType(chunk_data["section_type"])
+        except ValueError:
+            section_type = SectionType.POSITIONING
+        msg = KeyMessage(
+            message_house_id=house.id,
+            pillar_id=pillar_id,
+            section_type=section_type,
+            priority=chunk_data.get("priority", 3),
+            content=chunk_data["content"],
+            variants=chunk_data.get("variants", {}),
+            personas=chunk_data.get("personas", []),
+            channels=[Channel(c) for c in chunk_data.get("channels", ["all"])],
+        )
+        store.upsert_key_message(msg)
+        # Phase 2: link chunk to pain points / objections
+        pp_ids = [
+            pain_point_map[txt.strip().lower()]
+            for txt in chunk_data.get("addresses_pain_points", [])
+            if txt.strip().lower() in pain_point_map
+        ]
+        ob_ids = [
+            objection_map[txt.strip().lower()]
+            for txt in chunk_data.get("resolves_objections", [])
+            if txt.strip().lower() in objection_map
+        ]
+        if pp_ids or ob_ids:
+            # Re-fetch the message to get its UUID
+            messages = store.get_key_messages(house.id)
+            for m in messages:
+                if m.content == chunk_data["content"] and m.section_type == str(section_type):
+                    store.update_chunk_links(str(m.id), pp_ids, ob_ids)
+                    break
+
+    if structured.pillars:
+        for pillar in structured.pillars:
+            pid = pillar_map.get(pillar["name"])
+            if pid is None:
+                continue
+            for chunk in pillar.get("chunks", []):
+                _resolve_chunk(chunk, pillar_id=pid)
+        for chunk in structured.ungrouped_chunks:
+            _resolve_chunk(chunk)
+    else:
+        for km in structured.key_messages:
+            try:
+                section_type = SectionType(km["section_type"])
+            except ValueError:
+                section_type = SectionType.POSITIONING
+            msg = KeyMessage(
+                message_house_id=house.id,
+                pillar_id=None,
+                section_type=section_type,
+                priority=km.get("priority", 3),
+                content=km["content"],
+                variants=km.get("variants", {}),
+                personas=km.get("personas", []),
+                channels=[Channel(c) for c in km.get("channels", ["all"])],
+            )
+            store.upsert_key_message(msg)
 
     markdown = structurer.to_markdown(structured)
     save_path = DATA_DIR / "frames" / f"{house.id}.md"
@@ -769,6 +964,89 @@ def get_frame_markdown(house_id: str):
     if not path.exists():
         raise HTTPException(404, "Markdown file not found")
     return {"markdown": path.read_text()}
+
+
+# --- Channels ---
+
+class ChannelCreateRequest(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+
+
+class ChannelUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+@app.get("/api/channels")
+def get_channels():
+    return store.get_channels()
+
+
+@app.post("/api/channels")
+def create_channel(req: ChannelCreateRequest, auth: AuthContext = Depends(require_write)):
+    if not req.id or not req.name:
+        raise HTTPException(400, "id and name are required")
+    if not req.id.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(400, "id must be alphanumeric with underscores/hyphens only")
+    return store.upsert_channel(req.id, req.name, req.description)
+
+
+@app.patch("/api/channels/{channel_id}")
+def update_channel(channel_id: str, req: ChannelUpdateRequest,
+                   auth: AuthContext = Depends(require_write)):
+    channels = store.get_channels()
+    existing = next((c for c in channels if c["id"] == channel_id), None)
+    if not existing:
+        raise HTTPException(404, "Channel not found")
+    name = req.name if req.name is not None else existing["name"]
+    description = req.description if req.description is not None else existing["description"]
+    return store.upsert_channel(channel_id, name, description)
+
+
+@app.delete("/api/channels/{channel_id}")
+def delete_channel(channel_id: str, auth: AuthContext = Depends(require_write)):
+    try:
+        deleted = store.delete_channel(channel_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not deleted:
+        raise HTTPException(404, "Channel not found")
+    return {"deleted": True}
+
+
+# --- Knowledge Graph ---
+
+@app.get("/api/graph/stats")
+def graph_stats():
+    from src.grounding.graph import get_graph_engine
+    return get_graph_engine().get_stats()
+
+
+@app.get("/api/graph/house/{house_id}")
+def graph_house(house_id: str):
+    from src.grounding.graph import get_graph_engine
+    try:
+        UUID(house_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid house_id UUID")
+    chunks = get_graph_engine().get_chunks_for_house(house_id)
+    return {"house_id": house_id, "chunks": chunks, "count": len(chunks)}
+
+
+@app.get("/api/graph/data")
+def graph_data():
+    from src.grounding.graph import get_graph_engine
+    return get_graph_engine().get_graph_data()
+
+
+@app.post("/api/graph/rebuild")
+def graph_rebuild(auth: AuthContext = Depends(require_write)):
+    from src.grounding.graph import get_graph_engine
+    engine = get_graph_engine()
+    engine.rebuild()
+    return {"rebuilt": True, "stats": engine.get_stats()}
 
 
 # --- Skill Files ---

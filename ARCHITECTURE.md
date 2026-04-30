@@ -103,6 +103,23 @@ REST API + static SPA. All routes are under `/api/*` except the SPA root (`/`), 
 - `chunk_text(text, size, overlap)` → paragraph-aware chunker
 - `save_upload(file, path)` → streams upload to disk
 
+#### 4a2. Multimodal Processing — `multimodal.py` _(Planned — v0.7)_
+
+Extension to the extraction pipeline for complex document formats and visual content. File does not yet exist.
+
+**Vision Model Fallback:**
+- Detect pages with high graphical element ratio (>40% images/graphics)
+- Route to vision model (GPT-4V) for layout meaning extraction
+- Handles diagrams and infographic-heavy slides that `pypdf` misses
+
+**Structural Table Extraction:**
+- DOCX table extraction with document-order preservation and merged-cell deduplication is implemented in `extract.py` (v0.6)
+- PDF table extraction and vision-based table parsing are planned for this module
+
+**Unified Hybrid Indexing:**
+- On ingest, route text chunks to Pinecone and simultaneously write entity relationships to the graph store
+- Dual-index strategy enables semantic queries (vector) and deterministic retrieval (graph)
+
 #### 4b. Structure — `structure.py`
 Converts raw document text into a `StructuredHouse` Pydantic model.
 
@@ -169,6 +186,51 @@ Grounding is **optional** — if Pinecone is not configured the engine returns a
 
 ---
 
+### 5b. Knowledge Graph Engine — `src/grounding/graph.py` _(Planned — v0.7)_
+
+> **Not yet implemented.** File does not exist. This section describes the target design.
+
+Separates deterministic retrieval from semantic search. The graph layer guarantees that verbatim approved content is returned exactly when queried by relationship — the vector layer handles thematic similarity for exploratory queries.
+
+**Design rationale:** vector nearest-neighbor search can return a *similar but not approved* message when messaging governance matters (e.g., a tagline that's close to the approved one but from a draft). Graph traversal from `(MessageHouse)-[:CONTAINS]->(KeyMessage)` returns exactly the messages associated with a framework, with no approximation.
+
+#### Graph Schema
+
+Generic node types keep the graph content-type-agnostic — the same schema covers message houses, brand guides, competitive briefs, and corp narratives.
+
+| Node | Attributes | Description |
+|---|---|---|
+| GroundingDocument | id, name, document_type, summary | Any structured grounding document — backed by a `message_houses` row |
+| GroundingChunk | id, content, section_type, priority | Individual content unit — backed by a `key_messages` row |
+| Persona | id, name, pain_points, buying_triggers | Target buyer/user roles with behavioral triggers |
+| Channel | id, name, constraints | Content requirements per channel — backed by a `channels` row [Planned v0.7] |
+
+#### Graph Relationships
+
+```
+(GroundingDocument) -[:CONTAINS]-> (GroundingChunk)
+(GroundingDocument) -[:TARGETS]-> (Persona)
+(GroundingChunk) -[:APPLIES_TO]-> (Channel)
+(GroundingChunk) -[:ADDRESSES]-> (Persona)
+```
+
+v0.8 cross-document edge (planned):
+```
+(GroundingDocument) -[:INFORMS]-> (GroundingDocument)
+```
+
+#### Hybrid Query Routing
+
+| Query Type | Primary Path | Fallback |
+|---|---|---|
+| Exploratory | Vector search → Graph traversal for context | Keyword search |
+| Governance | Graph traversal for explicit relationships | Vector search |
+| Filtered | SQLite metadata + Vector search | Graph lookup |
+
+**Implementation:** Neo4j integration or SQLite-based graph extension storing entity relationships alongside the existing relational schema.
+
+---
+
 ### 6. Data Store — `src/store.py`
 
 Single `Store` class wrapping a SQLAlchemy session factory. Exposed as a process-level singleton via `init_store()` / `get_store()`.
@@ -189,6 +251,7 @@ message_houses (idx: workspace_id)
 ├── id (PK)
 ├── workspace_id
 ├── name, source, source_id
+├── document_type (enum: message_house|brand_guide|competitive_brief|corp_narrative|persona_library — default: message_house) [Planned v0.7]
 ├── summary, audience, brand_personality (Text — no length limit)
 ├── positioning, tagline, differentiation (Text)
 ├── status, last_synced
@@ -383,12 +446,14 @@ msgstack-mcp/
 │   ├── rate_limit.py      # Sliding-window rate limiter
 │   ├── logging_config.py  # JSON/text structured logging
 │   ├── pipeline/
-│   │   ├── extract.py     # PDF/DOCX text extraction
+│   │   ├── extract.py     # PDF/DOCX extraction — doc-order, heading structure, table dedup
 │   │   ├── structure.py   # LLM structuring → StructuredHouse
 │   │   ├── generator.py   # Artifact generation via skills
-│   │   └── skills.py      # SkillManager + DEFAULT_SKILLS (12)
+│   │   ├── skills.py      # SkillManager + DEFAULT_SKILLS (12)
+│   │   └── multimodal.py  # [Planned v0.7] Vision model fallback for graphical content
 │   ├── grounding/
-│   │   └── search.py      # Hybrid vector+keyword search, Pinecone
+│   │   ├── search.py      # Hybrid vector+keyword search, Pinecone
+│   │   └── graph.py       # [Planned v0.7] Knowledge graph engine — deterministic retrieval
 │   └── web/
 │       └── index.html     # Single-file SPA frontend (~2,300 lines)
 ├── skills/                # Git-tracked skill JSON files (12)
@@ -601,4 +666,4 @@ ORM --> PG
 
 ---
 
-*Generated from live codebase analysis — reflects MsgStack MCP v0.5.0*
+*Reflects MsgStack MCP v0.6. Sections marked [Planned — v0.7] describe the target architecture for the next milestone and reference files that do not yet exist.*

@@ -26,6 +26,7 @@ def search_messaging(
     min_priority: Optional[int] = None,
     min_confidence: Optional[float] = None,
     workspace_id: Optional[str] = None,
+    retrieval_mode: Optional[str] = None,
 ) -> dict:
     """Search marketing messaging frameworks for grounding content.
 
@@ -45,6 +46,8 @@ def search_messaging(
         min_priority: Only return messages at or above this priority (1=highest).
         min_confidence: Warn if average result confidence is below this threshold (0.0–1.0).
         workspace_id: Filter to a specific workspace (optional).
+        retrieval_mode: "hybrid" (default), "vector", "graph" (deterministic — bypasses
+                        vector approximation, returns exact approved content), or "keyword".
 
     Returns:
         Matched messaging chunks with confidence scores and grounding context.
@@ -59,6 +62,7 @@ def search_messaging(
         min_priority=min_priority,
         min_confidence=min_confidence,
         workspace_id=workspace_id,
+        retrieval_mode=retrieval_mode or "hybrid",
     ).model_dump()
 
 
@@ -454,6 +458,55 @@ def check_framework_completeness(house_id: Optional[str] = None, house_name: Opt
         "persona_count": len(personas),
         "sections_covered": list(by_section.keys()),
     }
+
+
+@mcp.tool()
+def get_graph_connections(
+    house_id: str,
+    persona: Optional[str] = None,
+    channel: Optional[str] = None,
+) -> dict:
+    """Retrieve verbatim approved messaging via deterministic graph traversal.
+
+    Unlike search_messaging (which uses vector approximation), this tool queries
+    the knowledge graph directly — returning exactly the content associated with
+    a house, persona, or channel via typed relationships. Use this when you need:
+    - An exact approved tagline or headline (not the nearest neighbor)
+    - All messages that apply to a specific persona
+    - All messages approved for a specific channel
+
+    Args:
+        house_id: UUID of the message house to query.
+        persona: Optional persona name to filter by ADDRESSES relationship.
+        channel: Optional channel to filter by APPLIES_TO relationship.
+
+    Returns:
+        List of content chunks retrieved via graph traversal (confidence=1.0).
+    """
+    from src.grounding.graph import get_graph_engine
+    engine = get_graph_engine()
+    chunks = engine.get_connections(house_id, persona=persona, channel=channel)
+    return {
+        "retrieval_mode": "graph",
+        "house_id": house_id,
+        "persona_filter": persona,
+        "channel_filter": channel,
+        "count": len(chunks),
+        "chunks": [{"content": c.get("content", ""), "section_type": c.get("section_type", ""),
+                    "priority": c.get("priority", 3)} for c in chunks],
+    }
+
+
+@mcp.tool()
+def list_channels() -> dict:
+    """List all available messaging channels (including user-defined custom channels).
+
+    Returns the full channel registry — both the default channels (email, linkedin,
+    twitter, etc.) and any custom channels added by the team. Use channel IDs as
+    the 'channels' filter in search_messaging or get_graph_connections.
+    """
+    store = get_store()
+    return {"channels": store.get_channels()}
 
 
 @mcp.tool()

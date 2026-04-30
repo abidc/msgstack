@@ -70,16 +70,52 @@ def _extract_pdf(path: Path) -> str:
     return "\n".join(lines)
 
 
+_TOC_STYLES = {"toc 2", "toc 3", "toc 4", "toc 5", "toc 6"}
+
+
 def _extract_docx(path: Path) -> str:
+    from docx.text.paragraph import Paragraph as DocxParagraph
+    from docx.table import Table as DocxTable
+
     doc = DocxDocument(str(path))
     parts = []
-    for para in doc.paragraphs:
-        if para.text.strip():
-            parts.append(para.text.strip())
-    for table in doc.tables:
-        for row in table.rows:
-            cells = [c.text.strip().replace("\n", " ") for c in row.cells]
-            parts.append(" | ".join(cells))
+
+    for child in doc.element.body.iterchildren():
+        tag = child.tag.split("}")[-1]
+
+        if tag == "p":
+            para = DocxParagraph(child, doc)
+            style = para.style.name if para.style else ""
+            if style in _TOC_STYLES:
+                continue
+            text = para.text.strip()
+            if not text:
+                continue
+            if style.startswith("Heading"):
+                try:
+                    level = int(style.split()[-1])
+                    prefix = "#" * min(level, 4) + " "
+                except (ValueError, IndexError):
+                    prefix = "## "
+                parts.append(prefix + text)
+            elif "List" in style:
+                parts.append("- " + text)
+            else:
+                parts.append(text)
+
+        elif tag == "tbl":
+            table = DocxTable(child, doc)
+            for row in table.rows:
+                seen = set()
+                cells = []
+                for cell in row.cells:
+                    cid = id(cell._tc)
+                    if cid not in seen:
+                        seen.add(cid)
+                        cells.append(cell.text.strip().replace("\n", " "))
+                if any(cells):
+                    parts.append(" | ".join(cells))
+
     return "\n".join(parts)
 
 

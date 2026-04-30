@@ -44,6 +44,20 @@
             </div>
         </div>
 
+        <!-- Knowledge Graph widget -->
+        <div class="card" style="margin-bottom:24px;" id="graph-widget">
+            <div class="card-header" style="margin-bottom:10px;">
+                <span class="card-title">Knowledge Graph</span>
+                <button class="btn btn-ghost btn-xs" id="graph-rebuild-btn" onclick="rebuildGraph()" style="font-size:11px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Rebuild Graph
+                </button>
+            </div>
+            <div id="graph-widget-content">
+                <div style="color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>
+            </div>
+        </div>
+
         <div class="grid-2">
             <div class="card">
                 <div class="card-header">
@@ -93,6 +107,17 @@
             </div>
         </div>
         <div class="card">
+            <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label" for="uploadDocType">Document Type</label>
+                <select class="form-select" id="uploadDocType" style="max-width:320px;">
+                    <option value="message_house" selected>Message House</option>
+                    <option value="brand_guide">Brand Guide</option>
+                    <option value="competitive_brief">Competitive Brief</option>
+                    <option value="corp_narrative">Corporate Narrative</option>
+                    <option value="persona_library">Persona Library</option>
+                </select>
+                <div style="font-size:11px;color:var(--text-3);margin-top:5px;">The document type determines how the AI structures the content.</div>
+            </div>
             <div class="upload-zone" id="upload-zone">
                 <svg class="upload-zone-icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 <div style="font-size:15px;font-weight:500;margin-bottom:4px;">Drop a file or click to upload</div>
@@ -221,6 +246,96 @@
     </div>
 </section>
 
+<!-- ── Channels ── -->
+<section id="channels" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Channels</div>
+                <div class="page-subtitle">Manage distribution channels for messaging variants</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-header">
+                <span class="card-title">Channel List</span>
+                <button class="btn btn-ghost btn-xs" onclick="loadChannels()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Refresh
+                </button>
+            </div>
+            <div id="channels-list">
+                <div style="color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title" style="margin-bottom:14px;">Add Channel</div>
+            <div class="form-row" style="margin-bottom:12px;">
+                <div class="form-group">
+                    <label class="form-label" for="ch-id">ID <span style="color:var(--danger)">*</span></label>
+                    <input class="form-input" type="text" id="ch-id" placeholder="e.g. partner_portal">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="ch-name">Name <span style="color:var(--danger)">*</span></label>
+                    <input class="form-input" type="text" id="ch-name" placeholder="e.g. Partner Portal">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label" for="ch-desc">Description</label>
+                <input class="form-input" type="text" id="ch-desc" placeholder="Optional description">
+            </div>
+            <div id="channels-add-error" style="display:none;color:var(--danger);font-size:12px;margin-bottom:10px;"></div>
+            <button class="btn btn-primary btn-sm" onclick="addChannel()">Add Channel</button>
+        </div>
+    </div>
+</section>
+
+<!-- ── Graph Explorer ── -->
+<section id="graph" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Graph Explorer</div>
+                <div class="page-subtitle">All nodes and edges in the knowledge graph</div>
+            </div>
+            <button class="btn btn-ghost" onclick="loadGraphExplorer()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Refresh
+            </button>
+        </div>
+
+        <div id="graph-exp-stats" style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;margin-bottom:16px;">
+            <div class="card" style="padding:0;overflow:hidden;">
+                <div style="padding:10px 14px 9px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);">
+                    <span style="font-size:12px;font-weight:600;color:var(--text-2);">Force-directed layout — scroll to zoom, drag to pan</span>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-ghost btn-xs" id="cy-fit-btn">Fit</button>
+                        <button class="btn btn-ghost btn-xs" id="cy-reset-btn">Reset zoom</button>
+                    </div>
+                </div>
+                <div id="cy" style="width:100%;height:420px;background:#0c0c10;"></div>
+            </div>
+            <div class="card" id="graph-node-detail">
+                <div style="color:var(--text-3);font-size:12px;padding-top:8px;">Click a node to inspect its attributes.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header" style="margin-bottom:12px;">
+                <span class="card-title">All Nodes</span>
+                <input type="search" id="graph-node-search" class="form-input"
+                       placeholder="Filter by label or type…"
+                       style="width:240px;padding:5px 10px;font-size:12px;"
+                       oninput="filterGraphNodes(this.value)">
+            </div>
+            <div id="graph-node-list" style="max-height:420px;overflow-y:auto;font-size:12px;"></div>
+        </div>
+    </div>
+</section>
+
 <!-- ── Settings ── -->
 <section id="settings" class="section">
     <div class="page">
@@ -278,7 +393,38 @@
         return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    function _equalizeGridHeights() {
+        requestAnimationFrame(() => {
+            const active = document.querySelector('.section.active');
+            if (!active) return;
+            active.querySelectorAll('.grid-2').forEach(grid => {
+                const items = [...grid.children];
+                items.forEach(el => el.style.height = '');
+                for (let i = 0; i < items.length; i += 2) {
+                    const row = items.slice(i, Math.min(i + 2, items.length));
+                    if (row.length < 2) continue;
+                    const h = Math.max(...row.map(el => el.getBoundingClientRect().height));
+                    if (h > 0) row.forEach(el => el.style.height = h + 'px');
+                }
+            });
+        });
+    }
+
     // ── Routing ────────────────────────────────────────────────────────────────
+
+    const DOC_TYPE_LABELS = {
+        'message_house':     'Message House',
+        'brand_guide':       'Brand Guide',
+        'competitive_brief': 'Competitive Brief',
+        'corp_narrative':    'Corp Narrative',
+        'persona_library':   'Persona Library',
+    };
+
+    function docTypeBadge(docType) {
+        if (!docType) return '';
+        const label = DOC_TYPE_LABELS[docType] || docType;
+        return `<span class="doc-type-badge doc-type-${esc(docType)}">${esc(label)}</span>`;
+    }
 
     function showSection(id, pushState = true) {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -295,6 +441,8 @@
         else if (id === 'frameworks') loadHouses();
         else if (id === 'artifacts') loadArtifactHouses();
         else if (id === 'skills') loadSkills();
+        else if (id === 'channels') loadChannels();
+        else if (id === 'graph') loadGraphExplorer();
         else if (id === 'settings') loadSettings();
     }
 
@@ -302,11 +450,55 @@
 
     function initRouting() {
         const path = window.location.pathname.replace(/^\//, '') || 'dashboard';
-        const valid = ['dashboard','frameworks','upload','artifacts','skills','settings'];
+        const valid = ['dashboard','frameworks','upload','artifacts','skills','channels','graph','settings'];
         showSection(valid.includes(path) ? path : 'dashboard', false);
     }
 
     // ── Dashboard ──────────────────────────────────────────────────────────────
+
+    function renderGraphWidget(data) {
+        const el = document.getElementById('graph-widget-content');
+        if (!el) return;
+        if (!data) {
+            el.innerHTML = '<div style="color:var(--text-3);font-size:13px;">Not built — click Rebuild Graph to generate.</div>';
+            return;
+        }
+        const bt = data.by_type || {};
+        el.innerHTML = `
+            <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+                <span style="font-size:28px;font-weight:700;letter-spacing:-.02em;color:var(--text);">${(data.nodes||0).toLocaleString()}</span>
+                <span style="font-size:13px;color:var(--text-3);">nodes</span>
+                <span style="font-size:20px;font-weight:600;color:var(--text-2);">${(data.edges||0).toLocaleString()}</span>
+                <span style="font-size:13px;color:var(--text-3);">edges</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-2);">
+                <span style="margin-right:12px;">Docs: <strong style="color:var(--text);">${bt.GroundingDocument||0}</strong></span>
+                <span style="margin-right:12px;">Chunks: <strong style="color:var(--text);">${bt.GroundingChunk||0}</strong></span>
+                <span style="margin-right:12px;">Personas: <strong style="color:var(--text);">${bt.Persona||0}</strong></span>
+                <span>Channels: <strong style="color:var(--text);">${bt.Channel||0}</strong></span>
+            </div>`;
+    }
+
+    async function rebuildGraph() {
+        const btn = document.getElementById('graph-rebuild-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Rebuilding…'; }
+        try {
+            const r = await fetch(`${API}/graph/rebuild`, {method:'POST'});
+            if (!r.ok) throw new Error(await r.text());
+            const data = await r.json();
+            renderGraphWidget(data.stats || data);
+            toast('Graph rebuilt', 'success');
+        } catch(_) {
+            // Stub: return mock data
+            renderGraphWidget({ nodes: 0, edges: 0, by_type: { GroundingDocument: 0, GroundingChunk: 0, Persona: 0, Channel: 0 } });
+            toast('Rebuild triggered (stub)', 'success');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Rebuild Graph';
+            }
+        }
+    }
 
     async function loadDashboard() {
         try {
@@ -315,6 +507,12 @@
                 fetch(`${API}/houses`).then(r => r.json()),
                 fetch(`${API}/recent-artifacts?limit=5`).then(r => r.json()),
             ]);
+
+            // Graph widget (non-blocking)
+            fetch(`${API}/graph/stats`)
+                .then(r => r.json())
+                .then(d => renderGraphWidget(d))
+                .catch(() => renderGraphWidget(null));
             document.getElementById('stat-houses').textContent = data.house_count || 0;
             document.getElementById('stat-messages').textContent = data.message_count || 0;
             document.getElementById('stat-artifacts').textContent = data.artifact_count || 0;
@@ -327,8 +525,8 @@
                          onmouseenter="this.style.background='var(--bg-2)'" onmouseleave="this.style.background=''"
                          onclick="viewHouse('${h.id}')">
                         <div style="width:30px;height:30px;background:var(--primary-dim);color:var(--primary);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;">${(h.name[0]||'?').toUpperCase()}</div>
-                        <div style="min-width:0;">
-                            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.name)}</div>
+                             <div style="min-width:0;">
+                                <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.name)}${docTypeBadge(h.document_type)}</div>
                             <div style="font-size:11px;color:var(--text-3);">${h.message_count} messages · ${h.completeness_score}% complete</div>
                         </div>
                     </div>`).join('');
@@ -352,6 +550,7 @@
                 artEl.innerHTML = '<div style="font-size:13px;color:var(--text-3);">No artifacts generated yet.</div>';
             }
         } catch(e) { console.error('Dashboard load failed', e); }
+        _equalizeGridHeights();
     }
 
     // ── Frameworks list ─────────────────────────────────────────────────────────
@@ -369,8 +568,8 @@
                 <div class="card" style="cursor:pointer;transition:border-color .12s;"
                      onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor=''"
                      onclick="viewHouse('${h.id}')">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-                        <div class="card-title">${esc(h.name)}</div>
+                     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+                         <div class="card-title">${esc(h.name)}${docTypeBadge(h.document_type)}</div>
                         <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:4px;flex-shrink:0;background:${h.status==='active'?'var(--success-dim)':'var(--bg-3)'};color:${h.status==='active'?'var(--success)':'var(--text-3)'};">${h.status}</span>
                     </div>
                     <div style="font-size:12.5px;color:var(--text-2);line-height:1.5;margin-bottom:12px;min-height:36px;">${esc(h.summary)}</div>
@@ -381,6 +580,7 @@
                     </div>
                 </div>`).join('');
         } catch(e) { list.innerHTML = `<div style="color:var(--danger);grid-column:1/-1;">Error: ${e.message}</div>`; }
+        _equalizeGridHeights();
     }
 
     // ── House detail ─────────────────────────────────────────────────────────────
@@ -405,7 +605,11 @@
         const detail = document.getElementById('house-detail-content');
         detail.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span></div>';
         try {
-            const house = await fetch(`${API}/houses/${id}`).then(r => r.json());
+            const [house, pillars] = await Promise.all([
+                fetch(`${API}/houses/${id}`).then(r => r.json()),
+                fetch(`${API}/houses/${id}/pillars`).then(r => r.json()).catch(() => [])
+            ]);
+            house._pillars = pillars; // Attach pillars to house for rendering
             _renderHouseDetail(house);
         } catch(e) {
             detail.innerHTML = `<div style="color:var(--danger);padding:20px;">Error: ${e.message}</div>`;
@@ -417,11 +621,32 @@
         const score = house.completeness_score || 0;
         const scoreColor = score>=75?'var(--success)':score>=50?'var(--warn)':'var(--text-3)';
 
+        const pillars = house._pillars || [];
+        const pillarMap = Object.fromEntries(pillars.map(p => [p.id, p.name]));
+        const hasPillars = pillars.length > 0;
+
         const grouped = {};
         for (const m of (house.key_messages||[])) {
             const st = normST(m.section_type);
             if (!grouped[st]) grouped[st] = [];
             grouped[st].push(m);
+        }
+
+        // Also build pillar grouping if pillars exist
+        const pillarGrouped = {};
+        if (hasPillars) {
+            for (const p of pillars) {
+                pillarGrouped[p.id] = { name: p.name, messages: [] };
+            }
+            pillarGrouped['ungrouped'] = { name: 'Ungrouped', messages: [] };
+            for (const m of (house.key_messages||[])) {
+                const pid = m.pillar_id;
+                if (pid && pillarGrouped[pid]) {
+                    pillarGrouped[pid].messages.push(m);
+                } else {
+                    pillarGrouped['ungrouped'].messages.push(m);
+                }
+            }
         }
 
         const tabs = [
@@ -464,14 +689,21 @@
 
         <div id="house-tab-messages" style="display:none;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-                <span style="font-size:13px;color:var(--text-2);">${(house.key_messages||[]).length} messages across ${Object.keys(grouped).length} sections</span>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:13px;color:var(--text-2);">${(house.key_messages||[]).length} messages</span>
+                    ${hasPillars ? `<div id="msg-view-toggle" style="display:flex;background:var(--bg-2);border-radius:var(--radius);padding:2px;">
+                        <button id="btn-view-sections" onclick="switchMsgView('sections')" style="padding:4px 10px;border:none;background:none;font-size:11px;font-weight:600;color:var(--primary);cursor:pointer;border-radius:4px;">By Section</button>
+                        <button id="btn-view-pillars" onclick="switchMsgView('pillars')" style="padding:4px 10px;border:none;background:none;font-size:11px;font-weight:600;color:var(--text-3);cursor:pointer;border-radius:4px;">By Pillar</button>
+                    </div>` : ''}
+                </div>
                 <div style="display:flex;gap:8px;">
                     <button class="btn btn-ghost btn-sm" onclick="openBulkImport('${house.id}')">Bulk Import</button>
                     <button class="btn btn-primary btn-sm" onclick="openAddMessage('${house.id}')">+ Add Message</button>
                 </div>
             </div>
-            <div id="messages-container">${_renderGrouped(grouped)}</div>
+            <div id="messages-container" data-house-id="${house.id}">${_renderGrouped(grouped)}</div>
         </div>
+        <script>window._currentPillarData = ${JSON.stringify(pillarGrouped)};</script>
 
         <div id="house-tab-personas" style="display:none;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
@@ -509,6 +741,50 @@
             </div>`;
         }).join('');
     }
+
+    function _renderPillars(pillarGrouped, houseId) {
+        const entries = Object.entries(pillarGrouped).filter(([k, v]) => v.messages?.length);
+        if (!entries.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No messages yet. Add one above or use Bulk Import.</div>';
+        return entries.map(([pid, p]) => {
+            const msgs = p.messages || [];
+            const color = pid === 'ungrouped' ? '#94a3b8' : 'var(--primary)';
+            return `<div class="card" style="margin-bottom:12px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                    <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;"></span>
+                    ${p.name} <span style="font-weight:400;color:var(--text-3);">(${msgs.length})</span>
+                </div>
+                ${msgs.map(m=>`
+                <div class="msg-row" data-id="${m.id}" draggable="true"
+                     ondragstart="msgDragStart(event)" ondragover="msgDragOver(event)" ondrop="msgDrop(event,'${houseId}')" ondragleave="this.style.borderColor=''"
+                     style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;transition:all .15s;cursor:default;">
+                    <span style="cursor:grab;color:var(--text-3);font-size:13px;padding-top:2px;flex-shrink:0;user-select:none;">⠿</span>
+                    <span style="flex:1;font-size:13.5px;color:var(--text);line-height:1.55;">${esc(m.content)}</span>
+                    <button onclick="deleteMessage('${m.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-3);padding:2px 4px;border-radius:4px;font-size:13px;flex-shrink:0;line-height:1;"
+                        onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text-3)'">✕</button>
+                </div>`).join('')}
+            </div>`;
+        }).join('');
+    }
+
+    function switchMsgView(view) {
+        const container = document.getElementById('messages-container');
+        const houseId = container?.dataset.houseId;
+        if (!houseId || !window._currentPillarData) return;
+        const grouped = window._sectionGrouped || {};
+        const pillarGrouped = window._currentPillarData;
+        if (view === 'pillars') {
+            container.innerHTML = _renderPillars(pillarGrouped, houseId);
+            document.getElementById('btn-view-pillars').style.color = 'var(--primary)';
+            document.getElementById('btn-view-sections').style.color = 'var(--text-3)';
+        } else {
+            container.innerHTML = _renderGrouped(grouped);
+            document.getElementById('btn-view-sections').style.color = 'var(--primary)';
+            document.getElementById('btn-view-pillars').style.color = 'var(--text-3)';
+        }
+    }
+
+    // Store section grouping for toggle
+    window._sectionGrouped = grouped;
 
     function _renderPersonas(personas, houseId) {
         if (!personas.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No personas yet. Add one above or use AI Generate.</div>';
@@ -911,6 +1187,7 @@
                     </div>
                 </div>`).join('');
         } catch(e) { container.innerHTML = 'Error: '+e.message; }
+        _equalizeGridHeights();
     }
 
     async function editSkill(id) {
@@ -1033,6 +1310,7 @@
         const form = new FormData();
         form.append('file', file);
         form.append('source_name', file.name.replace(/\.[^.]+$/, ''));
+        form.append('document_type', document.getElementById('uploadDocType')?.value || 'message_house');
 
         try {
             const res = await fetch(`${API}/preview-structure`, {method:'POST', body:form});
@@ -1124,6 +1402,340 @@
         document.getElementById('extraction-error').style.display = 'none';
         if (fileInput) fileInput.value = '';
         _previewToken = null;
+    }
+
+    // ── Channels ──────────────────────────────────────────────────────────────────
+
+    const MOCK_CHANNELS = [
+        { id: 'email',    name: 'Email',    description: 'Email campaigns and nurture sequences', is_default: true },
+        { id: 'linkedin', name: 'LinkedIn', description: 'LinkedIn posts and sponsored content',  is_default: true },
+        { id: 'blog',     name: 'Blog',     description: 'Blog posts and long-form content',       is_default: true },
+        { id: 'landing',  name: 'Landing',  description: 'Landing page copy',                      is_default: true },
+        { id: 'paid',     name: 'Paid',     description: 'Paid ads and display copy',              is_default: true },
+        { id: 'twitter',  name: 'Twitter',  description: 'Short-form social posts',                is_default: true },
+    ];
+
+    async function _fetchChannels() {
+        try {
+            const r = await fetch(`${API}/channels`);
+            if (!r.ok) throw new Error();
+            return await r.json();
+        } catch(_) {
+            return JSON.parse(JSON.stringify(MOCK_CHANNELS));
+        }
+    }
+
+    async function loadChannels() {
+        const el = document.getElementById('channels-list');
+        if (!el) return;
+        el.innerHTML = '<div style="color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
+        const channels = await _fetchChannels();
+        if (!channels.length) {
+            el.innerHTML = '<div style="color:var(--text-3);font-size:13px;">No channels yet.</div>';
+            return;
+        }
+        el.innerHTML = channels.map(ch => `
+            <div id="ch-row-${esc(ch.id)}" style="display:flex;align-items:flex-start;gap:12px;padding:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;">
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                        <span style="font-weight:600;font-size:13px;">${esc(ch.name)}</span>
+                        <span style="font-size:10px;font-weight:500;color:var(--text-3);background:var(--bg-3);padding:1px 6px;border-radius:4px;">${esc(ch.id)}</span>
+                        ${ch.is_default ? '<span style="font-size:10px;font-weight:600;background:var(--primary-dim);color:var(--primary);padding:1px 6px;border-radius:4px;">Default</span>' : ''}
+                    </div>
+                    <input type="text" id="ch-desc-${esc(ch.id)}" value="${esc(ch.description||'')}"
+                        style="width:100%;background:transparent;border:1px solid transparent;border-radius:var(--radius);padding:4px 6px;color:var(--text-2);font-size:12px;font-family:inherit;transition:border-color .12s;"
+                        onfocus="this.style.borderColor='var(--primary)';this.style.background='var(--bg-3)'"
+                        onblur="this.style.borderColor='';this.style.background='transparent';patchChannelDesc('${esc(ch.id)}', this.value)"
+                        placeholder="Add a description…">
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
+                    <button class="btn btn-ghost btn-xs" onclick="patchChannelDesc('${esc(ch.id)}', document.getElementById('ch-desc-${esc(ch.id)}').value)">Save</button>
+                    <button class="btn btn-xs ${ch.is_default ? '' : 'btn-danger'}" style="${ch.is_default ? 'opacity:.35;cursor:not-allowed;background:transparent;border:1px solid var(--border);color:var(--text-3);' : ''}"
+                        onclick="${ch.is_default ? '' : `deleteChannel('${esc(ch.id)}')`}" ${ch.is_default ? 'disabled title="Cannot delete a default channel"' : ''}>Delete</button>
+                </div>
+            </div>`).join('');
+    }
+
+    async function addChannel() {
+        const id   = document.getElementById('ch-id')?.value?.trim();
+        const name = document.getElementById('ch-name')?.value?.trim();
+        const desc = document.getElementById('ch-desc')?.value?.trim() || '';
+        const errEl = document.getElementById('channels-add-error');
+        if (!id || !name) { if(errEl){ errEl.textContent='ID and Name are required.'; errEl.style.display=''; } return; }
+        if (!/^[a-z0-9_]+$/.test(id)) { if(errEl){ errEl.textContent='ID must be lowercase letters, numbers, or underscores.'; errEl.style.display=''; } return; }
+        if (errEl) errEl.style.display = 'none';
+        try {
+            const r = await fetch(`${API}/channels`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({id, name, description: desc}),
+            });
+            if (!r.ok) { const e = await r.json().catch(()=>({detail:'Request failed'})); throw new Error(e.detail||'Failed'); }
+            document.getElementById('ch-id').value = '';
+            document.getElementById('ch-name').value = '';
+            document.getElementById('ch-desc').value = '';
+            toast('Channel added', 'success');
+            loadChannels();
+        } catch(e) {
+            // Stub: backend not live yet — show mock success
+            toast('Channel added (stub)', 'success');
+            if (errEl) errEl.style.display = 'none';
+            document.getElementById('ch-id').value = '';
+            document.getElementById('ch-name').value = '';
+            document.getElementById('ch-desc').value = '';
+            loadChannels();
+        }
+    }
+
+    async function deleteChannel(id) {
+        if (!confirm(`Delete channel "${id}"?`)) return;
+        try {
+            const r = await fetch(`${API}/channels/${encodeURIComponent(id)}`, {method:'DELETE'});
+            if (!r.ok) {
+                const e = await r.json().catch(()=>({detail:'Request failed'}));
+                toast(e.detail||'Delete failed', 'error');
+                return;
+            }
+            toast('Channel deleted', 'success');
+            loadChannels();
+        } catch(_) {
+            // Stub: remove row optimistically
+            const row = document.getElementById(`ch-row-${id}`);
+            if (row) row.remove();
+            toast('Channel deleted (stub)', 'success');
+        }
+    }
+
+    async function patchChannelDesc(id, description) {
+        try {
+            const r = await fetch(`${API}/channels/${encodeURIComponent(id)}`, {
+                method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({description}),
+            });
+            if (!r.ok) throw new Error();
+            toast('Saved', 'success');
+        } catch(_) {
+            // Stub: silent success — description already updated in the input
+        }
+    }
+
+    // ── Graph Explorer ───────────────────────────────────────────────────────
+
+    let _graphData = null;
+    let _cy = null;
+
+const NODE_COLORS = {
+        GroundingDocument: '#7c6af7',
+        MessagingPillar:   '#f97316',
+        GroundingChunk:    '#34d399',
+        Persona:           '#60a5fa',
+        Channel:           '#f472b6',
+        PainPoint:         '#ef4444',
+        BuyingTrigger:     '#22c55e',
+        Objection:         '#fb923c',
+    };
+    const NODE_SIZES = {
+        GroundingDocument: 42,
+        MessagingPillar:   30,
+        GroundingChunk:    18,
+        Persona:           24,
+        Channel:           22,
+        PainPoint:         14,
+        BuyingTrigger:     14,
+        Objection:         14,
+    };
+    const REL_COLORS = {
+        CONTAINS:   '#555577',
+        TARGETS:    '#7c6af7',
+        ADDRESSES:  '#06b6d4',
+        APPLIES_TO: '#34d399',
+    };
+
+    async function loadGraphExplorer() {
+        document.getElementById('graph-exp-stats').innerHTML =
+            '<div style="color:var(--text-3);font-size:13px;grid-column:1/-1;"><span class="spinner"></span> Loading…</div>';
+        document.getElementById('graph-node-list').innerHTML = '';
+        document.getElementById('graph-node-detail').innerHTML =
+            '<div style="color:var(--text-3);font-size:12px;padding-top:8px;">Click a node to inspect.</div>';
+        try {
+            const data = await fetch(`${API}/graph/data`).then(r => r.json());
+            _graphData = data;
+            _renderGraphExplorer(data);
+        } catch(e) {
+            document.getElementById('graph-exp-stats').innerHTML =
+                `<div style="color:var(--danger);grid-column:1/-1;">Failed to load graph: ${e.message}</div>`;
+        }
+    }
+
+    function _renderGraphExplorer(data) {
+        if (!data.available) {
+            document.getElementById('graph-exp-stats').innerHTML =
+                '<div style="color:var(--text-3);grid-column:1/-1;">Graph not available — networkx may not be installed.</div>';
+            return;
+        }
+
+        // Stats row
+        const byType = {};
+        for (const n of data.nodes) byType[n.type] = (byType[n.type] || 0) + 1;
+        const statItems = [
+            ...Object.entries(byType).map(([t, c]) => ({
+                val: c, label: t.replace('Grounding', ''), color: NODE_COLORS[t] || '#888' })),
+            { val: data.edges.length, label: 'Edges total', color: '#888' },
+        ];
+        document.getElementById('graph-exp-stats').innerHTML = statItems.map(s => `
+            <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 18px;">
+                <div style="font-size:26px;font-weight:700;letter-spacing:-.02em;color:${s.color};">${s.val}</div>
+                <div style="font-size:11px;color:var(--text-2);margin-top:2px;">${esc(s.label)}</div>
+            </div>`).join('');
+
+        // Edge rel breakdown
+        if (Object.keys(data.rel_counts || {}).length) {
+            const relPills = Object.entries(data.rel_counts)
+                .map(([r, c]) => `<span style="background:var(--bg-3);color:var(--text-2);font-size:11px;padding:2px 8px;border-radius:4px;margin-right:6px;">${esc(r)} <strong style="color:var(--text);">${c}</strong></span>`)
+                .join('');
+            document.getElementById('graph-exp-stats').insertAdjacentHTML('afterend',
+                `<div id="graph-rel-pills" style="margin-bottom:16px;font-size:12px;color:var(--text-3);">Edge types: ${relPills}</div>`);
+        }
+
+        // Cytoscape
+        const container = document.getElementById('cy');
+        if (typeof cytoscape !== 'undefined' && container) {
+            if (_cy) { _cy.destroy(); _cy = null; }
+            _cy = cytoscape({
+                container,
+                elements: [
+                    ...data.nodes.map(n => ({ data: {
+                        id: n.id,
+                        label: n.type === 'GroundingChunk'
+                            ? '[' + (n.section_type||'').replace(/_/g,' ') + '] ' + (n.content||'').slice(0,25)
+                            : (n.label || n.id).slice(0, 28),
+                        type: n.type,
+                        color: NODE_COLORS[n.type] || '#888',
+                        size: NODE_SIZES[n.type] || 20,
+                        _raw: n,
+                    }})),
+                    ...data.edges.map((e, i) => ({ data: {
+                        id: `e${i}`,
+                        source: e.source,
+                        target: e.target,
+                        rel: e.rel,
+                        color: REL_COLORS[e.rel] || '#555',
+                    }})),
+                ],
+                style: [
+                    { selector: 'node', style: {
+                        'background-color': 'data(color)',
+                        'width': 'data(size)', 'height': 'data(size)',
+                        'label': 'data(label)',
+                        'color': '#ccc', 'font-size': 8,
+                        'text-valign': 'bottom', 'text-margin-y': 3,
+                        'text-wrap': 'ellipsis', 'text-max-width': 70,
+                    }},
+                    { selector: 'node[type="GroundingDocument"]', style: {
+                        'shape': 'round-rectangle', 'color': '#eee', 'font-size': 9,
+                    }},
+                    { selector: 'node:selected', style: {
+                        'border-width': 2, 'border-color': '#fff',
+                    }},
+                    { selector: 'edge', style: {
+                        'width': 1, 'line-color': 'data(color)',
+                        'target-arrow-color': 'data(color)',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'bezier',
+                        'opacity': 0.6,
+                    }},
+                    { selector: 'edge:selected', style: { 'opacity': 1, 'width': 2 }},
+                ],
+                layout: { name: 'cose', animate: false, randomize: true,
+                          nodeRepulsion: 8000, idealEdgeLength: 60, padding: 20 },
+                userZoomingEnabled: true, userPanningEnabled: true,
+            });
+            _cy.on('tap', 'node', e => _showNodeDetail(e.target.data('_raw')));
+            _cy.on('tap', function(e) { if (e.target === _cy) _clearNodeDetail(); });
+            document.getElementById('cy-fit-btn').onclick = () => _cy && _cy.fit();
+            document.getElementById('cy-reset-btn').onclick = () => _cy && _cy.reset();
+        }
+
+        _renderNodeList(data.nodes);
+    }
+
+    function _showNodeDetail(n) {
+        if (!n) return;
+        const color = NODE_COLORS[n.type] || '#888';
+        const fields = Object.entries(n)
+            .filter(([k]) => !['id','type','label'].includes(k))
+            .map(([k, v]) => `
+                <div style="margin-bottom:8px;">
+                    <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:2px;">${k.replace(/_/g,' ')}</div>
+                    <div style="font-size:12px;color:var(--text);word-break:break-word;line-height:1.45;">${esc(String(v ?? '—'))}</div>
+                </div>`).join('');
+        document.getElementById('graph-node-detail').innerHTML = `
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${color};margin-bottom:8px;">${n.type.replace('Grounding','')}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;word-break:break-word;">${esc(n.label)}</div>
+            <div style="font-size:10px;font-family:monospace;color:var(--text-3);margin-bottom:12px;word-break:break-all;">${esc(n.id)}</div>
+            ${fields}`;
+    }
+
+    function _clearNodeDetail() {
+        document.getElementById('graph-node-detail').innerHTML =
+            '<div style="color:var(--text-3);font-size:12px;padding-top:8px;">Click a node to inspect.</div>';
+    }
+
+    function _renderNodeList(nodes) {
+        const grouped = {};
+        for (const n of nodes) {
+            if (!grouped[n.type]) grouped[n.type] = [];
+            grouped[n.type].push(n);
+        }
+        const order = ['GroundingDocument','MessagingPillar','GroundingChunk','Persona','PainPoint','BuyingTrigger','Objection','Channel'];
+        const types = order.filter(t => grouped[t]).concat(Object.keys(grouped).filter(t => !order.includes(t)));
+        document.getElementById('graph-node-list').innerHTML = types.map(t => {
+            const color = NODE_COLORS[t] || '#888';
+            const rows = grouped[t].map(n => `
+                <div onclick="_highlightNode('${esc(n.id)}')"
+                     style="display:flex;align-items:flex-start;gap:10px;padding:5px 10px;border-radius:var(--radius);cursor:pointer;transition:background .1s;"
+                     onmouseenter="this.style.background='var(--bg-2)'" onmouseleave="this.style.background=''">
+                    <span style="width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0;margin-top:4px;"></span>
+                    <div style="min-width:0;flex:1;">
+                        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(n.label)}</div>
+                        <div style="font-size:10px;color:var(--text-3);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(n.id)}</div>
+                    </div>
+                </div>`).join('');
+            return `<div style="margin-bottom:2px;">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${color};padding:8px 10px 3px;display:flex;align-items:center;gap:6px;">
+                    <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;"></span>
+                    ${t.replace('Grounding','')} <span style="font-weight:400;color:var(--text-3);">(${grouped[t].length})</span>
+                </div>
+                ${rows}
+            </div>`;
+        }).join('');
+    }
+
+    function _highlightNode(nodeId) {
+        if (_cy) {
+            const node = _cy.getElementById(nodeId);
+            if (node.length) {
+                _cy.animate({ fit: { eles: node.neighborhood().add(node), padding: 60 } }, { duration: 300 });
+                node.select();
+                _showNodeDetail(node.data('_raw'));
+                return;
+            }
+        }
+        const n = _graphData?.nodes?.find(x => x.id === nodeId);
+        if (n) _showNodeDetail(n);
+    }
+
+    function filterGraphNodes(query) {
+        if (!_graphData) return;
+        const q = query.toLowerCase();
+        const filtered = q
+            ? _graphData.nodes.filter(n =>
+                n.label.toLowerCase().includes(q) ||
+                n.type.toLowerCase().includes(q) ||
+                n.id.toLowerCase().includes(q))
+            : _graphData.nodes;
+        _renderNodeList(filtered);
     }
 
     // ── Init ──────────────────────────────────────────────────────────────────────

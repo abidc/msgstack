@@ -1,6 +1,6 @@
 # MsgStack — Product Specification
 
-**Version:** 0.1  
+**Version:** 0.2  
 **Last Updated:** April 2026  
 **Status:** Active Development
 
@@ -16,7 +16,7 @@ The result:
 - New hires and agencies have no reliable source of truth
 - Messaging frameworks sit in PowerPoints or Google Docs, get outdated, and are ignored
 
-MsgStack solves this by making messaging frameworks **structured, searchable, and directly accessible to AI assistants**.
+MsgStack solves this by making messaging frameworks **structured, searchable, and directly accessible to AI assistants**. The v0.7 milestone will deepen this with a hybrid Knowledge Graph + Vector RAG architecture — combining semantic vector search with deterministic graph retrieval so that verbatim approved messaging (taglines, locked proof points, approved headlines) is returned exactly, not approximated by nearest-neighbor search.
 
 ---
 
@@ -48,21 +48,19 @@ MsgStack solves this by making messaging frameworks **structured, searchable, an
 
 ## 4. Core Capabilities
 
-### 4.1 Message House Management
+### 4.1 Message House Specifications
 
-A **Message House** is the canonical data structure. It contains:
-
-| Section | Purpose | Required |
+| Section | Required | Purpose |
 |---|---|---|
-| Summary | 2-3 sentence product overview | Yes |
-| Target Audience | Buyer + user roles | Yes |
-| Brand Personality | Tone, voice, word choices | No |
-| Positioning | Core "what it is and why it matters" | Yes |
-| Tagline | ≤7 word punchy headline | Yes |
-| Differentiation | Key differentiators | Yes |
-| Key Messages | Headlines, benefits, use cases, proof points, objections | Yes (min 8) |
-| Personas | Buyer/user personas with triggers and objections | Yes (min 1) |
-| Know Your Market | Research pre-section (vision, before/after, FOMO, competition) | Optional |
+| Summary | Yes | 2-3 sentence overview of the product or service. |
+| Target Audience | Yes | Buyer and user roles. |
+| Positioning | Yes | Core statement of what the product is and why it matters. |
+| Tagline | Yes | ≤7 word punchy headline |
+| Differentiation | Yes | Key differentiators |
+| Brand Personality | No | Tone, voice, word choices |
+| Key Messages | Yes (min 8) | Headlines, benefits, use cases, proof points, objections |
+| Personas | Yes (min 1) | Buyer/user personas with triggers and objections |
+| Know Your Market | Optional | Research pre-section (vision, before/after, FOMO, competition) |
 
 **Completeness Scoring:** Each framework is scored 0-100 against the spec. The score drives the "Missing Sections" UI and AI-fill prompts.
 
@@ -151,6 +149,77 @@ Single-page application served at `/`. No build step required (vanilla JS + inli
 - Upload Source (drag-drop → auto-extract → completeness display + KYM card + missing sections)
 - Skills (search, create, edit, delete skill templates)
 - Seed (load sample data)
+
+---
+
+## Planned Architecture — v0.7: Hybrid RAG + Knowledge Graph
+
+> **Status: Not yet implemented.** This section describes the target architecture for the v0.7 milestone.
+
+The core design goal is a strict separation between two retrieval modes:
+
+- **Vector search (Pinecone)** — semantic similarity for exploratory queries. Finds thematically relevant messaging. Results are approximate by design.
+- **Graph traversal (Knowledge Graph)** — deterministic retrieval via typed relationships. Used when an AI agent needs verbatim approved content: an exact tagline, a locked proof point, a specific persona's buying triggers. Returns exact matches, not nearest neighbors.
+
+Together they eliminate the failure mode where an LLM grounds against a *similar but not approved* message because vector search returned a close-but-wrong result.
+
+### Knowledge Graph Schema
+
+The graph uses generic node types — `GroundingDocument` and `GroundingChunk` — rather than `MessageHouse`/`KeyMessage`. This makes the graph layer content-type-agnostic: a brand guide, competitive brief, or corp narrative uses the same graph schema as a message house.
+
+| Node / Entity | Attributes | Description |
+|---|---|---|
+| GroundingDocument | id, name, document_type, summary | Any structured grounding document (message house, brand guide, competitive brief, corp narrative, persona library). |
+| GroundingChunk | id, content, section_type, priority | Individual content unit from a document — maps to `KeyMessage` for message houses, `style_rule` for brand guides, etc. |
+| Persona | id, name, pain_points, buying_triggers | Target buyer or user roles with explicit behavioral triggers. |
+| Channel | id, name, constraints | Content requirements per delivery channel. |
+
+### Graph Relationships
+
+The property graph maintains the following explicit relationships:
+
+- `(GroundingDocument) -[:CONTAINS]-> (GroundingChunk)`
+- `(GroundingDocument) -[:TARGETS]-> (Persona)`
+- `(GroundingChunk) -[:APPLIES_TO]-> (Channel)`
+- `(GroundingChunk) -[:ADDRESSES]-> (Persona)`
+
+### Hybrid Indexing Strategy
+
+| Search Type | Use Case | Storage |
+|---|---|---|
+| Vector (Pinecone) | Broad thematic search, semantic similarity | Embeddings of message content + house fields |
+| Graph (SQLite adjacency tables) | Explicit relationship queries, path traversal | Entity + relationship store — Neo4j migration path for scale |
+| Keyword (SQLite) | Exact match, structured filtering | Full-text search on message content |
+
+The system routes queries by `retrieval_mode` parameter:
+- `vector` — Pinecone semantic search only
+- `graph` — Graph traversal for explicit relationships (governance/verbatim content)
+- `hybrid` — Vector first, graph traversal for related context (default)
+- `keyword` — SQLite full-text fallback
+
+### Multi-Content-Type Data Model
+
+The `message_houses` table stores all grounding document types via a `document_type` discriminator. This avoids schema proliferation as new document types are added.
+
+| DocumentType | Purpose | Key SectionType Variants |
+|---|---|---|
+| `message_house` | Brand messaging frameworks (current default) | headline, subhead, benefit, proof_point, objection, social_proof, positioning, use_case, know_your_market |
+| `brand_guide` | Brand voice, style guidelines, word lists | brand_voice, style_rule, word_list |
+| `competitive_brief` | Competitor analysis and response strategies | competitor_strength, competitor_weakness, competitive_response |
+| `corp_narrative` | Company story, values, founding narrative | narrative_pillar, company_value, founding_story |
+| `persona_library` | Standalone buyer/user persona definitions | persona_detail |
+
+**Channel as a first-class entity:** `Channel` is promoted from a code enum to a `ChannelModel` database table. Seeded defaults: `all`, `email`, `linkedin`, `twitter`, `paid_ads`, `landing_page`, `sales_deck`. Users can define custom channels (e.g., `partner_portal`, `in-app`) without code changes.
+
+### Enhanced Multimodal Document Processing Pipeline
+
+The intake pipeline will be extended to handle complex document formats and visual content:
+
+**Multimodal Fallback:** When a page contains a high ratio of graphical elements or complex layouts, the pipeline will route it to a vision model (GPT-4V) for layout meaning extraction — handling diagrams and infographic-heavy slides that basic PDF parsers miss.
+
+**Structural Table Extraction:** Preserves row and column relationships when extracting tables, maintaining header semantics for queryable structured data. _(Partially implemented in v0.6 for DOCX — PDF and vision-based table extraction is planned.)_
+
+**Unified Hybrid Indexing:** On ingest, text chunks are embedded and routed to Pinecone while entity relationships (House→Message→Persona→Channel) are simultaneously written to the graph store.
 
 ---
 

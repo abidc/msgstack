@@ -26,7 +26,7 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
-from src.models import Channel, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
+from src.models import Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -97,6 +97,27 @@ class TokenUsageModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class ChannelModel(Base):
+    __tablename__ = "channels"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[str] = mapped_column(String(500), default="")
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+_DEFAULT_CHANNELS = [
+    ("all", "All Channels", "Universal — applies to all channels", True),
+    ("email", "Email", "Email campaigns and newsletters", True),
+    ("linkedin", "LinkedIn", "LinkedIn posts and sponsored content", True),
+    ("twitter", "Twitter / X", "Twitter and X posts", True),
+    ("paid_ads", "Paid Ads", "Display, search, and social advertising", True),
+    ("landing_page", "Landing Page", "Website landing pages and hero copy", True),
+    ("sales_deck", "Sales Deck", "Slide decks and pitch presentations", True),
+]
+
+
 class HouseModel(Base):
     __tablename__ = "message_houses"
 
@@ -105,6 +126,7 @@ class HouseModel(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str] = mapped_column(String(50), default="manual")
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    document_type: Mapped[str] = mapped_column(String(30), nullable=False, default="message_house", server_default="message_house")
     summary: Mapped[str] = mapped_column(Text, default="")
     audience: Mapped[str] = mapped_column(Text, default="")
     brand_personality: Mapped[str] = mapped_column(Text, default="")
@@ -120,6 +142,42 @@ class HouseModel(Base):
     personas: Mapped[list["PersonaModel"]] = relationship(
         back_populates="message_house", cascade="all, delete-orphan"
     )
+    pillars: Mapped[list["PillarModel"]] = relationship(
+        back_populates="message_house", cascade="all, delete-orphan"
+    )
+
+
+class PillarModel(Base):
+    __tablename__ = "pillars"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    house_id: Mapped[str] = mapped_column(String(36), ForeignKey("message_houses.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), default="")
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+    message_house: Mapped["HouseModel"] = relationship(back_populates="pillars")
+
+
+class PainPointModel(Base):
+    __tablename__ = "pain_points"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    persona_id: Mapped[str] = mapped_column(String(36), ForeignKey("personas.id", ondelete="CASCADE"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class BuyingTriggerModel(Base):
+    __tablename__ = "buying_triggers"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    persona_id: Mapped[str] = mapped_column(String(36), ForeignKey("personas.id", ondelete="CASCADE"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class ObjectionModel(Base):
+    __tablename__ = "objections"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    persona_id: Mapped[str] = mapped_column(String(36), ForeignKey("personas.id", ondelete="CASCADE"), nullable=False)
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class KeyMessageModel(Base):
@@ -129,6 +187,7 @@ class KeyMessageModel(Base):
     message_house_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("message_houses.id"), nullable=False
     )
+    pillar_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("pillars.id", ondelete="SET NULL"), nullable=True)
     section_type: Mapped[str] = mapped_column(String(30), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -136,6 +195,8 @@ class KeyMessageModel(Base):
     personas: Mapped[list] = mapped_column(JSON, default=list)
     channels: Mapped[list] = mapped_column(JSON, default=["all"])
     source_chunk_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pain_point_ids: Mapped[list] = mapped_column(JSON, default=list)
+    objection_ids: Mapped[list] = mapped_column(JSON, default=list)
     message_house: Mapped["HouseModel"] = relationship(back_populates="key_messages")
 
 
@@ -183,12 +244,14 @@ class ArtifactHistoryModel(Base):
 
 # Performance indexes on high-cardinality FK / filter columns
 Index("ix_km_house_id", KeyMessageModel.message_house_id)
+Index("ix_km_pillar_id", KeyMessageModel.pillar_id)
 Index("ix_persona_house_id", PersonaModel.message_house_id)
 Index("ix_snapshot_house_id", SnapshotModel.house_id)
 Index("ix_artifact_house_id", ArtifactHistoryModel.house_id)
 Index("ix_token_usage_workspace", TokenUsageModel.workspace_id)
 Index("ix_api_key_workspace", ApiKeyModel.workspace_id)
 Index("ix_house_workspace", HouseModel.workspace_id)
+Index("ix_pillar_house_id", PillarModel.house_id)
 
 
 class Store:
@@ -203,7 +266,100 @@ class Store:
 
     def init(self) -> None:
         Base.metadata.create_all(self.engine)
+        self._migrate()
         self._ensure_default_workspace()
+        self._seed_default_channels()
+
+    def _migrate(self) -> None:
+        """Apply additive migrations for columns added after initial schema creation."""
+        from sqlalchemy import text, inspect
+        insp = inspect(self.engine)
+        with self.engine.connect() as conn:
+            # Add document_type to message_houses if missing
+            if "message_houses" in insp.get_table_names():
+                cols = {c["name"] for c in insp.get_columns("message_houses")}
+                if "document_type" not in cols:
+                    conn.execute(text(
+                        "ALTER TABLE message_houses ADD COLUMN document_type VARCHAR(30) "
+                        "NOT NULL DEFAULT 'message_house'"
+                    ))
+                    conn.commit()
+
+            # Create pillars table if not exists
+            if "pillars" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE pillars (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        house_id VARCHAR(36) NOT NULL REFERENCES message_houses(id) ON DELETE CASCADE,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        display_order INTEGER DEFAULT 0
+                    )
+                """))
+                conn.commit()
+
+            # Add pillar_id column to key_messages if missing
+            if "key_messages" in insp.get_table_names():
+                km_cols = {c["name"] for c in insp.get_columns("key_messages")}
+                if "pillar_id" not in km_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE key_messages ADD COLUMN pillar_id INTEGER REFERENCES pillars(id) ON DELETE SET NULL"))
+                        conn.commit()
+                    except Exception:
+                        pass  # Column already exists or other issue
+
+            # Create pain_points table
+            if "pain_points" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE pain_points (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+                        content TEXT NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            # Create buying_triggers table
+            if "buying_triggers" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE buying_triggers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+                        content TEXT NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            # Create objections table
+            if "objections" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE objections (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+                        statement TEXT NOT NULL,
+                        response TEXT
+                    )
+                """))
+                conn.commit()
+
+            # Add pain_point_ids and objection_ids to key_messages
+            if "key_messages" in insp.get_table_names():
+                km_cols = {c["name"] for c in insp.get_columns("key_messages")}
+                for col in ("pain_point_ids", "objection_ids"):
+                    if col not in km_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE key_messages ADD COLUMN {col} JSON DEFAULT '[]'"))
+                            conn.commit()
+                        except Exception:
+                            pass
+
+    def _seed_default_channels(self) -> None:
+        with self.session() as s:
+            for ch_id, name, description, is_default in _DEFAULT_CHANNELS:
+                if not s.get(ChannelModel, ch_id):
+                    s.add(ChannelModel(id=ch_id, name=name, description=description,
+                                       is_default=is_default, created_at=_now()))
+            s.commit()
 
     def _ensure_default_workspace(self) -> None:
         with self.session() as s:
@@ -234,6 +390,7 @@ class Store:
                 data["workspace_id"] = workspace_id
                 s.add(HouseModel(**data))
             s.commit()
+        _invalidate_graph()
 
     def get_house(self, house_id: UUID) -> MessageHouse | None:
         with self.session() as s:
@@ -264,6 +421,7 @@ class Store:
             else:
                 s.add(KeyMessageModel(**_to_db(msg.model_dump())))
             s.commit()
+        _invalidate_graph()
 
     def get_key_messages(self, house_id: UUID) -> list[KeyMessage]:
         with self.session() as s:
@@ -295,6 +453,7 @@ class Store:
             else:
                 s.add(PersonaModel(**_to_db(persona.model_dump())))
             s.commit()
+        _invalidate_graph()
 
     def get_personas(self, house_id: UUID) -> list[Persona]:
         with self.session() as s:
@@ -305,12 +464,84 @@ class Store:
             )
             return [_persona_from_row(r) for r in rows]
 
+    def get_persona_by_name(self, house_id: UUID, name: str) -> Persona | None:
+        with self.session() as s:
+            row = (
+                s.query(PersonaModel)
+                .filter(PersonaModel.message_house_id == str(house_id), PersonaModel.name == name)
+                .first()
+            )
+            return _persona_from_row(row) if row else None
+
+    def bulk_create_pain_points(self, persona_id: str, items: list[str]) -> list[int]:
+        with self.session() as s:
+            new_ids = []
+            for content in items:
+                pp = PainPointModel(persona_id=persona_id, content=content)
+                s.add(pp)
+                s.flush()
+                new_ids.append(pp.id)
+            s.commit()
+            return new_ids
+
+    def bulk_create_buying_triggers(self, persona_id: str, items: list[str]) -> list[int]:
+        with self.session() as s:
+            new_ids = []
+            for content in items:
+                bt = BuyingTriggerModel(persona_id=persona_id, content=content)
+                s.add(bt)
+                s.flush()
+                new_ids.append(bt.id)
+            s.commit()
+            return new_ids
+
+    def bulk_create_objections(self, persona_id: str, items: list[dict]) -> list[int]:
+        with self.session() as s:
+            new_ids = []
+            for ob in items:
+                stmt = ob.get("statement", "")
+                resp = ob.get("response")
+                obj = ObjectionModel(persona_id=persona_id, statement=stmt, response=resp)
+                s.add(obj)
+                s.flush()
+                new_ids.append(obj.id)
+            s.commit()
+            return new_ids
+
+    def delete_persona_sub_attrs(self, persona_id: str) -> None:
+        with self.session() as s:
+            s.query(PainPointModel).filter(PainPointModel.persona_id == persona_id).delete()
+            s.query(BuyingTriggerModel).filter(BuyingTriggerModel.persona_id == persona_id).delete()
+            s.query(ObjectionModel).filter(ObjectionModel.persona_id == persona_id).delete()
+            s.commit()
+
+    def update_chunk_links(self, chunk_id: str, pain_point_ids: list[int], objection_ids: list[int]) -> None:
+        with self.session() as s:
+            row = s.get(KeyMessageModel, chunk_id)
+            if row:
+                row.pain_point_ids = pain_point_ids
+                row.objection_ids = objection_ids
+                s.commit()
+
+    def list_pain_points(self, persona_id: str) -> list:
+        with self.session() as s:
+            return s.query(PainPointModel).filter(PainPointModel.persona_id == persona_id).all()
+
+    def list_objections(self, persona_id: str) -> list:
+        with self.session() as s:
+            return s.query(ObjectionModel).filter(ObjectionModel.persona_id == persona_id).all()
+
+    def list_buying_triggers(self, persona_id: str) -> list:
+        with self.session() as s:
+            return s.query(BuyingTriggerModel).filter(BuyingTriggerModel.persona_id == persona_id).all()
+
     def delete_house(self, house_id: UUID) -> bool:
         with self.session() as s:
             row = s.get(HouseModel, str(house_id))
             if row:
                 s.delete(row)
                 s.commit()
+                _invalidate_graph()
                 return True
             return False
 
@@ -320,6 +551,7 @@ class Store:
             if row:
                 s.delete(row)
                 s.commit()
+                _invalidate_graph()
                 return True
             return False
 
@@ -329,8 +561,71 @@ class Store:
             if row:
                 s.delete(row)
                 s.commit()
+                _invalidate_graph()
                 return True
             return False
+
+    # --- Pillars ---
+
+    def create_pillar(self, house_id: UUID, name: str, description: str | None = None, display_order: int = 0) -> int:
+        """Insert a new pillar, return its id."""
+        with self.session() as s:
+            row = PillarModel(
+                house_id=str(house_id),
+                name=name,
+                description=description or "",
+                display_order=display_order,
+            )
+            s.add(row)
+            s.commit()
+            return row.id
+        _invalidate_graph()
+
+    def list_pillars(self, house_id: UUID) -> list["Pillar"]:
+        """Return all pillars for a house ordered by display_order."""
+        with self.session() as s:
+            rows = (
+                s.query(PillarModel)
+                .filter(PillarModel.house_id == str(house_id))
+                .order_by(PillarModel.display_order, PillarModel.name)
+                .all()
+            )
+            return [_pillar_from_row(r) for r in rows]
+
+    def update_pillar(self, pillar_id: int, **kwargs) -> bool:
+        """Partial update. Returns True if row was found."""
+        with self.session() as s:
+            row = s.get(PillarModel, pillar_id)
+            if not row:
+                return False
+            for k, v in kwargs.items():
+                if hasattr(row, k):
+                    setattr(row, k, v)
+            s.commit()
+            _invalidate_graph()
+            return True
+
+    def delete_pillar(self, pillar_id: int) -> bool:
+        """Delete pillar; SET NULL cascades to key_messages. Returns True if found."""
+        with self.session() as s:
+            row = s.get(PillarModel, pillar_id)
+            if not row:
+                return False
+            s.delete(row)
+            s.commit()
+            _invalidate_graph()
+            return True
+
+    def assign_chunk_to_pillar(self, chunk_id: UUID, pillar_id: int | None) -> bool:
+        """Set key_messages.pillar_id. Pass None to unassign."""
+        with self.session() as s:
+            row = s.get(KeyMessageModel, str(chunk_id))
+            if not row:
+                return False
+            row.pillar_id = pillar_id
+            s.commit()
+            _invalidate_graph()
+            return True
 
     # --- Snapshots ---
 
@@ -711,6 +1006,39 @@ class Store:
                 "by_endpoint": by_endpoint,
             }
 
+    # --- Channels ---
+
+    def get_channels(self) -> list[dict]:
+        with self.session() as s:
+            rows = s.query(ChannelModel).order_by(ChannelModel.is_default.desc(), ChannelModel.name).all()
+            return [{"id": r.id, "name": r.name, "description": r.description,
+                     "is_default": r.is_default, "created_at": r.created_at.isoformat()} for r in rows]
+
+    def upsert_channel(self, ch_id: str, name: str, description: str = "") -> dict:
+        with self.session() as s:
+            existing = s.get(ChannelModel, ch_id)
+            if existing:
+                existing.name = name
+                existing.description = description
+            else:
+                s.add(ChannelModel(id=ch_id, name=name, description=description,
+                                   is_default=False, created_at=_now()))
+            s.commit()
+            row = s.get(ChannelModel, ch_id)
+            return {"id": row.id, "name": row.name, "description": row.description,
+                    "is_default": row.is_default, "created_at": row.created_at.isoformat()}
+
+    def delete_channel(self, ch_id: str) -> bool:
+        with self.session() as s:
+            row = s.get(ChannelModel, ch_id)
+            if not row:
+                return False
+            if row.is_default:
+                raise ValueError("Cannot delete a default channel")
+            s.delete(row)
+            s.commit()
+            return True
+
     # --- Workspace-scoped house list ---
 
     def list_houses(self, workspace_id: str | None = None) -> list[MessageHouse]:
@@ -756,12 +1084,37 @@ class Store:
             ]
 
 
+def _safe_section_type(value: str) -> SectionType:
+    try:
+        return SectionType(value)
+    except ValueError:
+        return SectionType.POSITIONING
+
+
+def _safe_channel(value: str) -> Channel:
+    try:
+        return Channel(value)
+    except ValueError:
+        return Channel.ALL
+
+
+def _invalidate_graph() -> None:
+    """Notify the graph engine that its derived state is stale."""
+    try:
+        from src.grounding.graph import get_graph_engine
+        get_graph_engine()._built = False
+    except Exception:
+        pass
+
+
 def _house_from_row(row: HouseModel) -> MessageHouse:
+    from src.models import DocumentType
     return MessageHouse(
         id=UUID(row.id),
         name=row.name,
         source=row.source,
         source_id=row.source_id,
+        document_type=row.document_type if row.document_type else "message_house",
         summary=row.summary,
         audience=row.audience,
         brand_personality=row.brand_personality,
@@ -777,12 +1130,13 @@ def _msg_from_row(row: KeyMessageModel) -> KeyMessage:
     return KeyMessage(
         id=UUID(row.id),
         message_house_id=UUID(row.message_house_id),
-        section_type=SectionType(row.section_type),
+        pillar_id=row.pillar_id,
+        section_type=_safe_section_type(row.section_type),
         priority=row.priority,
         content=row.content,
         variants=row.variants or {},
         personas=row.personas or [],
-        channels=[Channel(c) for c in (row.channels or ["all"])],
+        channels=[_safe_channel(c) for c in (row.channels or ["all"])],
         source_chunk_id=row.source_chunk_id,
     )
 
@@ -796,4 +1150,15 @@ def _persona_from_row(row: PersonaModel) -> Persona:
         pain_points=row.pain_points or [],
         buying_triggers=row.buying_triggers or [],
         objections=row.objections or [],
+    )
+
+
+def _pillar_from_row(row: PillarModel) -> "Pillar":
+    from src.models import Pillar
+    return Pillar(
+        id=row.id,
+        house_id=row.house_id,
+        name=row.name,
+        description=row.description,
+        display_order=row.display_order,
     )
