@@ -39,7 +39,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 **Known gaps:**
 - OIDC/OAuth login not yet implemented (API key auth only)
 - Workspace "invites" still manual via API
-- Paged.js / Satori visual pipeline not yet operational
+- Visual artifact rendering (Fabric.js, reveal.js, Penpot) not yet implemented — planned v0.8
 - Channel still a code enum (DB entity promotion not yet done)
 - Multimodal/vision model fallback not yet implemented
 
@@ -68,13 +68,53 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - [ ] **Usage Heatmap:** See which parts of the message house are being used most vs ignored
 
 ### Last-Mile Design
-- [ ] **Print-First Documents (Paged.js):** Professional typeset PDFs with real margins, page numbers, and bleed
-- [ ] **Design-as-Code Visuals (Satori):** High-fidelity PNG social cards and email headers via Satori WASM
-- [ ] **Push to Tooling:** "Export to Slides" via Google Slides API; placeholder Figma JSON export
+- [ ] **Print-First Documents (Paged.js):** Professional typeset PDFs with real margins, page numbers, and bleed — see v0.8 for the full visual artifact engine
 
 ---
 
-## v0.8 — Document Source Integrations (Google Drive + OneDrive/SharePoint)
+## v0.8 — Visual Artifact Engine (Fabric.js + reveal.js + Penpot)
+
+**Goal:** Replace server-rendered HTML artifact pages with a browser-side design engine that supports real graphic design capabilities — image and logo insertion, layered layouts, custom typography, and export to PNG/PDF. Three complementary rendering paths cover every artifact class.
+
+### Fabric.js — Visual & Graphic Artifacts
+Canvas-based design engine for one-pagers, battlecards, social cards, and any artifact that needs graphic design fidelity. The LLM generates a **design JSON spec** (not HTML) describing the layout tree; the browser renders it as a Fabric.js canvas. Users can interactively edit before exporting.
+
+- [ ] **Design JSON spec schema:** Define the artifact layout format — zones (hero, body, sidebar, footer), text blocks with font/size/color, image placeholders with type (`logo`, `hero_image`, `icon`), shape layers, brand color tokens
+- [ ] **Fabric.js canvas renderer:** Deserialize the design JSON into Fabric.js objects; render all element types (text, image, rect, SVG) with layer ordering
+- [ ] **Logo & image insertion:** `fabric.Image.fromURL()` support with drag-and-drop replace; accept URL, file upload, or base64 — no server round-trip
+- [ ] **Per-artifact-type templates:** Pre-designed Fabric.js templates for `one_pager`, `battlecard`, `social_card`, `event_brief` — each with defined content zones and brand styling
+- [ ] **Export pipeline:** PNG via `canvas.toDataURL()`; PDF via jsPDF wrapper preserving vector text where possible; SVG export for design hand-off
+- [ ] **Brand token system:** Workspace-level color palette and font settings applied across all Fabric.js templates automatically
+- [ ] **`generate_fabric_artifact` MCP tool:** Returns design JSON spec grounded in the message house; client renders it in the browser
+
+### reveal.js — Presentations & Slide Decks
+HTML-based presentation engine for sales decks, event presentations, partner briefings, and executive readouts. The LLM generates the slide HTML structure; reveal.js handles rendering, transitions, and speaker notes.
+
+- [ ] **Slide skill templates:** New skill types — `sales_deck`, `event_presentation`, `executive_readout` — with structured slide schemas (title, agenda, value prop, proof point, CTA, appendix)
+- [ ] **LLM slide generation:** `generate_artifact(skill_id="sales_deck")` returns structured slide JSON; server renders to reveal.js HTML via Jinja2 template
+- [ ] **Custom theme per workspace:** CSS theme variables mapping brand colors, fonts, and logo to reveal.js theme — applied server-side at render time
+- [ ] **Image & logo zones:** Designated slide sections for logo placement, product screenshots, and background images with URL or upload support
+- [ ] **Speaker notes:** LLM generates presenter notes per slide grounded in the full messaging context
+- [ ] **PDF export:** reveal.js `?print-pdf` mode → `window.print()` → browser PDF engine; output is significantly higher quality than jsPDF
+- [ ] **`build_presentation` MCP tool:** Returns a link to a live reveal.js presentation for a given message house and presentation type
+
+### Penpot — High-Fidelity Design Export
+Penpot is a self-hosted Figma alternative with a full design API. MsgStack already has the Penpot MCP server connected. For artifacts where pixel-perfect design quality matters most, MsgStack can programmatically create a fully designed document in Penpot — complete with brand fonts, vector assets, image frames, and design tokens — and hand the user an edit link.
+
+- [ ] **Penpot project per workspace:** Auto-create a MsgStack workspace in Penpot mapped to each MsgStack workspace; store the Penpot project ID on the workspace record
+- [ ] **Design token sync:** Map MsgStack brand color tokens and font settings to Penpot design tokens; push on workspace update
+- [ ] **Programmatic artifact creation:** Use the Penpot API to create a fully designed page for each artifact type — frames, text layers, image frames, brand colors, logo placeholder
+- [ ] **`export_to_penpot` MCP tool:** Creates the artifact in Penpot and returns an edit link; user lands in Penpot to do final polish and export
+- [ ] **Penpot → MsgStack round-trip (stretch):** Pull approved design decisions (updated logo, adjusted color) back from Penpot into MsgStack brand tokens
+
+### Shared Infrastructure
+- [ ] **`ArtifactRenderer` abstraction:** Common interface (`render_html`, `render_fabric`, `render_reveal`, `render_penpot`) so new rendering targets can be added without touching `generate_artifact`
+- [ ] **Artifact type → renderer routing:** Skill metadata includes a `renderer` field (`html`, `fabric`, `reveal`, `penpot`) — `generate_artifact` routes accordingly
+- [ ] **Brand asset store:** Per-workspace storage for logos, icons, and brand images referenced by all renderers; API endpoints for upload and retrieval
+
+---
+
+## v0.9 — Document Source Integrations (Google Drive + OneDrive/SharePoint)
 
 **Goal:** Connect MsgStack directly to where marketing documents already live — eliminating the manual upload step and keeping frameworks automatically in sync as source documents evolve.
 
@@ -105,7 +145,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ---
 
-## v0.9 — Advanced Graph Operations & Visualization
+## v1.0 — Advanced Graph Operations & Visualization
 
 **Goal:** Enable graph-powered insights and cross-document intelligence.
 
@@ -126,7 +166,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ---
 
-## v1.0 — Platform & Ecosystem
+## v1.1 — Platform & Ecosystem
 
 **Goal:** MsgStack as a platform other tools and workflows integrate with.
 

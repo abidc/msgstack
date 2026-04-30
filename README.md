@@ -231,6 +231,16 @@ Built-in `skill_id` values:
 Returns a public URL for a visual standalone artifact page (does NOT run the AI generator).
 - `artifact_type`: `one_pager` / `social_posts` / `email_template`
 
+#### `generate_fabric_artifact(skill_id, house_id?)` _(planned v0.8)_
+Returns a design JSON spec grounded in the message house. The browser deserializes this into a Fabric.js canvas with full graphic design capabilities — logo/image insertion, layer editing — and exports to PNG, PDF, or SVG.
+
+#### `build_presentation(house_id?, presentation_type?)` _(planned v0.8)_
+Generates a reveal.js slide deck grounded in the message house and returns a live presentation URL. Workspace-branded theme applied automatically. Export via browser print engine.
+- `presentation_type`: `sales_deck` / `event_presentation` / `executive_readout`
+
+#### `export_to_penpot(house_id?, artifact_type?)` _(planned v0.8)_
+Programmatically creates a fully designed artifact in the connected Penpot instance — brand tokens, image frames, text layers — and returns an edit link. Highest-fidelity output; user does final polish in Penpot.
+
 #### `list_skills()`
 List all available skill templates with their sections and metadata.
 
@@ -272,6 +282,11 @@ Navigate to `http://localhost:8001/` for the web interface (Jinja2-rendered, dar
 | **Channels** | View and manage messaging channels |
 | **Graph Explorer** | Interactive Cytoscape.js visualization of the full knowledge graph — filter by node type, click nodes for details, browse relationships |
 | **Settings** | API keys, workspaces, token usage, theme |
+
+**Planned v0.8 — Visual Artifact Engine:**
+- **Fabric.js canvas view:** Rendered design artifacts with logo/image insertion, layer editing, and PNG/PDF/SVG export — no server round-trip
+- **reveal.js presentation viewer:** Live branded slide decks with speaker notes, export via browser print
+- **Penpot export:** One-click "Open in Penpot" for highest-fidelity design editing and export
 
 ### Upload Flow
 1. Drop or select a file in the Upload section
@@ -390,4 +405,4 @@ curl -X POST http://localhost:8001/api/index-all
 
 ## Project Status
 
-Version `0.6` — active development. Knowledge graph engine implemented and live. See [ROADMAP.md](ROADMAP.md) for planned work including Google Drive and OneDrive/SharePoint source integrations (v0.8).
+Version `0.6` — active development. Knowledge graph engine implemented and live. Next milestone (v0.8) introduces the Visual Artifact Engine: Fabric.js for graphic artifacts, reveal.js for presentations, and Penpot integration for design-quality export. See [ROADMAP.md](ROADMAP.md) for the full roadmap.

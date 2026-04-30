@@ -166,6 +166,62 @@ skill_id + house_id
 
 `_ensure_defaults()` always writes built-in skill JSON files on startup — template improvements land automatically without manual file deletion.
 
+#### 4e. Visual Artifact Engine _(Planned — v0.8)_
+
+Three rendering paths replace the current server-rendered HTML artifact pages. Each path is selected by a `renderer` field on the skill definition. A shared `ArtifactRenderer` interface (`render_html`, `render_fabric`, `render_reveal`, `render_penpot`) keeps renderer additions isolated from `generate_artifact`.
+
+**Path A — Fabric.js (visual & graphic artifacts)**
+
+```
+generate_artifact(skill_id, house_id)
+  → GeneratedArtifact with sections JSON
+  → POST /api/artifacts/{id}/render?renderer=fabric
+  → server returns design JSON spec:
+      { zones: [{type:"hero", text:"...", font, color}, ...],
+        images: [{type:"logo", placeholder:true}, ...],
+        brand: {primary:"#7c6af7", font:"Inter"} }
+  → browser: Fabric.deserialize(spec) → canvas
+  → user edits: logo drag-drop, text click, color swap
+  → export: canvas.toDataURL() → PNG
+             jsPDF wrapper → PDF
+             canvas.toSVG() → SVG
+```
+
+Target artifact types: `one_pager`, `battlecard`, `social_card`, `event_brief`
+
+**Path B — reveal.js (presentations)**
+
+```
+generate_artifact(skill_id="sales_deck", house_id)
+  → LLM returns structured slide JSON:
+      { slides: [{type:"title", heading, subhead, notes},
+                 {type:"value_prop", headline, bullets, image_zone},
+                 {type:"proof", stat, quote, logo_zone}, ...] }
+  → server: Jinja2 render → reveal.js HTML page
+  → GET /artifact/presentation/{house_id}?type=sales_deck
+  → browser: reveal.js initializes, loads custom workspace theme CSS
+  → export: ?print-pdf → window.print() → browser PDF engine
+```
+
+Workspace theme CSS maps brand colors, fonts, and logo URL to reveal.js theme variables — applied server-side at render time.
+
+Target skill types: `sales_deck`, `event_presentation`, `executive_readout`
+
+**Path C — Penpot (design export)**
+
+```
+export_to_penpot(house_id, artifact_type)
+  → resolve workspace Penpot project ID (stored on workspace record)
+  → Penpot API: create page in project
+  → create frames: hero frame, body frame, sidebar frame
+  → push design tokens: brand colors → Penpot tokens, font → Penpot font
+  → fill text layers with grounded artifact content
+  → create image frames for logo and hero image placeholders
+  → return { penpot_url: "https://penpot.app/view/...", page_id }
+```
+
+MsgStack already has the Penpot MCP server connected. The `export_to_penpot` MCP tool wraps these API calls. User lands in Penpot with a fully structured, brand-styled design ready for final polish and high-fidelity export (SVG, PNG, PDF).
+
 ---
 
 ### 5. Grounding Engine — `src/grounding/search.py`
@@ -710,4 +766,4 @@ ORM --> PG
 
 ---
 
-*Reflects MsgStack MCP v0.6. Knowledge graph engine (`graph.py`) is fully implemented. Next milestone (v0.7) completes Channel as a DB entity and messaging governance features. v0.8 adds Google Drive and OneDrive/SharePoint source integrations.*
+*Reflects MsgStack MCP v0.6. Knowledge graph engine (`graph.py`) is fully implemented. v0.7 completes Channel as a DB entity and messaging governance. v0.8 introduces the Visual Artifact Engine (Fabric.js, reveal.js, Penpot). v0.9 adds Google Drive and OneDrive/SharePoint source integrations.*
