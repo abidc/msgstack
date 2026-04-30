@@ -382,10 +382,10 @@ class SkillManager:
         self._ensure_defaults()
 
     def _ensure_defaults(self) -> None:
+        # Always write built-in defaults so prompt template improvements land automatically.
+        # User-created custom skills (IDs not in DEFAULT_SKILLS) are never touched.
         for skill_id, skill in DEFAULT_SKILLS.items():
-            path = self.skills_dir / f"{skill_id}.json"
-            if not path.exists():
-                self._save_skill(skill_id, skill)
+            self._save_skill(skill_id, skill)
 
     def _save_skill(self, skill_id: str, data: dict) -> None:
         path = self.skills_dir / f"{skill_id}.json"

@@ -103,6 +103,13 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
     name — before calling any generate or search tool. Use the returned
     house_id (UUID) for all subsequent tool calls.
 
+    IMPORTANT: The 'summary' in the response is a 2–3 sentence overview ONLY.
+    It does NOT contain the actual key messages, headlines, or proof points.
+    After identifying the house_id:
+    - To GENERATE a document → call generate_artifact(skill_id, house_id)
+    - To READ full messaging content → call get_message_house(house_id)
+    Never write marketing content yourself using only this tool's output.
+
     Args:
         query: Optional text search across house names and summaries.
         workspace_id: Filter to a specific workspace (optional).

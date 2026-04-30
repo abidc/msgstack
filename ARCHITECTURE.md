@@ -150,13 +150,21 @@ Each skill defines:
 #### 4d. Generator — `generator.py`
 ```
 skill_id + house_id
-  → load skill + house + messages + personas
-  → _build_context()   [merges house fields, top-10 messages, persona info]
-  → skills.fill_prompt()  [template.format(**context)]
-  → OpenAI chat completion  [gpt-4o-mini, temp=0.7, max_tokens=4000]
-  → _parse_sections()  [extract skill section keys from raw output]
-  → GeneratedArtifact  [includes input_tokens, output_tokens]
+  → load skill + house + ALL messages + ALL personas
+  → _build_context()
+        → group messages by section_type, sort by priority within each group
+        → build full persona blocks: description + pain_points + buying_triggers + objections
+        → structured context_block: "## Key Messages (N total, all sections)\n### HEADLINE (3)\n  - ..."
+  → skills.fill_prompt()      [template.format(**context)]
+  → grounding preamble        ["GROUNDING CONTEXT — do not introduce claims not present here"]
+  → prompt = preamble + context_block + "---" + skill_task
+  → OpenAI chat completion    [gpt-4o-mini, temp=0.7, max_tokens=4000,
+                                system prompt includes explicit grounding contract]
+  → _parse_sections()         [extract skill section keys from raw output]
+  → GeneratedArtifact         [includes input_tokens, output_tokens, full grounded_messages list]
 ```
+
+`_ensure_defaults()` always writes built-in skill JSON files on startup — template improvements land automatically without manual file deletion.
 
 ---
 
@@ -186,48 +194,65 @@ Grounding is **optional** — if Pinecone is not configured the engine returns a
 
 ---
 
-### 5b. Knowledge Graph Engine — `src/grounding/graph.py` _(Planned — v0.7)_
-
-> **Not yet implemented.** File does not exist. This section describes the target design.
+### 5b. Knowledge Graph Engine — `src/grounding/graph.py`
 
 Separates deterministic retrieval from semantic search. The graph layer guarantees that verbatim approved content is returned exactly when queried by relationship — the vector layer handles thematic similarity for exploratory queries.
 
-**Design rationale:** vector nearest-neighbor search can return a *similar but not approved* message when messaging governance matters (e.g., a tagline that's close to the approved one but from a draft). Graph traversal from `(MessageHouse)-[:CONTAINS]->(KeyMessage)` returns exactly the messages associated with a framework, with no approximation.
+**Design rationale:** vector nearest-neighbor search can return a *similar but not approved* message when messaging governance matters. Graph traversal from `(GroundingDocument)-[:CONTAINS]->(GroundingChunk)` returns exactly the messages associated with a framework, with no approximation.
 
-#### Graph Schema
+**Implementation:** NetworkX `DiGraph` built in-memory from SQLite/PostgreSQL on server start and on each `rebuild()` call. `GraphEngine` is a process-level singleton. The `_ensure_built()` guard rebuilds lazily on first access.
 
-Generic node types keep the graph content-type-agnostic — the same schema covers message houses, brand guides, competitive briefs, and corp narratives.
+#### Graph Schema (implemented)
 
-| Node | Attributes | Description |
+| Node Type | Attributes | Backed By |
 |---|---|---|
-| GroundingDocument | id, name, document_type, summary | Any structured grounding document — backed by a `message_houses` row |
-| GroundingChunk | id, content, section_type, priority | Individual content unit — backed by a `key_messages` row |
-| Persona | id, name, pain_points, buying_triggers | Target buyer/user roles with behavioral triggers |
-| Channel | id, name, constraints | Content requirements per channel — backed by a `channels` row [Planned v0.7] |
+| `GroundingDocument` | id, name, document_type, summary | `message_houses` row |
+| `MessagingPillar` | id, name, description, house_id | `pillars` row |
+| `GroundingChunk` | id, content, section_type, priority | `key_messages` row |
+| `Persona` | id, name, description, house_id | `personas` row |
+| `Channel` | name | in-memory from message channel lists |
+| `PainPoint` | id, content, persona_name, house_id | `pain_points` row (Phase 2) or JSON array (Phase 1) |
+| `BuyingTrigger` | id, content, persona_name, house_id | `buying_triggers` row (Phase 2) or JSON array (Phase 1) |
+| `Objection` | id, statement, response, persona_name | `objections` row (Phase 2) or JSON array (Phase 1) |
 
-#### Graph Relationships
+#### Graph Relationships (implemented)
 
 ```
-(GroundingDocument) -[:CONTAINS]-> (GroundingChunk)
+(GroundingDocument) -[:CONTAINS]-> (MessagingPillar)
+(GroundingDocument) -[:CONTAINS]-> (GroundingChunk)    # chunks not assigned to a pillar
 (GroundingDocument) -[:TARGETS]-> (Persona)
-(GroundingChunk) -[:APPLIES_TO]-> (Channel)
-(GroundingChunk) -[:ADDRESSES]-> (Persona)
+(MessagingPillar)   -[:CONTAINS]-> (GroundingChunk)    # chunks assigned to a pillar
+(GroundingChunk)    -[:APPLIES_TO]-> (Channel)
+(GroundingChunk)    -[:ADDRESSES]-> (Persona)
+(GroundingChunk)    -[:ADDRESSES]-> (PainPoint)
+(GroundingChunk)    -[:RESOLVES]-> (Objection)
+(Persona)           -[:HAS_PAIN_POINT]-> (PainPoint)
+(Persona)           -[:HAS_TRIGGER]-> (BuyingTrigger)
+(Persona)           -[:HAS_OBJECTION]-> (Objection)
 ```
 
-v0.8 cross-document edge (planned):
+Planned v0.9 cross-document edge:
 ```
 (GroundingDocument) -[:INFORMS]-> (GroundingDocument)
 ```
 
-#### Hybrid Query Routing
+#### Public API
 
-| Query Type | Primary Path | Fallback |
-|---|---|---|
-| Exploratory | Vector search → Graph traversal for context | Keyword search |
-| Governance | Graph traversal for explicit relationships | Vector search |
-| Filtered | SQLite metadata + Vector search | Graph lookup |
+```python
+engine.rebuild()                                    # Rebuild from DB
+engine.get_connections(house_id, persona?, channel?) # Entry point — routes to:
+engine.get_chunks_for_house(house_id)               # All chunks via CONTAINS traversal
+engine.get_chunks_for_persona(house_id, persona)    # Chunks via ADDRESSES edge
+engine.get_chunks_for_channel(house_id, channel)    # Chunks via APPLIES_TO edge
+engine.get_graph_data()                             # Full serialized graph for UI
+engine.get_stats()                                  # Node/edge counts by type
+```
 
-**Implementation:** Neo4j integration or SQLite-based graph extension storing entity relationships alongside the existing relational schema.
+#### Phase 1 vs Phase 2 Sub-attributes
+
+Phase 1 (current): PainPoint, BuyingTrigger, Objection nodes built from JSON arrays on PersonaModel — no schema migration required. Node IDs are synthetic: `pain_point:{house_id}:{persona_name}:{i}`.
+
+Phase 2 (planned): Normalized DB tables (`pain_points`, `buying_triggers`, `objections`) with real UUIDs. Graph engine uses DB-first with JSON fallback: if `store.list_pain_points(persona_id)` returns rows, use them; otherwise fall back to JSON array.
 
 ---
 
@@ -320,13 +345,28 @@ All config read from environment variables in `Settings.__init__()`. Singleton `
 
 ---
 
-### 9. Frontend — `src/web/index.html`
+### 9. Frontend — `src/web/base.html` + `src/web/dashboard.html`
 
-Single-file SPA (~2,300 lines). No build step — served directly from FastAPI's static file handler.
+Jinja2 template system. No build step — rendered server-side by FastAPI via `Jinja2Templates`.
 
-**Views (sections):** Houses list → House detail (Overview / Messages / Personas / History tabs) → Upload → Skills → Settings
+**`base.html`:** Layout shell — sidebar nav, logo, theme toggle (dark/light), common CSS variables and component classes. All sections use `width: 100%` and viewport-relative sizing.
 
-**Settings panel capabilities:**
+**`dashboard.html`:** Extends `base.html`. Contains all SPA sections:
+
+| Section | Key Implementation |
+|---|---|
+| Dashboard | Stats cards + graph stats widget (nodes/edges by type) |
+| Frameworks | House list + tabbed detail (Overview / Messages / Personas) |
+| Artifacts | Skill selector + context inputs + generator UI |
+| Upload | Drag-drop → preview → confirm flow |
+| Skills | CRUD for skill templates |
+| Channels | Channel list view |
+| Graph Explorer | Cytoscape.js canvas (`calc(100vh - 280px)` height) with node type legend, filter controls, and detail panel |
+| Settings | API keys, workspaces, token usage |
+
+**Client-side routing:** `initRouting()` handles `?section=X` and `?house=Y` query params. Works on page refresh from any section (FastAPI catch-all route serves `dashboard.html` for all non-API, non-artifact paths).
+
+**Settings panel:**
 - API key creation + revocation (stored in `localStorage` for subsequent requests)
 - Token usage dashboard (by endpoint, total cost)
 - Workspace management
@@ -437,33 +477,37 @@ Environment:
 msgstack-mcp/
 ├── run_server.py          # ASGI entry point — PathRouter
 ├── src/
-│   ├── server.py          # FastMCP server + 15 tools
-│   ├── web_app.py         # FastAPI app — REST API (~1,900 lines)
-│   ├── models.py          # Pydantic models: MessageHouse, KeyMessage, Persona, etc.
-│   ├── store.py           # SQLAlchemy ORM + Store class
+│   ├── server.py          # FastMCP server + 20+ tools + MCP prompts
+│   ├── web_app.py         # FastAPI app — REST API + Jinja2 rendering
+│   ├── models.py          # Pydantic models: MessageHouse, KeyMessage, Persona, Pillar, etc.
+│   ├── store.py           # SQLAlchemy ORM + Store class (includes Pillar, PainPoint, etc.)
 │   ├── config.py          # Settings from env vars
 │   ├── auth.py            # API key auth, AuthContext
 │   ├── rate_limit.py      # Sliding-window rate limiter
 │   ├── logging_config.py  # JSON/text structured logging
 │   ├── pipeline/
 │   │   ├── extract.py     # PDF/DOCX extraction — doc-order, heading structure, table dedup
-│   │   ├── structure.py   # LLM structuring → StructuredHouse
-│   │   ├── generator.py   # Artifact generation via skills
-│   │   ├── skills.py      # SkillManager + DEFAULT_SKILLS (12)
-│   │   └── multimodal.py  # [Planned v0.7] Vision model fallback for graphical content
+│   │   ├── structure.py   # LLM structuring → StructuredHouse (pillars, objections as {statement, response})
+│   │   ├── generator.py   # Artifact generation — full-context grounding, all messages + personas
+│   │   └── skills.py      # SkillManager + DEFAULT_SKILLS (12) — always-overwrite on start
 │   ├── grounding/
 │   │   ├── search.py      # Hybrid vector+keyword search, Pinecone
-│   │   └── graph.py       # [Planned v0.7] Knowledge graph engine — deterministic retrieval
+│   │   ├── graph.py       # Knowledge graph engine — NetworkX DiGraph, deterministic retrieval
+│   │   ├── session.py     # In-memory session state
+│   │   └── tools.py       # Grounding tool implementations (list_message_houses w/ _next_step)
 │   └── web/
-│       └── index.html     # Single-file SPA frontend (~2,300 lines)
-├── skills/                # Git-tracked skill JSON files (12)
+│       ├── base.html      # Jinja2 base layout — sidebar, nav, CSS design system
+│       └── dashboard.html # Admin SPA — all sections including Graph Explorer
 ├── data/                  # Runtime data — gitignored
-│   ├── skills/            # SkillManager runtime directory
+│   ├── skills/            # SkillManager runtime directory (auto-written from DEFAULT_SKILLS)
 │   ├── uploads/           # Uploaded source documents
 │   └── frames/            # Generated markdown per house
 ├── tests/
-│   ├── test_store.py      # 55 unit tests
-│   └── test_integration.py# 15 integration tests (mocked LLM)
+│   ├── test_store.py      # Unit tests
+│   └── test_integration.py# Integration tests (mocked LLM)
+├── ROADMAP.md             # Roadmap (v0.7 graph done; v0.8 = Drive/OneDrive integrations)
+├── PRODUCT_SPEC.md        # Product specification v0.6
+├── ARCHITECTURE.md        # This document
 ├── Dockerfile
 ├── docker-compose.yml
 └── .env.example
@@ -666,4 +710,4 @@ ORM --> PG
 
 ---
 
-*Reflects MsgStack MCP v0.6. Sections marked [Planned — v0.7] describe the target architecture for the next milestone and reference files that do not yet exist.*
+*Reflects MsgStack MCP v0.6. Knowledge graph engine (`graph.py`) is fully implemented. Next milestone (v0.7) completes Channel as a DB entity and messaging governance features. v0.8 adds Google Drive and OneDrive/SharePoint source integrations.*

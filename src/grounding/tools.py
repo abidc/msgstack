@@ -262,7 +262,18 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
         q = query.lower()
         results = [r for r in results if q in r["name"].lower() or q in r["summary"].lower()]
 
-    return {"houses": results, "count": len(results)}
+    return {
+        "houses": results,
+        "count": len(results),
+        "_next_step": (
+            "You now have the house IDs. "
+            "To generate a document (one-pager, email, battlecard, etc.), call "
+            "generate_artifact(skill_id=<type>, house_id=<id>) — do NOT write the content yourself. "
+            "To read full messaging content (headlines, proof points, personas), call "
+            "get_message_house(house_id=<id>). "
+            "The 'summary' field above is a 2-3 sentence overview only — it is NOT the actual messaging."
+        ),
+    }
 
 
 def compare_houses(house_ids: list[str]) -> dict:

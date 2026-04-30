@@ -316,7 +316,7 @@
                         <button class="btn btn-ghost btn-xs" id="cy-reset-btn">Reset zoom</button>
                     </div>
                 </div>
-                <div id="cy" style="width:100%;height:420px;background:#0c0c10;"></div>
+                <div id="cy" style="width:100%;height:calc(100vh - 280px);min-height:420px;background:#0c0c10;"></div>
             </div>
             <div class="card" id="graph-node-detail">
                 <div style="color:var(--text-3);font-size:12px;padding-top:8px;">Click a node to inspect its attributes.</div>
@@ -331,7 +331,7 @@
                        style="width:240px;padding:5px 10px;font-size:12px;"
                        oninput="filterGraphNodes(this.value)">
             </div>
-            <div id="graph-node-list" style="max-height:420px;overflow-y:auto;font-size:12px;"></div>
+            <div id="graph-node-list" style="max-height:50vh;overflow-y:auto;font-size:12px;"></div>
         </div>
     </div>
 </section>
@@ -703,7 +703,6 @@
             </div>
             <div id="messages-container" data-house-id="${house.id}">${_renderGrouped(grouped)}</div>
         </div>
-        <script>window._currentPillarData = ${JSON.stringify(pillarGrouped)};</script>
 
         <div id="house-tab-personas" style="display:none;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
@@ -715,6 +714,8 @@
             </div>
             <div id="personas-container">${_renderPersonas(house.personas||[], house.id)}</div>
         </div>`;
+        window._currentPillarData = pillarGrouped;
+        window._sectionGrouped = grouped;
     }
 
     function _renderGrouped(grouped) {
@@ -782,9 +783,6 @@
             document.getElementById('btn-view-pillars').style.color = 'var(--text-3)';
         }
     }
-
-    // Store section grouping for toggle
-    window._sectionGrouped = grouped;
 
     function _renderPersonas(personas, houseId) {
         if (!personas.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No personas yet. Add one above or use AI Generate.</div>';

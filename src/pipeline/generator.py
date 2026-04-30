@@ -55,14 +55,36 @@ class ArtifactGenerator:
         personas = self.store.get_personas(house.id)
 
         context = self._build_context(house, messages, personas, custom_context or {})
-        prompt = self.skills.fill_prompt(skill_id, context)
+        skill_prompt = self.skills.fill_prompt(skill_id, context)
+
+        # Always prepend the full structured grounding block so every artifact
+        # has access to all section types, all personas, and all attributes —
+        # regardless of which fields the skill template explicitly references.
+        prompt = (
+            "GROUNDING CONTEXT — every claim, headline, and proof point you write "
+            "MUST be drawn from the material below. Do not introduce capabilities, "
+            "statistics, or claims not present here.\n\n"
+            f"{context['context']}\n\n"
+            "---\n\n"
+            f"TASK:\n{skill_prompt}"
+        )
 
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a marketing content generator. Generate artifacts based on the provided prompt and context. Output structured content that matches the skill's schema.",
+                    "content": (
+                        "You are a marketing content generator. "
+                        "You will be given a complete messaging framework including ALL section types "
+                        "(headlines, subheads, benefits, proof points, objections, social proof, etc.), "
+                        "ALL personas with their pain points, buying triggers, and objections, "
+                        "and full brand positioning. "
+                        "You MUST ground every claim, headline, and proof point in the provided framework. "
+                        "Do not introduce product capabilities, statistics, or claims that are not present "
+                        "in the provided context. Use the exact language, terminology, and tone from the "
+                        "framework wherever possible. Output structured content that matches the skill's schema."
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -72,7 +94,7 @@ class ArtifactGenerator:
 
         raw = response.choices[0].message.content
         sections = self._parse_sections(raw, skill)
-        grounded = [m.content for m in messages[:5]]
+        grounded = [m.content for m in messages]
 
         return GeneratedArtifact(
             skill_id=skill_id,
@@ -92,30 +114,77 @@ class ArtifactGenerator:
         personas: list[Persona],
         custom: dict,
     ) -> dict:
-        key_messages_str = "\n".join(
-            f"- {str(m.section_type)}: {m.content}" for m in messages[:10]
-        )
-        persona_names = ", ".join(p.name for p in personas[:3])
+        # Group ALL messages by section type, sorted by priority within each group
+        by_section: dict[str, list[KeyMessage]] = {}
+        for m in messages:
+            key = str(m.section_type)
+            by_section.setdefault(key, []).append(m)
+
+        section_blocks = []
+        for section_type in sorted(by_section):
+            msgs = sorted(by_section[section_type], key=lambda x: x.priority or 3)
+            section_blocks.append(f"### {section_type.upper().replace('_', ' ')} ({len(msgs)})")
+            for m in msgs:
+                section_blocks.append(f"  - {m.content}")
+        key_messages_str = "\n".join(section_blocks)
+
+        # Build full persona blocks — all personas, all attributes
+        persona_blocks = []
+        for p in personas:
+            lines = [f"**{p.name}**"]
+            if p.description:
+                lines.append(f"  Description: {p.description}")
+            pain = p.pain_points or []
+            if pain:
+                lines.append(f"  Pain Points: {'; '.join(str(x) for x in pain)}")
+            triggers = p.buying_triggers or []
+            if triggers:
+                lines.append(f"  Buying Triggers: {'; '.join(str(x) for x in triggers)}")
+            objs = p.objections or []
+            if objs:
+                obj_strs = [
+                    ob.get("statement", str(ob)) if isinstance(ob, dict) else str(ob)
+                    for ob in objs
+                ]
+                lines.append(f"  Objections: {'; '.join(obj_strs)}")
+            persona_blocks.append("\n".join(lines))
+        personas_str = "\n\n".join(persona_blocks)
+
         context_block = (
-            f"Positioning: {house.positioning}\n"
-            f"Tagline: {house.tagline}\n"
-            f"Differentiation: {house.differentiation}\n"
-            f"Audience: {house.audience}\n"
-            f"Brand personality: {house.brand_personality}\n"
-            f"Personas: {persona_names}\n"
-            f"Key messages:\n{key_messages_str}"
+            f"## {house.name}\n\n"
+            f"**Positioning:** {house.positioning or '(not set)'}\n"
+            f"**Tagline:** {house.tagline or '(not set)'}\n"
+            f"**Differentiation:** {house.differentiation or '(not set)'}\n"
+            f"**Audience:** {house.audience or '(not set)'}\n"
+            f"**Brand Personality:** {house.brand_personality or '(not set)'}\n\n"
+            f"## Key Messages ({len(messages)} total, all sections)\n\n"
+            f"{key_messages_str}\n\n"
+            f"## Personas ({len(personas)} total)\n\n"
+            f"{personas_str}"
         )
+
+        # Safe single-item values for skill templates that reference {persona} / {objections}
+        first_persona = personas[0] if personas else None
+        first_obj_list: list[str] = []
+        if first_persona:
+            for ob in (first_persona.objections or []):
+                first_obj_list.append(
+                    ob.get("statement", str(ob)) if isinstance(ob, dict) else str(ob)
+                )
+
         context = {
             "house_name": house.name,
-            "positioning": house.positioning,
-            "tagline": house.tagline,
-            "differentiation": house.differentiation,
-            "audience": house.audience,
+            "positioning": house.positioning or "",
+            "tagline": house.tagline or "",
+            "differentiation": house.differentiation or "",
+            "audience": house.audience or "",
+            "brand_personality": house.brand_personality or "",
             "key_messages": key_messages_str,
+            "personas_detail": personas_str,
             "context": context_block,
             "primary_message": messages[0].content if messages else "",
-            "persona": personas[0].name if personas else "",
-            "objections": ", ".join(personas[0].objections[:3]) if personas and personas[0].objections else "",
+            "persona": first_persona.name if first_persona else "",
+            "objections": "; ".join(first_obj_list) if first_obj_list else "",
             # defaults for optional context variables used in some skill templates
             "target_length": "800-1200",
             "tone": "professional",
