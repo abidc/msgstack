@@ -331,9 +331,18 @@ class HouseStructurer:
     }
 
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
-        self.client = OpenAI(api_key=openai_api_key or os.environ.get("OPENAI_API_KEY"))
+        self._api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
         self.model = model
         self._usage_lock = threading.Lock()
+        self._client = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            if not self._api_key:
+                raise ValueError("OpenAI API key required. Set OPENAI_API_KEY or pass openai_api_key.")
+            self._client = OpenAI(api_key=self._api_key)
+        return self._client
 
     def structure(self, text: str, source_name: str = "Untitled Source", document_type: str = "message_house") -> "tuple[StructuredHouse, dict]":
         """Run the structurer LLM on raw text and return (StructuredHouse, usage_dict).

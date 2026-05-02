@@ -62,7 +62,16 @@ _sync_engine = _init_sync(store)
 structurer = HouseStructurer()
 
 import openai as _oai_mod
-_oai_client = _oai_mod.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+_oai_api_key = os.environ.get("OPENAI_API_KEY")
+_oai_client = None
+
+def _get_oai_client():
+    global _oai_client
+    if _oai_client is None:
+        if not _oai_api_key:
+            raise ValueError("OPENAI_API_KEY environment variable required")
+        _oai_client = _oai_mod.OpenAI(api_key=_oai_api_key)
+    return _oai_client
 
 
 @app.on_event("startup")
@@ -1584,7 +1593,7 @@ def generate_section(house_id: str = Form(...), section: str = Form(...)):
         positioning=h.positioning or h.summary or "",
     )
 
-    client = _oai_client
+    client = _get_oai_client()
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1645,7 +1654,7 @@ def generate_section_single(house_id: str = Query(...), section: str = Query(...
         positioning=h.positioning or h.summary or "",
     ) + f"\n\nExisting key messages:\n{existing_msgs}"
 
-    client = _oai_client
+    client = _get_oai_client()
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1677,7 +1686,7 @@ def improve_message(msg_id: str):
     house = store.get_house(msg.message_house_id)
     positioning = house.positioning if house else ""
 
-    client = _oai_client
+    client = _get_oai_client()
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1715,7 +1724,7 @@ def generate_variant(msg_id: str, channel: str = Form(...)):
     }
     guidance = channel_guidance.get(channel, f"{channel} version")
 
-    client = _oai_client
+    client = _get_oai_client()
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1758,7 +1767,7 @@ def generate_persona(data: GeneratePersonaRequest):
     if not house:
         raise HTTPException(404, "House not found")
 
-    client = _oai_client
+    client = _get_oai_client()
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -1830,7 +1839,7 @@ def check_tone(house_id: str):
     samples = [m.content for m in messages[:12]]
 
     import json as _json
-    client = _oai_client
+    client = _get_oai_client()
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -2108,7 +2117,7 @@ def reset_artifact_design_spec(artifact_id: str):
         # Regenerate from AI
         try:
             from src.pipeline.generator import ArtifactGenerator
-            generator = ArtifactGenerator(store=store, openai_client=_oai_client)
+            generator = ArtifactGenerator(store=store, openai_client=_get_oai_client())
             # Get house for this artifact
             house = store.get_house(UUID(record.house_id)) if record.house_id else None
             if house:

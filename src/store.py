@@ -712,10 +712,24 @@ class Store:
                         font_body TEXT DEFAULT 'Inter',
                         logo_path TEXT
                     )
-                """))
+                 """))
                 conn.commit()
 
-        def _seed_default_channels(self) -> None:
+        # Create brand_assets table
+        if "brand_assets" not in insp.get_table_names():
+            conn.execute(text("""
+                CREATE TABLE brand_assets (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL,
+                    asset_name TEXT NOT NULL,
+                    asset_type TEXT DEFAULT 'logo',
+                    file_path TEXT NOT NULL,
+                    created_at DATETIME NOT NULL
+                )
+            """))
+            conn.commit()
+
+    def _seed_default_channels(self) -> None:
         with self.session() as s:
             for ch_id, name, description, is_custom in _DEFAULT_CHANNELS:
                 if not s.get(ChannelModel, ch_id):
