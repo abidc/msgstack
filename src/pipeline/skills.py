@@ -351,6 +351,32 @@ Structure:
 Tone: partner-first. Focus on what the partner gains, not what we gain.""",
         "prefab_template": "partner_brief",
     },
+    "one_pager_visual": {
+        "id": "one_pager_visual",
+        "name": "Visual One-Pager (Canvas)",
+        "description": "A visual, graphical one-pager layout generated as a Fabric.js design specification.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
+        ],
+        "prompt_template": """Generate a structured design specification for a visual One-Pager for {house_name}.
+        
+Grounded in this messaging framework:
+{context}
+
+You must return ONLY a JSON object stringified in the `design_spec` section that matches this schema:
+{{
+  "zones": [
+    {{ "type": "hero", "text": "Your Headline Here" }},
+    {{ "type": "positioning", "text": "Positioning paragraph..." }},
+    {{ "type": "messages", "text": "Bullet 1\\nBullet 2\\nBullet 3" }}
+  ]
+}}
+
+Ensure the content is concise enough to fit on a graphical canvas. Use the most impactful key messages.""",
+        "prefab_template": "one_pager_visual",
+        "renderer": "fabric"
+    },
 }
 
 

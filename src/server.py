@@ -250,6 +250,18 @@ def generate_artifact(
     generator = ArtifactGenerator(store, skills)
     artifact = generator.generate(skill_id, str(house.id), provided)
 
+    try:
+        saved = store.save_artifact(
+            house_id=house.id,
+            skill_id=skill_id,
+            house_name=artifact.house_name,
+            sections=artifact.sections,
+            raw_content=artifact.raw_content,
+        )
+        artifact_history_id = saved["id"]
+    except Exception:
+        artifact_history_id = None
+
     # Record in grounding session so get_grounding_context reflects this
     session = get_session()
     workspace_id = store.get_house_workspace_id(house.id) or "default"
@@ -262,21 +274,24 @@ def generate_artifact(
     )
 
     base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
-    visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
+    visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence", "one_pager_visual"}
 
     content = artifact.raw_content
     if skill_id in visual_types:
-        url = f"{base_url}/artifact/{skill_id}/{house.id}"
-        params = []
-        if skill_id == "battlecard" and provided.get("competitor"):
-            params.append(f"competitor={provided['competitor']}")
-        elif skill_id == "email_template" and provided.get("stage"):
-            params.append(f"stage={provided['stage']}")
-        elif skill_id in ("social_posts", "linkedin_post") and provided.get("channels"):
-            ch = provided["channels"]
-            params.append(f"channels={','.join(ch) if isinstance(ch, list) else ch}")
-        if params:
-            url += "?" + "&".join(params)
+        if skill_id == "one_pager_visual" and artifact_history_id:
+            url = f"{base_url}/canvas?artifact_id={artifact_history_id}"
+        else:
+            url = f"{base_url}/artifact/{skill_id}/{house.id}"
+            params = []
+            if skill_id == "battlecard" and provided.get("competitor"):
+                params.append(f"competitor={provided['competitor']}")
+            elif skill_id == "email_template" and provided.get("stage"):
+                params.append(f"stage={provided['stage']}")
+            elif skill_id in ("social_posts", "linkedin_post") and provided.get("channels"):
+                ch = provided["channels"]
+                params.append(f"channels={','.join(ch) if isinstance(ch, list) else ch}")
+            if params:
+                url += "?" + "&".join(params)
         content += f"\n\n---\n\n**Visual Version:** {url}"
 
     return content

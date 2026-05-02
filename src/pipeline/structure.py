@@ -4,13 +4,42 @@ import json
 import logging
 import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from openai import OpenAI, APITimeoutError, RateLimitError, APIError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 log = logging.getLogger(__name__)
+
+
+def detect_document_type(text: str, filename: str = "") -> str:
+    """Heuristic document type detection from filename and content keywords."""
+    name_lower = (filename or "").lower()
+    text_lower = text[:2000].lower()
+
+    if any(k in name_lower for k in ("brand", "style guide", "voice", "tone")):
+        return "brand_guide"
+    if any(k in name_lower for k in ("competitive", "competitor", "battle card")):
+        return "competitive_brief"
+    if any(k in name_lower for k in ("narrative", "story", "about us", "company")):
+        return "corp_narrative"
+    if any(k in name_lower for k in ("persona", "buyer", "icp")):
+        return "persona_library"
+
+    # Content-based fallback
+    if any(k in text_lower for k in ("message house", "key message", "positioning statement", "tagline", "pillar")):
+        return "message_house"
+    if any(k in text_lower for k in ("brand voice", "writing style", "word list", "do not use")):
+        return "brand_guide"
+    if any(k in text_lower for k in ("competitor", "vs.", " vs ", "battle card")):
+        return "competitive_brief"
+    if any(k in text_lower for k in ("persona", "buyer", "pain point", "buying trigger")):
+        return "persona_library"
+
+    return "message_house"  # default
 
 
 class StructuredHouse(BaseModel):
@@ -21,12 +50,19 @@ class StructuredHouse(BaseModel):
     positioning: str
     tagline: str
     differentiation: str
-    key_messages: list[dict]
+    key_messages: list[dict] = Field(default_factory=list)
     personas: list[dict]
     pillars: list[dict] = Field(default_factory=list)
     ungrouped_chunks: list[dict] = Field(default_factory=list)
     know_your_market: str = Field(default="")
     missing_sections: list[str] = Field(default_factory=list)
+
+    @field_validator("know_your_market", mode="before")
+    @classmethod
+    def coerce_kym_to_str(cls, v):
+        if isinstance(v, dict):
+            return json.dumps(v)
+        return v if isinstance(v, str) else str(v) if v is not None else ""
 
 REQUIRED_SECTIONS = ["summary", "audience", "positioning", "tagline", "differentiation"]
 REQUIRED_MESSAGE_TYPES = ["headline", "benefit", "proof_point"]
@@ -297,6 +333,7 @@ class HouseStructurer:
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
         self.client = OpenAI(api_key=openai_api_key or os.environ.get("OPENAI_API_KEY"))
         self.model = model
+        self._usage_lock = threading.Lock()
 
     def structure(self, text: str, source_name: str = "Untitled Source", document_type: str = "message_house") -> "tuple[StructuredHouse, dict]":
         """Run the structurer LLM on raw text and return (StructuredHouse, usage_dict).
@@ -312,7 +349,14 @@ class HouseStructurer:
             house = self._structure_single_chunk(text, source_name, prompt_template)
         else:
             chunks = self._split_text(text)
-            houses = [self._structure_single_chunk(chunk, source_name, prompt_template) for chunk in chunks]
+            houses = [None] * len(chunks)
+            max_workers = min(len(chunks), 5)  # cap at 5 to avoid rate-limit bursts
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {}
+                for i, chunk in enumerate(chunks):
+                    futures[pool.submit(self._structure_single_chunk, chunk, source_name, prompt_template)] = i
+                for future in as_completed(futures):
+                    houses[futures[future]] = future.result()
             house = self._merge_structures(houses, source_name)
         return house, dict(self._usage)
 
@@ -337,7 +381,9 @@ class HouseStructurer:
 
     def _structure_single_chunk(self, text: str, source_name: str, prompt_template: str) -> StructuredHouse:
         """Structure one text chunk with retry on transient OpenAI errors."""
-        prompt = prompt_template.format(content=text)
+        # Use replace instead of .format() so curly braces in the document don't
+        # get interpreted as format placeholders (causes KeyError on e.g. JSON snippets).
+        prompt = prompt_template.replace("{content}", text)
         raw = self._llm_call_with_retry(prompt, response_format={"type": "json_object"})
         try:
             data = json.loads(raw)
@@ -371,8 +417,9 @@ class HouseStructurer:
                     response_format=response_format,
                 )
                 if hasattr(self, "_usage") and response.usage:
-                    self._usage["input_tokens"] += response.usage.prompt_tokens
-                    self._usage["output_tokens"] += response.usage.completion_tokens
+                    with self._usage_lock:
+                        self._usage["input_tokens"] += response.usage.prompt_tokens
+                        self._usage["output_tokens"] += response.usage.completion_tokens
                 return response.choices[0].message.content
             except (APITimeoutError, RateLimitError) as e:
                 last_exc = e
@@ -407,6 +454,29 @@ class HouseStructurer:
                     seen_content.add(key)
                     merged_messages.append(m)
 
+        # Merge pillars (deduplicate by name; deduplicate chunks by content)
+        pillar_by_name: dict[str, dict] = {}
+        for h in houses:
+            for pillar in h.pillars:
+                pname = pillar.get("name", "")
+                if pname not in pillar_by_name:
+                    pillar_by_name[pname] = {"name": pname, "description": pillar.get("description", ""), "chunks": []}
+                for chunk in pillar.get("chunks", []):
+                    key = chunk.get("content", "").strip().lower()[:80]
+                    if key and key not in seen_content:
+                        seen_content.add(key)
+                        pillar_by_name[pname]["chunks"].append(chunk)
+        merged_pillars = list(pillar_by_name.values())
+
+        # Merge ungrouped chunks (deduplicated against all pillar chunks too)
+        merged_ungrouped: list[dict] = []
+        for h in houses:
+            for chunk in h.ungrouped_chunks:
+                key = chunk.get("content", "").strip().lower()[:80]
+                if key and key not in seen_content:
+                    seen_content.add(key)
+                    merged_ungrouped.append(chunk)
+
         merged_personas: list[dict] = []
         seen_names: set[str] = set()
         for h in houses:
@@ -425,6 +495,8 @@ class HouseStructurer:
             tagline=first_nonempty("tagline"),
             differentiation=first_nonempty("differentiation"),
             key_messages=merged_messages,
+            pillars=merged_pillars,
+            ungrouped_chunks=merged_ungrouped,
             personas=merged_personas,
             know_your_market=first_nonempty("know_your_market"),
         )
@@ -664,10 +736,16 @@ class HouseStructurer:
                 if p.get("description"):
                     lines.append(f"**Role:** {p['description']}")
                 if p.get("pain_points"):
-                    lines.append("**Pain Points:** " + ", ".join(p["pain_points"]))
+                    lines.append("**Pain Points:** " + ", ".join(
+                        i.get("content", str(i)) if isinstance(i, dict) else str(i)
+                        for i in p["pain_points"]))
                 if p.get("buying_triggers"):
-                    lines.append("**Buying Triggers:** " + ", ".join(p["buying_triggers"]))
+                    lines.append("**Buying Triggers:** " + ", ".join(
+                        i.get("content", str(i)) if isinstance(i, dict) else str(i)
+                        for i in p["buying_triggers"]))
                 if p.get("objections"):
-                    lines.append("**Objections:** " + ", ".join(p["objections"]))
+                    lines.append("**Objections:** " + ", ".join(
+                        i.get("statement", str(i)) if isinstance(i, dict) else str(i)
+                        for i in p["objections"]))
 
         return "\n".join(lines)

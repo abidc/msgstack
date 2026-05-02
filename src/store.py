@@ -242,6 +242,46 @@ class ArtifactHistoryModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class SourceConnectionModel(Base):
+    __tablename__ = "source_connections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # "google_drive"
+    account_email: Mapped[str] = mapped_column(String(255), default="")
+    folder_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    folder_name: Mapped[str] = mapped_column(String(500), default="")
+    access_token: Mapped[str] = mapped_column(Text, default="")
+    refresh_token: Mapped[str] = mapped_column(Text, default="")
+    page_token: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(String(30), default="connected")
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    source_files: Mapped[list["SourceFileModel"]] = relationship(
+        back_populates="connection", cascade="all, delete-orphan"
+    )
+
+
+class SourceFileModel(Base):
+    __tablename__ = "source_files"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    connection_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_connections.id", ondelete="CASCADE"), nullable=False
+    )
+    drive_file_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), default="")
+    house_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    drive_modified_at: Mapped[str] = mapped_column(String(50), default="")
+    sync_status: Mapped[str] = mapped_column(String(30), default="pending")
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    connection: Mapped["SourceConnectionModel"] = relationship(back_populates="source_files")
+
+
 # Performance indexes on high-cardinality FK / filter columns
 Index("ix_km_house_id", KeyMessageModel.message_house_id)
 Index("ix_km_pillar_id", KeyMessageModel.pillar_id)
@@ -252,6 +292,8 @@ Index("ix_token_usage_workspace", TokenUsageModel.workspace_id)
 Index("ix_api_key_workspace", ApiKeyModel.workspace_id)
 Index("ix_house_workspace", HouseModel.workspace_id)
 Index("ix_pillar_house_id", PillarModel.house_id)
+Index("ix_source_files_conn", SourceFileModel.connection_id)
+Index("ix_source_files_drive_id", SourceFileModel.drive_file_id)
 
 
 class Store:
@@ -352,6 +394,45 @@ class Store:
                             conn.commit()
                         except Exception:
                             pass
+
+            # Create source_connections table
+            if "source_connections" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE source_connections (
+                        id TEXT PRIMARY KEY,
+                        workspace_id TEXT NOT NULL DEFAULT 'default',
+                        provider TEXT NOT NULL,
+                        account_email TEXT DEFAULT '',
+                        folder_id TEXT NOT NULL,
+                        folder_name TEXT DEFAULT '',
+                        access_token TEXT DEFAULT '',
+                        refresh_token TEXT DEFAULT '',
+                        page_token TEXT DEFAULT '',
+                        status TEXT DEFAULT 'connected',
+                        last_sync_at DATETIME,
+                        error_message TEXT DEFAULT '',
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            # Create source_files table
+            if "source_files" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE source_files (
+                        id TEXT PRIMARY KEY,
+                        connection_id TEXT NOT NULL REFERENCES source_connections(id) ON DELETE CASCADE,
+                        drive_file_id TEXT NOT NULL,
+                        file_name TEXT NOT NULL,
+                        mime_type TEXT DEFAULT '',
+                        house_id TEXT,
+                        drive_modified_at TEXT DEFAULT '',
+                        sync_status TEXT DEFAULT 'pending',
+                        error_message TEXT DEFAULT '',
+                        synced_at DATETIME
+                    )
+                """))
+                conn.commit()
 
     def _seed_default_channels(self) -> None:
         with self.session() as s:
@@ -544,6 +625,18 @@ class Store:
                 _invalidate_graph()
                 return True
             return False
+
+    def delete_houses_by_source_id(self, source_id: str) -> int:
+        """Delete all houses with the given source_id. Returns count deleted."""
+        with self.session() as s:
+            rows = s.query(HouseModel).filter(HouseModel.source_id == source_id).all()
+            count = len(rows)
+            for row in rows:
+                s.delete(row)
+            if count:
+                s.commit()
+                _invalidate_graph()
+            return count
 
     def delete_key_message(self, msg_id: UUID) -> bool:
         with self.session() as s:
@@ -1082,6 +1175,186 @@ class Store:
                 }
                 for row, mc, pc in q.all()
             ]
+
+    # --- Source Connections ---
+
+    def create_connection(
+        self,
+        provider: str,
+        folder_id: str,
+        account_email: str,
+        folder_name: str,
+        access_token: str,
+        refresh_token: str,
+        page_token: str,
+        workspace_id: str = "default",
+    ) -> dict:
+        from uuid import uuid4
+        row = SourceConnectionModel(
+            id=str(uuid4()),
+            workspace_id=workspace_id,
+            provider=provider,
+            account_email=account_email,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            page_token=page_token,
+            status="connected",
+            created_at=_now(),
+        )
+        with self.session() as s:
+            s.add(row)
+            s.commit()
+            return _conn_to_dict(row)
+
+    def get_connection(self, connection_id: str) -> dict | None:
+        with self.session() as s:
+            row = s.get(SourceConnectionModel, connection_id)
+            return _conn_to_dict(row) if row else None
+
+    def list_connections(self, workspace_id: str | None = None) -> list[dict]:
+        with self.session() as s:
+            q = s.query(SourceConnectionModel)
+            if workspace_id:
+                q = q.filter(SourceConnectionModel.workspace_id == workspace_id)
+            return [_conn_to_dict(r) for r in q.order_by(SourceConnectionModel.created_at).all()]
+
+    def update_connection(self, connection_id: str, updates: dict) -> None:
+        with self.session() as s:
+            row = s.get(SourceConnectionModel, connection_id)
+            if not row:
+                return
+            for k, v in updates.items():
+                if hasattr(row, k):
+                    setattr(row, k, v)
+            s.commit()
+
+    def delete_connection(self, connection_id: str) -> bool:
+        with self.session() as s:
+            row = s.get(SourceConnectionModel, connection_id)
+            if not row:
+                return False
+            s.delete(row)
+            s.commit()
+            return True
+
+    # --- Source Files ---
+
+    def upsert_source_file(
+        self,
+        connection_id: str,
+        drive_file_id: str,
+        file_name: str,
+        mime_type: str = "",
+        drive_modified_at: str = "",
+        house_id: str | None = None,
+        sync_status: str = "synced",
+        error_message: str = "",
+    ) -> None:
+        from uuid import uuid4
+        with self.session() as s:
+            row = (
+                s.query(SourceFileModel)
+                .filter(
+                    SourceFileModel.connection_id == connection_id,
+                    SourceFileModel.drive_file_id == drive_file_id,
+                )
+                .first()
+            )
+            now = _now()
+            if row:
+                row.file_name = file_name
+                row.mime_type = mime_type
+                row.drive_modified_at = drive_modified_at
+                row.sync_status = sync_status
+                row.error_message = error_message
+                row.synced_at = now
+                if house_id is not None:
+                    row.house_id = house_id
+            else:
+                s.add(SourceFileModel(
+                    id=str(uuid4()),
+                    connection_id=connection_id,
+                    drive_file_id=drive_file_id,
+                    file_name=file_name,
+                    mime_type=mime_type,
+                    house_id=house_id,
+                    drive_modified_at=drive_modified_at,
+                    sync_status=sync_status,
+                    error_message=error_message,
+                    synced_at=now,
+                ))
+            s.commit()
+
+    def get_source_file_by_drive_id(self, connection_id: str, drive_file_id: str) -> dict | None:
+        with self.session() as s:
+            row = (
+                s.query(SourceFileModel)
+                .filter(
+                    SourceFileModel.connection_id == connection_id,
+                    SourceFileModel.drive_file_id == drive_file_id,
+                )
+                .first()
+            )
+            return _source_file_to_dict(row) if row else None
+
+    def list_source_files(self, connection_id: str) -> list[dict]:
+        with self.session() as s:
+            rows = (
+                s.query(SourceFileModel)
+                .filter(SourceFileModel.connection_id == connection_id)
+                .order_by(SourceFileModel.file_name)
+                .all()
+            )
+            return [_source_file_to_dict(r) for r in rows]
+
+    def delete_source_file(self, connection_id: str, drive_file_id: str) -> None:
+        with self.session() as s:
+            row = (
+                s.query(SourceFileModel)
+                .filter(
+                    SourceFileModel.connection_id == connection_id,
+                    SourceFileModel.drive_file_id == drive_file_id,
+                )
+                .first()
+            )
+            if row:
+                s.delete(row)
+                s.commit()
+
+
+def _conn_to_dict(row: "SourceConnectionModel") -> dict:
+    return {
+        "id": row.id,
+        "workspace_id": row.workspace_id,
+        "provider": row.provider,
+        "account_email": row.account_email,
+        "folder_id": row.folder_id,
+        "folder_name": row.folder_name,
+        "access_token": row.access_token,
+        "refresh_token": row.refresh_token,
+        "page_token": row.page_token,
+        "status": row.status,
+        "last_sync_at": row.last_sync_at.isoformat() if row.last_sync_at else None,
+        "error_message": row.error_message,
+        "created_at": row.created_at.isoformat(),
+    }
+
+
+def _source_file_to_dict(row: "SourceFileModel") -> dict:
+    return {
+        "id": row.id,
+        "connection_id": row.connection_id,
+        "drive_file_id": row.drive_file_id,
+        "file_name": row.file_name,
+        "mime_type": row.mime_type,
+        "house_id": row.house_id,
+        "drive_modified_at": row.drive_modified_at,
+        "sync_status": row.sync_status,
+        "error_message": row.error_message,
+        "synced_at": row.synced_at.isoformat() if row.synced_at else None,
+    }
 
 
 def _safe_section_type(value: str) -> SectionType:

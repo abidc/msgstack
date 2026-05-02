@@ -23,7 +23,8 @@ mcp_app = mcp.http_app(
 
 class PathRouter:
     """Route /mcp* to mcp_app (full path, no stripping), everything else to admin_app.
-    Delegates lifespan to mcp_app so FastMCP's session task group initializes."""
+    Delegates lifespan to mcp_app so FastMCP's session task group initializes.
+    Also starts the admin app's sync engine background loop on startup."""
 
     def __init__(self, mcp, admin):
         self.mcp = mcp
@@ -31,7 +32,17 @@ class PathRouter:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":
-            await self.mcp(scope, receive, send)
+            # Intercept startup to also boot the sync engine background loop
+            async def patched_receive():
+                msg = await receive()
+                if msg["type"] == "lifespan.startup":
+                    try:
+                        from src.web_app import _sync_engine
+                        _sync_engine.start()
+                    except Exception:
+                        pass
+                return msg
+            await self.mcp(scope, patched_receive, send)
             return
         if scope["type"] in ("http", "websocket") and scope.get("path", "").startswith("/mcp"):
             await self.mcp(scope, receive, send)
@@ -42,4 +53,4 @@ class PathRouter:
 app = PathRouter(mcp_app, admin_app)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8002)

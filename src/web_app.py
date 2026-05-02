@@ -15,6 +15,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 load_dotenv()
@@ -44,6 +45,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount("/canvas", StaticFiles(directory="src/web/canvas", html=True), name="canvas")
+
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR = DATA_DIR / "uploads"
@@ -52,6 +55,10 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 store = init_store()
 
 skills = SkillManager(skills_dir=str(DATA_DIR / "skills"))
+
+# Initialize sync engine eagerly so it's available regardless of lifespan routing
+from src.sources.sync import init_sync_engine as _init_sync
+_sync_engine = _init_sync(store)
 structurer = HouseStructurer()
 
 import openai as _oai_mod
@@ -60,7 +67,7 @@ _oai_client = _oai_mod.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 @app.on_event("startup")
 async def startup_event():
-    """Ensure Pinecone index exists on startup, seed if no houses."""
+    """Ensure Pinecone index exists on startup, seed if no houses, start sync."""
     from src.grounding.search import GroundingEngine
     try:
         engine = GroundingEngine(
@@ -75,15 +82,16 @@ async def startup_event():
     except Exception as e:
         log.warning("Pinecone index creation skipped: %s", e)
 
-    # Auto-seed if no houses exist
-    if not store.list_houses():
-        log.info("No houses found, running seed...")
-        from seed_data.seed import seed as run_seed
-        try:
-            run_seed()
-            log.info("Auto-seed complete")
-        except Exception as e:
-            log.warning("Auto-seed skipped: %s", e)
+    # Start the background source sync loop (engine already initialized at module level)
+    _sync_engine.start()
+
+    # Build the knowledge graph on startup so graph explorer and MCP tools work immediately
+    try:
+        from src.grounding.graph import get_graph_engine
+        get_graph_engine().rebuild()
+        log.info("Graph engine rebuilt on startup")
+    except Exception as e:
+        log.warning("Graph rebuild on startup failed: %s", e)
 
 def _check_token_budget(workspace_id: str) -> None:
     """Raise HTTP 402 if workspace token budget is exhausted."""
@@ -146,8 +154,10 @@ async def log_requests(request: Request, call_next):
 def _house_response(house: MessageHouse) -> dict:
     messages = store.get_key_messages(house.id)
     personas = store.get_personas(house.id)
+    completeness = _completeness_score_fast(house, len(messages), len(personas))
     return {
         "id": str(house.id),
+        "completeness_score": completeness,
         "name": house.name,
         "source": house.source,
         "source_id": house.source_id,
@@ -392,8 +402,32 @@ def update_house(house_id: str, data: HouseUpdate):
 
 @app.delete("/api/houses/{house_id}")
 def delete_house(house_id: str):
-    if not store.delete_house(UUID(house_id)):
+    try:
+        uid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    if not store.delete_house(uid):
         raise HTTPException(404, "House not found")
+    # Remove Pinecone vectors for this house
+    try:
+        from src.grounding.search import GroundingEngine
+        ge = GroundingEngine(
+            store=store,
+            openai_api_key=os.environ.get("OPENAI_API_KEY"),
+            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+            index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
+            namespace="default",
+        )
+        ge.ensure_index()
+        ge.index.delete(filter={"message_house_id": house_id}, namespace="default")
+    except Exception as exc:
+        log.warning("Pinecone cleanup on house delete failed: %s", exc)
+    # Rebuild graph so deleted house is removed from graph explorer immediately
+    try:
+        from src.grounding.graph import get_graph_engine
+        get_graph_engine().rebuild()
+    except Exception as exc:
+        log.warning("Graph rebuild after house delete failed: %s", exc)
     return {"ok": True, "deleted_id": house_id}
 
 
@@ -1368,14 +1402,18 @@ def generate_artifact(
 
     try:
         artifact = generator.generate(skill_id, house_id, context)
-        visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
+        visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence", "one_pager_visual"}
         artifact_type = skill_id if skill_id in visual_types else None
         if artifact_type:
-            visual_url = f"{settings.base_url}/artifact/{artifact_type}/{house_id}"
-            if skill_id == "battlecard" and context.get("competitor"):
-                visual_url += f"?competitor={context['competitor']}"
-            elif skill_id == "email_template" and context.get("stage"):
-                visual_url += f"?stage={context['stage']}"
+            if artifact_type == "one_pager_visual":
+                # Will open the canvas editor
+                pass
+            else:
+                visual_url = f"{settings.base_url}/artifact/{artifact_type}/{house_id}"
+                if skill_id == "battlecard" and context.get("competitor"):
+                    visual_url += f"?competitor={context['competitor']}"
+                elif skill_id == "email_template" and context.get("stage"):
+                    visual_url += f"?stage={context['stage']}"
         else:
             visual_url = None
 
@@ -1405,6 +1443,10 @@ def generate_artifact(
             artifact_history_id = saved["id"]
         except Exception:
             artifact_history_id = None
+
+        # If it's a visual canvas artifact, set the visual url to the canvas route using the saved history ID
+        if artifact_type == "one_pager_visual" and artifact_history_id:
+            visual_url = f"{settings.base_url}/canvas?artifact_id={artifact_history_id}"
 
         return {
             "skill_id": skill_id,
@@ -1852,6 +1894,57 @@ def save_artifact(data: dict):
         raw_content=data.get("raw_content", ""),
     )
     return record
+
+@app.get("/api/artifacts/{artifact_id}/render")
+def render_artifact(artifact_id: str, renderer: str = Query("fabric")):
+    """Convert an artifact's sections to a specific renderer format."""
+    from src.store import ArtifactRecord
+    import json
+    aid = UUID(artifact_id)
+    with store.session() as s:
+        record = s.query(ArtifactRecord).filter(ArtifactRecord.id == aid).first()
+        if not record:
+            raise HTTPException(404, "Artifact not found")
+        sections = record.sections_json
+        
+        if renderer == "fabric":
+            try:
+                if "design_spec" in sections:
+                    return json.loads(sections["design_spec"]) if isinstance(sections["design_spec"], str) else sections["design_spec"]
+                
+                return {
+                    "zones": [
+                        {"type": "hero", "text": record.house_name},
+                        {"type": "positioning", "text": sections.get("positioning_statement", "")},
+                        {"type": "messages", "text": str(sections.get("key_messages_list", ""))}
+                    ],
+                    "raw_sections": sections
+                }
+            except Exception as e:
+                raise HTTPException(500, f"Failed to format for fabric: {str(e)}")
+        
+        raise HTTPException(400, "Unsupported renderer")
+
+class DesignSpecUpdate(BaseModel):
+    design_spec: dict
+
+@app.patch("/api/artifacts/{artifact_id}/design_spec")
+def update_artifact_design_spec(artifact_id: str, data: DesignSpecUpdate):
+    """Save the updated Fabric.js design spec back to the artifact."""
+    from src.store import ArtifactRecord
+    aid = UUID(artifact_id)
+    with store.session() as s:
+        record = s.query(ArtifactRecord).filter(ArtifactRecord.id == aid).first()
+        if not record:
+            raise HTTPException(404, "Artifact not found")
+        
+        # We store the updated spec back into the 'design_spec' section
+        sections = dict(record.sections_json)
+        sections["design_spec"] = data.design_spec
+        record.sections_json = sections
+        s.commit()
+    
+    return {"ok": True}
 
 
 @app.get("/api/recent-artifacts")
@@ -2688,6 +2781,170 @@ def get_artifact_image(artifact_id: str):
         log.error("Image generation failed: %s", e)
         raise HTTPException(500, f"Failed to generate image: {str(e)}")
 
+# --- Source Connections ---
+
+@app.get("/api/connections")
+def list_connections():
+    return {"connections": store.list_connections()}
+
+
+@app.get("/api/connections/google-drive/connect")
+def gdrive_connect(folder_id: str = "", workspace_id: str = "default"):
+    """Start the Google Drive OAuth2 flow. Redirects the browser to Google."""
+    import json
+    from fastapi.responses import RedirectResponse
+    from src.sources.google_drive import GoogleDriveConnector
+
+    if not folder_id:
+        raise HTTPException(400, "folder_id is required")
+
+    connector = GoogleDriveConnector()
+    if not connector.client_id:
+        raise HTTPException(500, "GOOGLE_CLIENT_ID not configured")
+
+    state = json.dumps({"folder_id": folder_id, "workspace_id": workspace_id})
+    import base64
+    state_b64 = base64.urlsafe_b64encode(state.encode()).decode()
+    url = connector.get_auth_url(state=state_b64)
+    return RedirectResponse(url)
+
+
+@app.get("/api/connections/google-drive/callback")
+def gdrive_callback(code: str = "", state: str = "", error: str = ""):
+    """OAuth2 callback — exchanges code for tokens and creates the connection."""
+    import base64
+    import json
+    import threading
+    from fastapi.responses import RedirectResponse
+    from src.sources.google_drive import GoogleDriveConnector
+    from src.sources.sync import get_sync_engine
+
+    if error:
+        return RedirectResponse(f"/?error={error}#connections")
+
+    try:
+        state_data = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
+    except Exception:
+        raise HTTPException(400, "Invalid state parameter")
+
+    folder_id = state_data.get("folder_id", "")
+    workspace_id = state_data.get("workspace_id", "default")
+
+    connector = GoogleDriveConnector()
+    try:
+        tokens = connector.exchange_code(code)
+    except Exception as exc:
+        log.error("Google OAuth token exchange failed: %s", exc)
+        return RedirectResponse("/?error=token_exchange_failed#connections")
+
+    access_token = tokens["access_token"]
+    refresh_token = tokens.get("refresh_token", "")
+
+    try:
+        account_email = connector.get_account_email(access_token)
+    except Exception as exc:
+        log.warning("Could not fetch account email: %s", exc)
+        account_email = ""
+
+    try:
+        folder_name = connector.get_folder_name(folder_id, access_token)
+    except Exception as exc:
+        log.warning("Could not fetch folder name: %s", exc)
+        folder_name = folder_id
+
+    try:
+        page_token = connector.get_initial_page_token(access_token)
+    except Exception as exc:
+        log.warning("Could not fetch initial page token: %s", exc)
+        page_token = "1"
+
+    connection = store.create_connection(
+        provider="google_drive",
+        folder_id=folder_id,
+        account_email=account_email,
+        folder_name=folder_name,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        page_token=page_token,
+        workspace_id=workspace_id,
+    )
+
+    # Run initial folder scan in a background thread so the redirect is immediate
+    def _bg_initial_sync(conn_id: str):
+        try:
+            get_sync_engine().initial_sync(conn_id)
+        except Exception as exc:
+            log.error("Initial sync failed for %s: %s", conn_id, exc)
+
+    thread = threading.Thread(target=_bg_initial_sync, args=(connection["id"],), daemon=True)
+    thread.start()
+
+    return RedirectResponse("/#connections")
+
+
+@app.delete("/api/connections/{connection_id}")
+def delete_connection(connection_id: str):
+    if not store.delete_connection(connection_id):
+        raise HTTPException(404, "Connection not found")
+    return {"deleted": True}
+
+
+@app.post("/api/connections/{connection_id}/sync")
+def trigger_sync(connection_id: str):
+    """Trigger an immediate manual sync for a connection."""
+    import threading
+    from src.sources.sync import get_sync_engine
+
+    conn = store.get_connection(connection_id)
+    if not conn:
+        raise HTTPException(404, "Connection not found")
+
+    def _bg(cid: str):
+        try:
+            get_sync_engine().sync_connection(cid)
+        except Exception as exc:
+            log.error("Manual sync failed for %s: %s", cid, exc)
+
+    threading.Thread(target=_bg, args=(connection_id,), daemon=True).start()
+    return {"status": "syncing"}
+
+
+@app.get("/api/connections/{connection_id}/files")
+def list_connection_files(connection_id: str):
+    conn = store.get_connection(connection_id)
+    if not conn:
+        raise HTTPException(404, "Connection not found")
+    return {"files": store.list_source_files(connection_id)}
+
+
+@app.post("/api/connections/{connection_id}/source-files/{drive_file_id}/resync")
+def resync_source_file(connection_id: str, drive_file_id: str):
+    """Mark a source file for re-ingestion on next sync cycle."""
+    conn = store.get_connection(connection_id)
+    if not conn:
+        raise HTTPException(404, "Connection not found")
+    sf = store.get_source_file_by_drive_id(connection_id, drive_file_id)
+    if not sf:
+        raise HTTPException(404, "Source file not found")
+    # Delete the existing house so a fresh one is created on re-ingest
+    if sf.get("house_id"):
+        try:
+            store.delete_house(UUID(sf["house_id"]))
+        except Exception:
+            pass
+    # Reset to error so the error-file retry loop picks it up on next sync
+    store.upsert_source_file(
+        connection_id=connection_id,
+        drive_file_id=drive_file_id,
+        file_name=sf["file_name"],
+        mime_type=sf["mime_type"],
+        drive_modified_at=sf.get("drive_modified_at", ""),
+        sync_status="error",
+        error_message="queued for resync",
+    )
+    return {"status": "queued"}
+
+
 # --- Frontend ---
 
 @app.get("/", response_class=HTMLResponse)
@@ -2698,6 +2955,7 @@ def get_artifact_image(artifact_id: str):
 @app.get("/skills", response_class=HTMLResponse)
 @app.get("/settings", response_class=HTMLResponse)
 @app.get("/house-detail", response_class=HTMLResponse)
+@app.get("/connections", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(request, "dashboard.html")
 

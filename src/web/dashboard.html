@@ -291,6 +291,46 @@
     </div>
 </section>
 
+<!-- ── Connections ── -->
+<section id="connections" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Source Connections</div>
+                <div class="page-subtitle">Connect Google Drive folders to auto-sync documents into your knowledge graph</div>
+            </div>
+            <button class="btn btn-primary" onclick="showConnectModal()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Connect Google Drive
+            </button>
+        </div>
+
+        <div id="connections-list"></div>
+    </div>
+</section>
+
+<!-- Connect Modal -->
+<div id="connect-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)hideConnectModal()">
+    <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:480px;max-width:95vw;">
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Connect Google Drive Folder</div>
+        <div style="font-size:12px;color:var(--text-2);margin-bottom:20px;">MsgStack will watch this folder and auto-ingest any Google Docs, DOCX, PDF, or TXT files into your knowledge graph.</div>
+
+        <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label">Google Drive Folder URL or ID</label>
+            <input type="text" id="gdrive-folder-id" class="form-input" placeholder="https://drive.google.com/drive/folders/…" style="width:100%;">
+            <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Paste the folder URL from Google Drive, or just the folder ID.</div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+            <button class="btn btn-ghost" onclick="hideConnectModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="startGDriveConnect()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.67 13.5a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.58 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                Authorize with Google
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- ── Graph Explorer ── -->
 <section id="graph" class="section">
     <div class="page">
@@ -361,6 +401,11 @@
 {% block scripts %}
 <script>
     const API = '/api';
+    async function apiFetch(path, opts = {}) {
+        const res = await fetch(path, opts);
+        if (!res.ok) { const t = await res.text(); throw new Error(t || res.statusText); }
+        return res.status === 204 ? null : res.json();
+    }
     let currentHouseId = null;
     let selectedSkillId = null;
     let selectedSkillContextInputs = [];
@@ -442,6 +487,7 @@
         else if (id === 'artifacts') loadArtifactHouses();
         else if (id === 'skills') loadSkills();
         else if (id === 'channels') loadChannels();
+        else if (id === 'connections') loadConnections();
         else if (id === 'graph') loadGraphExplorer();
         else if (id === 'settings') loadSettings();
     }
@@ -449,8 +495,9 @@
     window.onpopstate = e => showSection(e.state?.section || 'dashboard', false);
 
     function initRouting() {
-        const path = window.location.pathname.replace(/^\//, '') || 'dashboard';
-        const valid = ['dashboard','frameworks','upload','artifacts','skills','channels','graph','settings'];
+        const hash = window.location.hash.replace(/^#/, '');
+        const path = hash || window.location.pathname.replace(/^\//, '') || 'dashboard';
+        const valid = ['dashboard','frameworks','upload','artifacts','skills','channels','connections','graph','settings'];
         showSection(valid.includes(path) ? path : 'dashboard', false);
     }
 
@@ -565,18 +612,19 @@
                 return;
             }
             list.innerHTML = houses.map(h => `
-                <div class="card" style="cursor:pointer;transition:border-color .12s;"
+                <div class="card" id="house-card-${h.id}" style="cursor:pointer;transition:border-color .12s;"
                      onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor=''"
                      onclick="viewHouse('${h.id}')">
                      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-                         <div class="card-title">${esc(h.name)}${docTypeBadge(h.document_type)}</div>
+                         <div class="card-title">${esc(h.name)}${docTypeBadge(h.document_type)}${h.source==='google_drive'?'<span style="font-size:9px;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:rgba(66,133,244,.15);color:#4285f4;vertical-align:middle;margin-left:6px;">Drive</span>':''}</div>
                         <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:4px;flex-shrink:0;background:${h.status==='active'?'var(--success-dim)':'var(--bg-3)'};color:${h.status==='active'?'var(--success)':'var(--text-3)'};">${h.status}</span>
                     </div>
                     <div style="font-size:12.5px;color:var(--text-2);line-height:1.5;margin-bottom:12px;min-height:36px;">${esc(h.summary)}</div>
-                    <div style="display:flex;gap:12px;font-size:11px;color:var(--text-3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">
+                    <div class="house-card-footer" style="display:flex;gap:12px;font-size:11px;color:var(--text-3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;align-items:center;">
                         <span>${h.message_count} Messages</span>
                         <span>${h.persona_count} Personas</span>
                         <span style="margin-left:auto;color:${h.completeness_score>=75?'var(--success)':h.completeness_score>=50?'var(--warn)':'var(--text-3)'};">${h.completeness_score}%</span>
+                        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--danger);" onclick="event.stopPropagation();deleteHouse('${h.id}')">Delete</button>
                     </div>
                 </div>`).join('');
         } catch(e) { list.innerHTML = `<div style="color:var(--danger);grid-column:1/-1;">Error: ${e.message}</div>`; }
@@ -665,6 +713,7 @@
                 <span style="font-size:12px;font-weight:600;color:${scoreColor};border:1px solid ${scoreColor};padding:3px 10px;border-radius:100px;">${score}% complete</span>
                 <button class="btn btn-ghost btn-sm" onclick="viewArtifactForHouse('${house.id}')">Generate →</button>
                 <button class="btn btn-ghost btn-sm" onclick="showSection('frameworks')">← Back</button>
+                <button id="detail-delete-btn" class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="deleteHouse('${house.id}')">Delete</button>
             </div>
         </div>
 
@@ -1734,6 +1783,203 @@ const NODE_COLORS = {
                 n.id.toLowerCase().includes(q))
             : _graphData.nodes;
         _renderNodeList(filtered);
+    }
+
+    // ── Connections ──────────────────────────────────────────────────────────────
+
+    function showConnectModal() {
+        const m = document.getElementById('connect-modal');
+        m.style.display = 'flex';
+        m.style.alignItems = 'center';
+        m.style.justifyContent = 'center';
+    }
+    function hideConnectModal() {
+        document.getElementById('connect-modal').style.display = 'none';
+    }
+
+    function startGDriveConnect() {
+        const folderInput = document.getElementById('gdrive-folder-id').value.trim();
+        if (!folderInput) { showToast('Enter a folder URL or ID', 'warn'); return; }
+        // Extract folder ID if a URL was pasted
+        let folderId = folderInput;
+        const m = folderInput.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+        if (m) folderId = m[1];
+        window.location.href = `/api/connections/google-drive/connect?folder_id=${encodeURIComponent(folderId)}`;
+    }
+
+    async function loadConnections() {
+        const el = document.getElementById('connections-list');
+        if (!el) return;
+        el.innerHTML = '<div style="color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
+        try {
+            const data = await apiFetch('/api/connections');
+            if (!data.connections.length) {
+                el.innerHTML = `<div class="card" style="text-align:center;padding:40px;color:var(--text-3);">
+                    No connections yet. Click <b>Connect Google Drive</b> to watch a folder.
+                </div>`;
+                return;
+            }
+            el.innerHTML = data.connections.map(c => {
+                const statusColor = c.status === 'connected' ? 'var(--success)' : c.status === 'syncing' ? 'var(--primary)' : c.status === 'error' ? 'var(--danger)' : 'var(--text-3)';
+                const lastSync = c.last_sync_at ? new Date(c.last_sync_at).toLocaleString() : 'Never';
+                return `<div class="card" id="conn-card-${c.id}" style="margin-bottom:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div>
+                            <div style="font-weight:600;font-size:14px;margin-bottom:3px;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:-2px;margin-right:5px;color:var(--primary)"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                ${c.folder_name || c.folder_id}
+                            </div>
+                            <div style="font-size:12px;color:var(--text-2);">${c.account_email || 'Google Drive'} &middot; <span style="color:${statusColor};font-weight:500;">${c.status}</span></div>
+                            <div style="font-size:11px;color:var(--text-3);margin-top:3px;">Last synced: ${lastSync}</div>
+                            ${c.error_message ? `<div style="font-size:11px;color:var(--danger);margin-top:3px;">${c.error_message}</div>` : ''}
+                        </div>
+                        <div style="display:flex;gap:8px;flex-shrink:0;">
+                            <button class="btn btn-ghost btn-sm" onclick="syncConnection('${c.id}', this)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                Sync now
+                            </button>
+                            <button class="btn btn-ghost btn-sm" onclick="viewConnectionFiles('${c.id}')">Files</button>
+                            <button class="btn btn-danger btn-sm" onclick="disconnectSource('${c.id}')">Disconnect</button>
+                        </div>
+                    </div>
+                    <div id="conn-files-${c.id}" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px;"></div>
+                </div>`;
+            }).join('');
+        } catch (e) {
+            el.innerHTML = `<div class="card" style="color:var(--danger);">Failed to load connections: ${e.message}</div>`;
+        }
+    }
+
+    async function syncConnection(connId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Syncing…';
+        try {
+            await apiFetch(`/api/connections/${connId}/sync`, {method: 'POST'});
+            showToast('Sync started', 'success');
+            setTimeout(loadConnections, 2000);
+        } catch (e) {
+            showToast('Sync failed: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Sync now';
+        }
+    }
+
+    async function disconnectSource(connId) {
+        if (!confirm('Disconnect this source? Synced frameworks will remain, but auto-sync will stop.')) return;
+        const card = document.getElementById(`conn-card-${connId}`);
+        if (card) card.style.opacity = '0.4';
+        try {
+            await apiFetch(`/api/connections/${connId}`, {method: 'DELETE'});
+            if (card) card.remove();
+            showToast('Disconnected', 'success');
+            const list = document.getElementById('connections-list');
+            if (list && !list.querySelector('.card')) loadConnections();
+        } catch (e) {
+            if (card) card.style.opacity = '1';
+            showToast('Failed to disconnect: ' + e.message, 'error');
+        }
+    }
+
+    async function viewConnectionFiles(connId) {
+        const filesEl = document.getElementById(`conn-files-${connId}`);
+        if (filesEl.style.display !== 'none') { filesEl.style.display = 'none'; return; }
+        filesEl.style.display = 'block';
+        filesEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;"><span class="spinner"></span> Loading files…</div>';
+        try {
+            const data = await apiFetch(`/api/connections/${connId}/files`);
+            if (!data.files.length) {
+                filesEl.innerHTML = '<div style="font-size:12px;color:var(--text-3);">No files synced yet.</div>';
+                return;
+            }
+            filesEl.innerHTML = `<table style="width:100%;font-size:12px;border-collapse:collapse;">
+                <thead><tr style="color:var(--text-3);text-align:left;">
+                    <th style="padding:4px 8px;font-weight:500;">File</th>
+                    <th style="padding:4px 8px;font-weight:500;">Status</th>
+                    <th style="padding:4px 8px;font-weight:500;">Synced</th>
+                    <th style="padding:4px 8px;font-weight:500;">Framework</th>
+                    <th style="padding:4px 8px;font-weight:500;"></th>
+                </tr></thead>
+                <tbody>${data.files.map(f => {
+                    const statusColor = f.sync_status === 'synced' ? 'var(--success)' : f.sync_status === 'error' ? 'var(--danger)' : 'var(--text-3)';
+                    const synced = f.synced_at ? new Date(f.synced_at).toLocaleString() : '—';
+                    const houseLink = f.house_id ? `<a href="#" onclick="event.preventDefault();showHouseDetail('${f.house_id}')" style="color:var(--primary);">${f.house_id.slice(0,8)}…</a>` : '—';
+                    return `<tr style="border-top:1px solid var(--border);">
+                        <td style="padding:5px 8px;">${f.file_name}</td>
+                        <td style="padding:5px 8px;color:${statusColor};">${f.sync_status}${f.error_message ? ` — ${f.error_message.slice(0,60)}` : ''}</td>
+                        <td style="padding:5px 8px;color:var(--text-3);">${synced}</td>
+                        <td style="padding:5px 8px;">${houseLink}</td>
+                        <td style="padding:5px 8px;"><button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;" onclick="resyncFile('${connId}','${f.drive_file_id}',this)">Re-sync</button></td>
+                    </tr>`;
+                }).join('')}</tbody>
+            </table>`;
+        } catch (e) {
+            filesEl.innerHTML = `<div style="color:var(--danger);font-size:12px;">Error: ${e.message}</div>`;
+        }
+    }
+
+    async function resyncFile(connId, driveFileId, btn) {
+        btn.disabled = true;
+        btn.textContent = '…';
+        try {
+            await apiFetch(`/api/connections/${connId}/source-files/${encodeURIComponent(driveFileId)}/resync`, {method: 'POST'});
+            showToast('File queued for re-sync. Trigger a sync or wait for next poll.', 'success');
+            await apiFetch(`/api/connections/${connId}/sync`, {method: 'POST'}).catch(() => {});
+            setTimeout(() => viewConnectionFiles(connId), 3000);
+        } catch(e) {
+            showToast('Re-sync failed: ' + e.message, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Re-sync';
+        }
+    }
+
+    function deleteHouse(id) {
+        const card = document.getElementById('house-card-' + id);
+        if (card) {
+            // List view — replace the footer row with inline confirmation
+            const footer = card.querySelector('.house-card-footer');
+            if (!footer) return;
+            footer.innerHTML = `
+                <span style="font-size:12px;color:var(--danger);font-weight:600;text-transform:none;letter-spacing:0;">Delete permanently?</span>
+                <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger);font-size:10px;padding:2px 8px;"
+                        onclick="event.stopPropagation();_doDeleteHouse('${id}')">Yes, delete</button>
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;"
+                        onclick="event.stopPropagation();loadHouses()">Cancel</button>`;
+        } else {
+            // Detail view — show inline confirmation next to the Delete button
+            const btn = document.getElementById('detail-delete-btn');
+            if (!btn) return;
+            btn.style.display = 'none';
+            const confirm_span = document.createElement('span');
+            confirm_span.id = 'detail-delete-confirm';
+            confirm_span.style.cssText = 'display:flex;gap:6px;align-items:center;';
+            confirm_span.innerHTML = `
+                <span style="font-size:12px;color:var(--danger);font-weight:600;">Delete permanently?</span>
+                <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger);font-size:10px;" onclick="_doDeleteHouse('${id}')">Confirm</button>
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;" onclick="document.getElementById('detail-delete-confirm').remove();document.getElementById('detail-delete-btn').style.display='';">Cancel</button>`;
+            btn.insertAdjacentElement('afterend', confirm_span);
+        }
+    }
+
+    async function _doDeleteHouse(id) {
+        const card = document.getElementById('house-card-' + id);
+        if (card) {
+            // Immediately remove from DOM (optimistic update)
+            card.remove();
+            // If the list is now empty, show the empty state
+            const list = document.getElementById('houses-list');
+            if (list && !list.querySelector('.card')) {
+                list.innerHTML = `<div style="grid-column:1/-1;" class="card"><div style="color:var(--text-3);font-size:14px;text-align:center;padding:32px 0;">No frameworks yet. <button class="btn btn-ghost btn-sm" onclick="showSection('upload')">Upload a document →</button></div></div>`;
+            }
+        }
+        try {
+            await apiFetch(`${API}/houses/${id}`, {method: 'DELETE'});
+            showToast('Framework deleted', 'success');
+            if (!card) showSection('frameworks');
+        } catch(e) {
+            showToast('Delete failed: ' + e.message, 'error');
+            loadHouses(); // Restore list on failure (re-fetches from server)
+        }
     }
 
     // ── Init ──────────────────────────────────────────────────────────────────────

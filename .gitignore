@@ -15,3 +15,6 @@ server.log
 server_err.log
 check_db.py
 test_init.json
+venv_linux/
+server_out.log
+node_modules/

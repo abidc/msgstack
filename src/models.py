@@ -124,6 +124,16 @@ class Persona(BaseModel):
     buying_triggers: list[str] = Field(default_factory=list)
     objections: list[str] = Field(default_factory=list)
 
+    @field_validator("pain_points", "buying_triggers", mode="before")
+    @classmethod
+    def coerce_str_list(cls, v):
+        return [i.get("content", str(i)) if isinstance(i, dict) else str(i) for i in (v or [])]
+
+    @field_validator("objections", mode="before")
+    @classmethod
+    def coerce_objections(cls, v):
+        return [i.get("statement", str(i)) if isinstance(i, dict) else str(i) for i in (v or [])]
+
 
 class PainPoint(BaseModel):
     id: int
