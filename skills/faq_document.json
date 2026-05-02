@@ -23,5 +23,6 @@
     }
   ],
   "prompt_template": "Write an FAQ document for {house_name} addressing {audience} questions.\n\nGrounded in: {positioning}\nCommon objections to address: {objections}\n\nRules:\n- Organize by theme (Product, Pricing, Security, Integration, Support)\n- Each Q is a real question a prospect would ask \u2014 not a softballs\n- Each A is direct, confident, and grounded in the positioning\n- 8-12 Q&A pairs minimum\n- Include an 'Other questions?' section at the end",
-  "prefab_template": "faq_document"
+  "prefab_template": "faq_document",
+  "renderer": "html"
 }

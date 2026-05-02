@@ -1454,12 +1454,13 @@
     // ── Channels ──────────────────────────────────────────────────────────────────
 
     const MOCK_CHANNELS = [
-        { id: 'email',    name: 'Email',    description: 'Email campaigns and nurture sequences', is_default: true },
-        { id: 'linkedin', name: 'LinkedIn', description: 'LinkedIn posts and sponsored content',  is_default: true },
-        { id: 'blog',     name: 'Blog',     description: 'Blog posts and long-form content',       is_default: true },
-        { id: 'landing',  name: 'Landing',  description: 'Landing page copy',                      is_default: true },
-        { id: 'paid',     name: 'Paid',     description: 'Paid ads and display copy',              is_default: true },
-        { id: 'twitter',  name: 'Twitter',  description: 'Short-form social posts',                is_default: true },
+        { id: 'email',    name: 'Email',    description: 'Email campaigns and nurture sequences', is_custom: false },
+        { id: 'linkedin', name: 'LinkedIn', description: 'LinkedIn posts and sponsored content',  is_custom: false },
+        { id: 'blog',     name: 'Blog',     description: 'Blog posts and long-form content',       is_custom: false },
+        { id: 'landing_page',  name: 'Landing Page',  description: 'Website landing pages and hero copy', is_custom: false },
+        { id: 'paid_ads',     name: 'Paid Ads',     description: 'Display, search, and social advertising', is_custom: false },
+        { id: 'twitter',  name: 'Twitter',  description: 'Twitter and X posts',                is_custom: false },
+        { id: 'sales_deck',  name: 'Sales Deck',  description: 'Slide decks and pitch presentations', is_custom: false },
     ];
 
     async function _fetchChannels() {
@@ -1487,7 +1488,7 @@
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
                         <span style="font-weight:600;font-size:13px;">${esc(ch.name)}</span>
                         <span style="font-size:10px;font-weight:500;color:var(--text-3);background:var(--bg-3);padding:1px 6px;border-radius:4px;">${esc(ch.id)}</span>
-                        ${ch.is_default ? '<span style="font-size:10px;font-weight:600;background:var(--primary-dim);color:var(--primary);padding:1px 6px;border-radius:4px;">Default</span>' : ''}
+                        ${ch.is_custom ? '' : '<span style="font-size:10px;font-weight:600;background:var(--primary-dim);color:var(--primary);padding:1px 6px;border-radius:4px;">Default</span>'}
                     </div>
                     <input type="text" id="ch-desc-${esc(ch.id)}" value="${esc(ch.description||'')}"
                         style="width:100%;background:transparent;border:1px solid transparent;border-radius:var(--radius);padding:4px 6px;color:var(--text-2);font-size:12px;font-family:inherit;transition:border-color .12s;"
@@ -1497,8 +1498,8 @@
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
                     <button class="btn btn-ghost btn-xs" onclick="patchChannelDesc('${esc(ch.id)}', document.getElementById('ch-desc-${esc(ch.id)}').value)">Save</button>
-                    <button class="btn btn-xs ${ch.is_default ? '' : 'btn-danger'}" style="${ch.is_default ? 'opacity:.35;cursor:not-allowed;background:transparent;border:1px solid var(--border);color:var(--text-3);' : ''}"
-                        onclick="${ch.is_default ? '' : `deleteChannel('${esc(ch.id)}')`}" ${ch.is_default ? 'disabled title="Cannot delete a default channel"' : ''}>Delete</button>
+                    <button class="btn btn-xs ${ch.is_custom ? 'btn-danger' : ''}" style="${!ch.is_custom ? 'opacity:.35;cursor:not-allowed;background:transparent;border:1px solid var(--border);color:var(--text-3);' : ''}"
+                        onclick="${ch.is_custom ? `deleteChannel('${esc(ch.id)}')` : ''}" ${!ch.is_custom ? 'disabled title="Cannot delete a default channel"' : ''}>Delete</button>
                 </div>
             </div>`).join('');
     }

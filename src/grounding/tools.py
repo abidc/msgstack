@@ -318,3 +318,253 @@ def get_grounding_context() -> GroundingResponse:
     session = get_session()
     ctx = session.get_context()
     return GroundingResponse(results=[], grounding_context=ctx)
+
+
+def generate_artifact(
+    skill_id: str,
+    house_id: str,
+    custom_context: Optional[dict] = None,
+    workspace_id: Optional[str] = None,
+) -> dict:
+    """Generate a marketing artifact using LLM + skills + grounding context.
+
+    Args:
+        skill_id: The skill ID (e.g., "one_pager", "battlecard")
+        house_id: The message house ID or name
+        custom_context: Additional context to pass to the skill template
+        workspace_id: Optional workspace ID for scoping
+
+    Returns:
+        dict with generated artifact including renderer-specific output
+    """
+    from src.pipeline.generator import ArtifactGenerator, GeneratedArtifact
+    from src.pipeline.skills import SkillManager
+
+    store = _get_store()
+    skills = SkillManager()
+    generator = ArtifactGenerator(store=store, skills=skills)
+
+    # Resolve house_id to UUID if needed
+    try:
+        from uuid import UUID
+        hid = UUID(house_id)
+    except (ValueError, AttributeError):
+        house = store.get_house_by_name(house_id)
+        if not house:
+            return {"error": f"House '{house_id}' not found"}
+        hid = house.id
+
+    result = generator.generate(skill_id, str(hid), custom_context)
+
+    response = {
+        "skill_id": result.skill_id,
+        "house_id": result.house_id,
+        "house_name": result.house_name,
+        "sections": result.sections,
+        "raw_content": result.raw_content,
+        "grounded_messages": result.grounded_messages,
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "renderer_type": result.renderer_type,
+    }
+
+    # Include renderer-specific output if available
+    if result.renderer_output:
+        response["renderer_output"] = {
+            "output_type": result.renderer_output.output_type,
+            "content": result.renderer_output.content,
+            "metadata": result.renderer_output.metadata,
+        }
+
+    return response
+
+
+def build_presentation(
+    house_id: str,
+    skill_id: str = "executive_summary",
+    custom_context: Optional[dict] = None,
+) -> dict:
+    """Build a presentation using RevealRenderer.
+
+    Args:
+        house_id: The message house ID or name
+        skill_id: Skill to use for content generation (default: executive_summary)
+        custom_context: Additional context
+
+    Returns:
+        dict with reveal.js HTML presentation
+    """
+    from src.rendering.renderer import get_renderer
+
+    # Generate artifact first
+    artifact_result = generate_artifact(skill_id, house_id, custom_context)
+    if "error" in artifact_result:
+        return artifact_result
+
+    # Use RevealRenderer to generate presentation
+    renderer = get_renderer("reveal")
+    context = custom_context or {}
+    context["house_name"] = artifact_result.get("house_name", "Untitled")
+
+    render_output = renderer.render_reveal(
+        artifact_result.get("sections", {}),
+        context,
+    )
+
+    return {
+        "skill_id": artifact_result["skill_id"],
+        "house_id": artifact_result["house_id"],
+        "house_name": artifact_result["house_name"],
+        "renderer_type": "reveal",
+        "presentation_html": render_output.content,
+        "metadata": render_output.metadata,
+    }
+
+
+def export_to_penpot(
+    house_id: str,
+    skill_id: str = "one_pager_visual",
+    custom_context: Optional[dict] = None,
+) -> dict:
+    """Export an artifact to Penpot format.
+
+    Args:
+        house_id: The message house ID or name
+        skill_id: Skill to use (default: one_pager_visual)
+        custom_context: Additional context
+
+    Returns:
+        dict with Penpot-compatible data structure
+    """
+    from src.rendering.renderer import get_renderer
+
+    # Generate artifact first
+    artifact_result = generate_artifact(skill_id, house_id, custom_context)
+    if "error" in artifact_result:
+        return artifact_result
+
+    # Use PenpotRenderer to generate Penpot data
+    renderer = get_renderer("penpot")
+    context = custom_context or {}
+    context["house_name"] = artifact_result.get("house_name", "Untitled")
+
+    render_output = renderer.render_penpot(
+        artifact_result.get("sections", {}),
+        context,
+    )
+
+    return {
+        "skill_id": artifact_result["skill_id"],
+        "house_id": artifact_result["house_id"],
+        "house_name": artifact_result["house_name"],
+        "renderer_type": "penpot",
+        "penpot_data": render_output.content,
+        "metadata": render_output.metadata,
+    }
+
+
+def get_usage_heatmap(house_id: str) -> dict:
+    """Get chunk usage heatmap for a message house.
+
+    Shows how many times each chunk was used in artifacts, with which ratings.
+    """
+    engine = _get_engine()
+    store = engine.store
+    try:
+        hid = UUID(house_id)
+    except (ValueError, AttributeError):
+        return {"error": "Invalid house_id — must be a valid UUID"}
+
+    heatmap = store.get_chunk_usage_heatmap(hid)
+    return heatmap
+
+
+def get_coverage_report(house_id: str) -> dict:
+    """Get a coverage report for a message house.
+
+    Shows which parts of the message house are used most vs ignored.
+    """
+    engine = _get_engine()
+    store = engine.store
+    try:
+        hid = UUID(house_id)
+    except (ValueError, AttributeError):
+        return {"error": "Invalid house_id — must be a valid UUID"}
+
+    coverage = store.get_message_house_coverage(hid)
+    return coverage
+
+
+def export_to_penpot(
+    artifact_id: str,
+    workspace_id: str,
+    house_id: str,
+) -> dict:
+    """Export a MsgStack artifact to Penpot and return the edit link.
+
+    Creates a fully designed Penpot file with frames, text layers,
+    brand colors, and proper layout matching the artifact's design spec.
+
+    Args:
+        artifact_id: The artifact ID to export.
+        workspace_id: The workspace ID (to find the linked Penpot project).
+        house_id: The message house ID (to get brand tokens and messages).
+
+    Returns:
+        dict with file_id, edit_url, and creation status.
+    """
+    from src.design.penpot_sync import export_artifact_to_penpot
+    from src.store import get_store
+
+    store = get_store()
+
+    # Get the house
+    try:
+        house_uuid = UUID(house_id)
+    except (ValueError, AttributeError):
+        return {"error": "Invalid house_id — must be a valid UUID"}
+
+    house = store.get_house(house_uuid)
+    if not house:
+        return {"error": f"House {house_id} not found"}
+
+    # Export to Penpot
+    result = export_artifact_to_penpot(artifact_id, workspace_id, house)
+
+    if "error" in result:
+        return result
+
+    # Build the Penpot file using the Penpot MCP tools
+    # The tools are available in the MCP context
+    from src.design.penpot_sync import get_or_create_penpot_project
+
+    project_id = store.get_penpot_project(workspace_id)
+    if not project_id:
+        return {"error": "No Penpot project linked to workspace. Call set_penpot_project first."}
+
+    result["edit_url"] = f"https://design.penpot.app/work/#/project/{project_id}"
+    result["status"] = "success"
+
+    return result
+
+
+def set_penpot_project(workspace_id: str, project_id: str) -> dict:
+    """Link a Penpot project to a MsgStack workspace.
+
+    Args:
+        workspace_id: The MsgStack workspace ID.
+        project_id: The Penpot project ID to link.
+
+    Returns:
+        dict with status and confirmation.
+    """
+    store = get_store()
+    success = store.set_penpot_project(workspace_id, project_id)
+    if success:
+        return {
+            "status": "success",
+            "workspace_id": workspace_id,
+            "penpot_project_id": project_id,
+            "message": f"Penpot project {project_id} linked to workspace {workspace_id}",
+        }
+    return {"error": f"Workspace {workspace_id} not found"}

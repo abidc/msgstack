@@ -1,0 +1,43 @@
+{
+  "id": "event_presentation",
+  "name": "Event Presentation",
+  "description": "Presentation deck for conferences, webinars, and live events with audience engagement focus.",
+  "channels": [
+    "all"
+  ],
+  "artifact_type": "event_presentation",
+  "sections": [
+    {
+      "key": "hook",
+      "label": "Opening Hook",
+      "required": true
+    },
+    {
+      "key": "context",
+      "label": "Market Context",
+      "required": true
+    },
+    {
+      "key": "insights",
+      "label": "Key Insights",
+      "required": true
+    },
+    {
+      "key": "solution_highlight",
+      "label": "Solution Highlight",
+      "required": true
+    },
+    {
+      "key": "takeaways",
+      "label": "Key Takeaways",
+      "required": true
+    },
+    {
+      "key": "qna",
+      "label": "Q&A / CTA",
+      "required": true
+    }
+  ],
+  "prompt_template": "Generate an event presentation for {house_name} using the messaging framework below.\n\nGROUNDING CONTEXT:\n{context}\n\nGenerate exactly 6 slides as a JSON array. Each slide must have:\n- \"layout\": one of [\"title\", \"hook\", \"content\", \"timeline\", \"quote\", \"closing\"]\n- \"heading\": slide heading (max 8 words)\n- \"content\": array of strings (bullet points or paragraphs)\n- \"notes\": speaker notes (2-3 sentences — include audience engagement tips)\n- \"image_prompt\": optional visual description\n\nSlide structure:\n1. Title Slide — event name: {event_name}, company, tagline\n2. Opening Hook — surprising stat or question from the framework\n3. Market Context — trends and positioning context\n4. Key Insights — 3 insights from key messages and personas\n5. Solution Highlight — differentiation + 1 key benefit\n6. Key Takeaways + Q&A — 3 takeaways + call to action\n\nOutput ONLY valid JSON array. No markdown fences.",
+  "prefab_template": "reveal_presentation"
+}

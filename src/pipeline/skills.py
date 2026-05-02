@@ -360,21 +360,121 @@ Tone: partner-first. Focus on what the partner gains, not what we gain.""",
             {"key": "design_spec", "label": "Design JSON Specification", "required": True},
         ],
         "prompt_template": """Generate a structured design specification for a visual One-Pager for {house_name}.
-        
-Grounded in this messaging framework:
-{context}
 
-You must return ONLY a JSON object stringified in the `design_spec` section that matches this schema:
+TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
+{visual_context}
+
+GROUNDING REMINDER:
+- Use ONLY content from the messaging house below.
+- Do NOT invent headlines, stats, or claims.
+- Copy pre-filled zone content EXACTLY (edit only for tone/polish).
+
+HOUSE DATA:
+- Tagline: {tagline} (keep under 10 words)
+- Positioning: {positioning}
+- Differentiation: {differentiation}
+- Top messages: {key_messages}
+
+OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
   "zones": [
-    {{ "type": "hero", "text": "Your Headline Here" }},
-    {{ "type": "positioning", "text": "Positioning paragraph..." }},
-    {{ "type": "messages", "text": "Bullet 1\\nBullet 2\\nBullet 3" }}
+    {{ "id": "hero", "type": "hero", "content": {{ "text": "Pre-filled tagline here" }} }},
+    {{ "id": "positioning_block", "type": "positioning", "content": {{ "text": "Pre-filled positioning..." }} }},
+    {{ "id": "pillar_grid", "type": "pillar_grid", "content": {{ "items": ["Point 1", "Point 2", "Point 3"] }} }}
   ]
 }}
 
-Ensure the content is concise enough to fit on a graphical canvas. Use the most impactful key messages.""",
+RULES:
+- hero.text_content MUST be the tagline (under 10 words)
+- positioning.text MUST be the positioning statement
+- pillar_grid shows exactly 3 differentiation points
+- message_list shows top 6 key messages by priority
+- persona_strip shows max 3 personas (primary first)
+- proof_block shows top 3 proof points""",
         "prefab_template": "one_pager_visual",
+        "renderer": "fabric"
+    },
+    "datasheet": {
+        "id": "datasheet",
+        "name": "Data Sheet",
+        "description": "A technical data sheet with specs, features, and benefits.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
+        ],
+        "prompt_template": """Generate a structured design specification for a Data Sheet for {house_name}.
+
+TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
+{visual_context}
+
+GROUNDING REMINDER:
+- Use ONLY content from the messaging house below.
+- Do NOT invent specs, features, or benefits.
+- Copy pre-filled zone content EXACTLY (edit only for tone/polish).
+
+HOUSE DATA:
+- Tagline: {tagline}
+- Positioning: {positioning}
+- Key Benefits: {key_messages}
+
+OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
+{{
+  "zones": [
+    {{ "id": "header", "type": "hero", "content": {{ "text": "Product Name | Tagline" }} }},
+    {{ "id": "features", "type": "feature_grid", "content": {{ "items": ["Feature 1", "Feature 2"] }} }},
+    {{ "id": "specs", "type": "spec_list", "content": {{ "items": ["Spec 1", "Spec 2"] }} }}
+  ]
+}}
+
+RULES:
+- header.text MUST include tagline
+- feature_grid shows top benefits (max 6)
+- spec_list shows technical specs from key messages
+- proof_block shows 3 proof points with stats""",
+        "prefab_template": "datasheet",
+        "renderer": "fabric"
+    },
+    "battlecard_visual": {
+        "id": "battlecard_visual",
+        "name": "Visual Battlecard (Canvas)",
+        "description": "A visual competitive battlecard with verbatim objections and responses.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
+            {"key": "competitor", "label": "Competitor Name", "required": True},
+        ],
+        "prompt_template": """Generate a structured design specification for a Visual Battlecard for {house_name} against {competitor}.
+
+TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
+{visual_context}
+
+GROUNDING REMINDER:
+- Use ONLY objections/responses from the messaging house.
+- Pull objections and responses from graph for VERBATIM accuracy.
+- Copy pre-filled zone content EXACTLY (edit only for tone/polish).
+
+COMPETITOR: {competitor}
+OUR POSITIONING: {positioning}
+KEY MESSAGES: {key_messages}
+PERSONA OBJECTIONS: {objections}
+
+OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
+{{
+  "zones": [
+    {{ "id": "competitor_header", "type": "hero", "content": {{ "text": "vs {competitor}" }} }},
+    {{ "id": "our_strengths", "type": "comparison_grid", "content": {{ "items": ["Strength 1", "Strength 2"] }} }},
+    {{ "id": "objections", "type": "objection_list", "content": {{ "items": ["Objection → Response 1", "Objection → Response 2"] }} }},
+    {{ "id": "proof_block", "type": "proof_block", "content": {{ "items": ["Proof 1", "Proof 2", "Proof 3"] }} }}
+  ]
+}}
+
+RULES:
+- competior_header.text MUST include competitor name
+- comparison_grid shows our strengths vs theirs (3-4 items)
+- objection_list shows verbatim objections with responses (max 5)
+- proof_block shows top 3 proof points with stats
+- All objection responses MUST be from the graph (verbatim)""",
+        "prefab_template": "battlecard_visual",
         "renderer": "fabric"
     },
 }
@@ -382,6 +482,9 @@ Ensure the content is concise enough to fit on a graphical canvas. Use the most 
 
 SKILL_CONTEXT_INPUTS: dict[str, list[dict]] = {
     "battlecard": [
+        {"key": "competitor", "label": "Competitor Name", "placeholder": "e.g. Salesforce", "required": True},
+    ],
+    "battlecard_visual": [
         {"key": "competitor", "label": "Competitor Name", "placeholder": "e.g. Salesforce", "required": True},
     ],
     "email_template": [
@@ -397,6 +500,9 @@ SKILL_CONTEXT_INPUTS: dict[str, list[dict]] = {
     ],
     "event_brief": [
         {"key": "event_name", "label": "Event Name", "placeholder": "e.g. Dreamforce 2025", "required": True},
+    ],
+    "datasheet": [
+        {"key": "specs", "label": "Technical Specs", "placeholder": "e.g. 99.9% uptime", "required": False},
     ],
 }
 

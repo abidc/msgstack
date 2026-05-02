@@ -27,7 +27,7 @@ configure_logging()
 log = logging.getLogger(__name__)
 
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
-from src.models import Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
+from src.models import Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, MessageStatus, Persona, SectionType
 from src.store import init_store
 from src.pipeline.extract import ExtractionError, extract_text, chunk_text, save_upload
 from src.pipeline.structure import HouseStructurer, StructuredHouse
@@ -491,6 +491,96 @@ def delete_message(msg_id: str):
     if not store.delete_key_message(UUID(msg_id)):
         raise HTTPException(404, "Message not found")
     return {"ok": True, "deleted_id": msg_id}
+
+
+# --- Message Status ---
+
+class MessageStatusUpdate(BaseModel):
+    status: str
+    approved_by: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@app.patch("/api/messages/{msg_id}/status")
+def update_message_status(msg_id: str, data: MessageStatusUpdate):
+    """Update a key message's approval status."""
+    msg = _find_message(msg_id)
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    try:
+        msg.status = MessageStatus(data.status)
+    except ValueError:
+        raise HTTPException(400, f"Invalid status: {data.status}")
+    if msg.status == MessageStatus.APPROVED and data.approved_by:
+        msg.approved_by = data.approved_by
+        msg.approved_at = _now()
+    store.upsert_key_message(msg)
+    # Log the review action
+    store.log_review_action(
+        house_id=msg.message_house_id,
+        action=f"message_{data.status}",
+        performed_by=data.approved_by or "system",
+        message_id=UUID(msg_id),
+        notes=data.notes or "",
+    )
+    return {"ok": True, "id": msg_id, "status": str(msg.status)}
+
+
+# --- House Review & Staleness ---
+
+@app.post("/api/houses/{house_id}/review")
+def mark_house_reviewed(house_id: str, performed_by: Optional[str] = Query(None)):
+    """Mark a house as reviewed (updates last_reviewed timestamp)."""
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+    store.update_house_last_reviewed(house_uuid)
+    store.log_review_action(
+        house_id=house_uuid,
+        action="house_reviewed",
+        performed_by=performed_by or "system",
+        notes=f"House '{house.name}' marked as reviewed.",
+    )
+    return {"ok": True, "last_reviewed": _now().isoformat()}
+
+
+@app.get("/api/houses/{house_id}/staleness")
+def check_house_staleness(house_id: str):
+    """Check if a house is stale (>90 days since last review)."""
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+    is_stale = house.is_stale(days=90)
+    return {
+        "house_id": house_id,
+        "is_stale": is_stale,
+        "last_reviewed": house.last_reviewed.isoformat() if house.last_reviewed else None,
+        "days_since_review": (
+            (datetime.now() - house.last_reviewed).days if house.last_reviewed else None
+        ),
+    }
+
+
+@app.get("/api/houses/{house_id}/review-trail")
+def get_house_review_trail(house_id: str):
+    """Get the full review audit trail for a house."""
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "House not found")
+    trail = store.get_review_trail(house_uuid)
+    return {"house_id": house_id, "trail": trail, "count": len(trail)}
 
 
 class MessageReorder(BaseModel):
@@ -1958,8 +2048,85 @@ def update_artifact_design_spec(artifact_id: str, data: DesignSpecUpdate):
         sections["design_spec"] = data.design_spec
         record.sections_json = sections
         s.commit()
-    
+
     return {"ok": True}
+
+
+# --- Brand Settings ---
+
+@app.get("/api/workspaces/{workspace_id}/brand")
+def get_workspace_brand(workspace_id: str):
+    """Get brand settings for a workspace."""
+    settings = store.get_brand_settings(workspace_id)
+    if not settings:
+        # Return defaults if not configured
+        return {
+            "workspace_id": workspace_id,
+            "primary_color": "#1e293b",
+            "secondary_color": "#3b82f6",
+            "accent_color": "#f59e0b",
+            "background_color": "#ffffff",
+            "text_color": "#1e293b",
+            "font_heading": "Inter",
+            "font_body": "Inter",
+            "logo_path": None,
+            "custom_fonts": [],
+        }
+    return settings
+
+
+@app.patch("/api/workspaces/{workspace_id}/brand")
+def update_workspace_brand(workspace_id: str, data: dict):
+    """Update brand settings for a workspace."""
+    result = store.upsert_brand_settings(workspace_id, **data)
+    return result
+
+
+# --- Design Spec Reset ---
+
+@app.post("/api/artifacts/{artifact_id}/design_spec/reset")
+def reset_artifact_design_spec(artifact_id: str):
+    """Reset design spec to AI-generated version."""
+    try:
+        aid = UUID(artifact_id)
+    except Exception:
+        raise HTTPException(400, "Invalid artifact ID")
+
+    from src.store import ArtifactHistoryModel
+    with store.session() as s:
+        record = s.query(ArtifactHistoryModel).filter(ArtifactHistoryModel.id == str(aid)).first()
+        if not record:
+            raise HTTPException(404, "Artifact not found")
+
+        # Remove the design_spec to force regeneration
+        sections = dict(record.sections_json)
+        if "design_spec" in sections:
+            del sections["design_spec"]
+            record.sections_json = sections
+            s.commit()
+
+        # Regenerate from AI
+        try:
+            from src.pipeline.generator import ArtifactGenerator
+            generator = ArtifactGenerator(store=store, openai_client=_oai_client)
+            # Get house for this artifact
+            house = store.get_house(UUID(record.house_id)) if record.house_id else None
+            if house:
+                _, updated_sections = generator.generate_artifact(
+                    house_id=record.house_id,
+                    skill_id=record.skill_id,
+                    custom_context=record.custom_context,
+                    renderer="fabric"
+                )
+                sections = dict(record.sections_json)
+                if "design_spec" in updated_sections:
+                    sections["design_spec"] = updated_sections["design_spec"]
+                    record.sections_json = sections
+                    s.commit()
+        except Exception as e:
+            log.warning("Failed to regenerate design spec: %s", e)
+
+    return {"ok": True, "reset": True}
 
 
 @app.get("/api/recent-artifacts")
@@ -1978,6 +2145,64 @@ def get_artifact(artifact_id: str):
     if not record:
         raise HTTPException(404, "Artifact not found")
     return record
+
+
+# --- Artifact Ratings ---
+
+class ArtifactRateRequest(BaseModel):
+    rating: int  # 1-5
+    tag: str = ""  # "good" or "bad", auto-inferred if empty
+    rated_by: str = ""
+    notes: str = ""
+
+
+@app.post("/api/artifacts/{artifact_id}/rate")
+def rate_artifact(artifact_id: str, data: ArtifactRateRequest):
+    """Rate an artifact (1-5 stars or good/bad). Updates chunk usage stats."""
+    try:
+        aid = UUID(artifact_id)
+    except Exception:
+        raise HTTPException(400, "Invalid artifact ID")
+    result = store.rate_artifact(
+        artifact_id=str(aid),
+        rating=data.rating,
+        tag=data.tag,
+        rated_by=data.rated_by,
+        notes=data.notes,
+    )
+    return result
+
+
+@app.get("/api/artifacts/{artifact_id}/ratings")
+def get_artifact_ratings(artifact_id: str):
+    """Get all ratings for an artifact."""
+    try:
+        aid = UUID(artifact_id)
+    except Exception:
+        raise HTTPException(400, "Invalid artifact ID")
+    return {"artifact_id": artifact_id, "ratings": store.get_artifact_rating(str(aid))}
+
+
+# --- Usage Heatmap & Coverage ---
+
+@app.get("/api/houses/{house_id}/heatmap")
+def get_heatmap(house_id: str):
+    """Get chunk usage heatmap for a house."""
+    try:
+        hid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    return store.get_chunk_usage_heatmap(hid)
+
+
+@app.get("/api/houses/{house_id}/coverage")
+def get_coverage(house_id: str):
+    """Get message house coverage report."""
+    try:
+        hid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    return store.get_message_house_coverage(hid)
 
 
 @app.patch("/api/artifacts/{artifact_id}")
@@ -2984,7 +3209,25 @@ def serve_canvas(request: Request):
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 def catch_all(request: Request, full_path: str):
     """Serve the SPA for any unmatched path so page refreshes don't 404."""
-    return templates.TemplateResponse(request, "dashboard.html")
+    return templates.TemplateResponse("dashboard.html")
+
+
+# --- Penpot Webhook ---
+
+@app.post("/api/webhooks/penpot")
+async def penpot_webhook(request: Request):
+    """Handle incoming Penpot webhooks for design changes.
+
+    Updates MsgStack brand settings when Penpot designs change.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+
+    from src.design.penpot_sync import handle_penpot_webhook
+    result = handle_penpot_webhook(body)
+    return result
 
 
 if __name__ == "__main__":

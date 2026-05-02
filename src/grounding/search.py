@@ -261,10 +261,13 @@ class GroundingEngine:
         return GroundingResponse(results=grounding_results, grounding_context=ctx)
 
     def _rerank(self, query: str, matches: list[dict], top_k: int) -> list[dict]:
-        """Rerank by blending vector score with keyword-overlap score."""
+        """Rerank by blending vector score with keyword-overlap score and boost factors."""
         _STOPWORDS = {"a", "an", "the", "and", "or", "in", "of", "to", "for", "is", "are",
                       "be", "with", "that", "this", "on", "at", "by", "from", "as", "it"}
         query_tokens = {w for w in query.lower().split() if len(w) > 2 and w not in _STOPWORDS}
+
+        # Fetch boost factors from store
+        boost_map = self._get_boost_factors()
 
         def _score(match: dict) -> float:
             vec_score = match.get("score", 0.0)
@@ -273,9 +276,24 @@ class GroundingEngine:
             content = (match.get("metadata", {}).get("content", "")).lower()
             content_tokens = set(content.split())
             overlap = len(query_tokens & content_tokens) / len(query_tokens)
-            return 0.7 * vec_score + 0.3 * overlap
+            base_score = 0.7 * vec_score + 0.3 * overlap
+
+            # Apply boost factor
+            chunk_id = match.get("id", "")
+            boost = boost_map.get(chunk_id, 1.0)
+            return base_score * boost
 
         return sorted(matches, key=_score, reverse=True)[:top_k]
+
+    def _get_boost_factors(self) -> dict[str, float]:
+        """Fetch chunk_id -> boost_factor map from DB via store."""
+        try:
+            with self.store.session() as s:
+                from src.store import ChunkUsageStatModel
+                rows = s.query(ChunkUsageStatModel).all()
+                return {r.chunk_id: r.boost_factor for r in rows}
+        except Exception:
+            return {}
 
     def _graph_search(self, house_id: UUID, filters: SearchFilters) -> GroundingResponse:
         """Deterministic graph retrieval — bypasses vector approximation."""

@@ -53,5 +53,6 @@
     }
   ],
   "prompt_template": "Write a press release for {house_name} announcing {announcement}.\n\nGrounded in: {positioning}\n\nRules:\n- Follow AP style\n- Lead paragraph answers: who, what, when, where, why in 35 words or fewer\n- Headline is the story, not the company name\n- Executive quote: specific outcome, no marketing superlatives\n- Boilerplate: 75 words about the company\n- Include media contact with name, email, phone",
-  "prefab_template": "press_release"
+  "prefab_template": "press_release",
+  "renderer": "html"
 }

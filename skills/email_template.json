@@ -38,5 +38,6 @@
     }
   ],
   "prompt_template": "Write an email at the {stage} stage for {house_name}.\n\nGrounded in this positioning: {positioning}\n\nKey message: {primary_message}\nTarget persona: {persona}\n\nRules:\n- Subject line: max 60 chars, curiosity-driven, no clickbait\n- Preview text: max 90 chars, extends the subject\n- Hook: 1-2 sentences, lead with the insight not the product\n- Body: {stage} stage tone \u2014 awareness = educate, consideration = compare, decision = convert\n- CTA: singular, specific, low friction\n- Output subject, preview, hook, body, and CTA as separate fields",
-  "prefab_template": "email_template"
+  "prefab_template": "email_template",
+  "renderer": "html"
 }

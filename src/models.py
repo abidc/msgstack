@@ -39,6 +39,7 @@ class DocumentType(str, Enum):
 
 
 class Channel(str, Enum):
+    """Enum kept for backward compatibility; DB channels are now first-class entities."""
     ALL = "all"
     LINKEDIN = "linkedin"
     EMAIL = "email"
@@ -48,10 +49,35 @@ class Channel(str, Enum):
     BLOG = "blog"
 
 
+class ChannelModel(BaseModel):
+    """Pydantic model for channel API responses."""
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: str
+    name: str
+    description: str = ""
+    is_custom: bool = False
+    created_at: datetime | None = None
+
+
 class HouseStatus(str, Enum):
     ACTIVE = "active"
     ARCHIVED = "archived"
     NEEDS_REVIEW = "needs_review"
+
+
+class MessageStatus(str, Enum):
+    DRAFT = "draft"
+    IN_REVIEW = "in_review"
+    APPROVED = "approved"
+    OUTDATED = "outdated"
+    LOCKED = "locked"
+
+
+class ArtifactStatus(str, Enum):
+    DRAFT = "draft"
+    INTERNAL_REVIEW = "internal_review"
+    APPROVED = "approved"
 
 
 class MessageHouse(BaseModel):
@@ -70,6 +96,40 @@ class MessageHouse(BaseModel):
     differentiation: str = ""
     status: HouseStatus = HouseStatus.ACTIVE
     last_synced: datetime | None = None
+    last_reviewed: datetime | None = None
+
+    def is_stale(self, days: int = 90) -> bool:
+        """Check if framework is stale (>days since last_reviewed or created)."""
+        now = datetime.now()
+        if self.last_reviewed:
+            return (now - self.last_reviewed).days > days
+        return True  # No review date means stale by default
+
+
+class KeyMessage(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: UUID = Field(default_factory=uuid4)
+    message_house_id: UUID
+    pillar_id: int | None = None
+    section_type: SectionType
+    priority: int = Field(ge=1, le=5)
+    content: str
+    status: MessageStatus = MessageStatus.DRAFT
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+
+    @field_validator('priority', mode='before')
+    @classmethod
+    def clamp_priority(cls, v):
+        try:
+            return max(1, min(5, int(v)))
+        except (TypeError, ValueError):
+            return 3
+    variants: dict[str, str] = Field(default_factory=dict)
+    personas: list[str] = Field(default_factory=list)
+    channels: list[Channel] = Field(default_factory=lambda: [Channel.ALL])
+    source_chunk_id: str | None = None
 
 
 class KeyMessage(BaseModel):
@@ -251,6 +311,69 @@ COMPLETE_FRAMEWORK_SPEC = {
         "Differentiation is specific and comparative (not generic)",
     ],
 }
+
+
+class ArtifactRating(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: str
+    artifact_id: str
+    rating: int  # 1-5, or mapped from good/bad
+    tag: str = "good"  # "good" or "bad"
+    rated_by: str = ""
+    timestamp: datetime
+    notes: str = ""
+
+
+class ChunkUsageStat(BaseModel):
+    chunk_id: str
+    times_used: int = 0
+    avg_rating: float = 0.0
+    boost_factor: float = 1.0
+
+
+class BrandSettings(BaseModel):
+    workspace_id: str
+    primary_color: str = "#1e293b"
+    secondary_color: str = "#3b82f6"
+    accent_color: str = "#f59e0b"
+    background_color: str = "#ffffff"
+    text_color: str = "#1e293b"
+    font_heading: str = "Inter"
+    font_body: str = "Inter"
+    logo_path: str | None = None
+
+
+def resolve_brand_tokens(workspace_id: str, design_spec: "DesignSpec") -> "DesignSpec":
+    """Apply workspace brand settings to a DesignSpec (modifies in place, returns same object)."""
+    from src.design.schema_v2 import ZoneType
+    from src.store import get_store
+
+    store = get_store()
+    brand = store.get_brand_settings(workspace_id)
+    if not brand:
+        return design_spec
+
+    design_spec.brand_tokens = {
+        "primary_color": brand.primary_color,
+        "secondary_color": brand.secondary_color,
+        "accent_color": brand.accent_color,
+        "background_color": brand.background_color,
+        "text_color": brand.text_color,
+        "font_heading": brand.font_heading,
+        "font_body": brand.font_body,
+        "logo_path": brand.logo_path,
+    }
+
+    for z in design_spec.zones:
+        if "brand" in z.brand_refs or not z.brand_refs:
+            if z.type == ZoneType.HEADER or z.type == ZoneType.CTA_FOOTER:
+                if not z.background:
+                    z.background = brand.primary_color
+            if z.type == ZoneType.HERO and not z.background:
+                z.background = brand.secondary_color
+
+    return design_spec
 
 
 class SearchFilters(BaseModel):

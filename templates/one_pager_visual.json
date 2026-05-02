@@ -1,0 +1,81 @@
+{
+  "id": "one_pager_visual",
+  "name": "Visual One-Pager",
+  "canvas_width": 800,
+  "canvas_height": 1200,
+  "background": {"type": "solid", "color": "#FFFFFF"},
+  "zones": [
+    {
+      "id": "hero",
+      "type": "hero",
+      "capacity": 1,
+      "max_chars": 50,
+      "x": 50,
+      "y": 50,
+      "width": 700,
+      "height": 100,
+      "z_index": 10,
+      "visible": true
+    },
+    {
+      "id": "positioning_block",
+      "type": "positioning",
+      "capacity": 1,
+      "max_chars": 500,
+      "x": 50,
+      "y": 180,
+      "width": 700,
+      "height": 150,
+      "z_index": 9,
+      "visible": true
+    },
+    {
+      "id": "pillar_grid",
+      "type": "pillar_grid",
+      "capacity": 3,
+      "max_chars": 200,
+      "x": 50,
+      "y": 360,
+      "width": 700,
+      "height": 200,
+      "z_index": 8,
+      "visible": true
+    },
+    {
+      "id": "message_list",
+      "type": "message_list",
+      "capacity": 6,
+      "max_chars": 300,
+      "x": 50,
+      "y": 600,
+      "width": 700,
+      "height": 250,
+      "z_index": 7,
+      "visible": true
+    },
+    {
+      "id": "persona_strip",
+      "type": "persona_strip",
+      "capacity": 3,
+      "max_chars": 100,
+      "x": 50,
+      "y": 900,
+      "width": 700,
+      "height": 100,
+      "z_index": 6,
+      "visible": true
+    },
+    {
+      "id": "proof_block",
+      "type": "proof_block",
+      "capacity": 3,
+      "max_chars": 250,
+      "x": 50,
+      "y": 1040,
+      "width": 700,
+      "height": 100,
+      "z_index": 5,
+      "visible": true
+    }
+  ]
+}

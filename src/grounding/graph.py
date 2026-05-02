@@ -27,6 +27,10 @@ class GraphEngine:
         g = nx.DiGraph()
         houses = store.list_houses()
 
+        # Cache channel metadata for efficient lookup
+        ch_meta_list = store.get_channels()
+        ch_meta_map = {c["id"]: c for c in ch_meta_list}
+
         for house in houses:
             doc_node = f"doc:{house.id}"
             g.add_node(doc_node, type="GroundingDocument",
@@ -34,7 +38,7 @@ class GraphEngine:
                        document_type=str(house.document_type),
                        summary=house.summary)
 
-            # ── Pillars ──────────────────────────────────────────────────────────
+            # ── Pillars ──────────────────────────────────────────────────
             pillars = store.list_pillars(house.id)
             pillar_map = {}  # pillar_id -> node_id
             for pillar in pillars:
@@ -121,7 +125,7 @@ class GraphEngine:
                                    house_id=str(house.id))
                         g.add_edge(pnode, ob_node, rel="HAS_OBJECTION")
 
-            # ── Chunks ───────────────────────────────────────────────────────────
+            # ── Chunks ───────────────────────────────────────────────────
             messages = store.get_key_messages(house.id)
             for msg in messages:
                 chunk_node = f"chunk:{msg.id}"
@@ -147,7 +151,14 @@ class GraphEngine:
                     ch_str = str(channel)
                     cnode = f"channel:{ch_str}"
                     if not g.has_node(cnode):
-                        g.add_node(cnode, type="Channel", name=ch_str)
+                        meta = ch_meta_map.get(ch_str)
+                        if meta:
+                            g.add_node(cnode, type="Channel", name=meta["name"],
+                                       description=meta.get("description", ""),
+                                       is_custom=meta.get("is_custom", True))
+                        else:
+                            g.add_node(cnode, type="Channel", name=ch_str,
+                                       description="", is_custom=True)
                     g.add_edge(chunk_node, cnode, rel="APPLIES_TO")
 
                 # Phase 2: edges to pain points and objections
@@ -244,6 +255,16 @@ class GraphEngine:
         if not _NX_AVAILABLE:
             return {"available": False, "nodes": [], "edges": [], "rel_counts": {}}
         g = self._graph
+
+        # Status → color map for GroundingChunk nodes
+        _STATUS_COLORS = {
+            "approved": "#22c55e",   # green
+            "draft": "#9ca3af",      # gray
+            "in_review": "#eab308",   # yellow/amber
+            "outdated": "#f97316",    # orange
+            "locked": "#ef4444",      # red
+        }
+
         nodes = []
         for nid, attrs in g.nodes(data=True):
             ntype = attrs.get("type", "unknown")
@@ -269,7 +290,11 @@ class GraphEngine:
             elif ntype == "GroundingChunk":
                 entry.update({"section_type": attrs.get("section_type", ""),
                                "priority": attrs.get("priority"),
-                               "content": (attrs.get("content") or "")[:150]})
+                               "content": (attrs.get("content") or "")[:150],
+                               "status": attrs.get("status", "draft")})
+                # Color-code by status
+                status = attrs.get("status", "draft")
+                entry["color"] = _STATUS_COLORS.get(status, "#9ca3af")
             elif ntype == "Persona":
                 entry.update({"name": attrs.get("name", ""), "house_id": attrs.get("house_id", "")})
             elif ntype == "Channel":

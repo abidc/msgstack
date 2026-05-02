@@ -38,5 +38,6 @@
     }
   ],
   "prompt_template": "Write a blog post for {house_name} on the topic of {topic}.\n\nGrounded in: {positioning}\nKey messages to weave in: {key_messages}\nPersona: {persona}\n\nRules:\n- Title: SEO-optimized, benefit-led, 60 chars or fewer\n- Meta: 155 chars or fewer\n- Intro: hook + roadmap (what the reader will learn)\n- Body: {target_length} words, H2/H3 structure, 3-5 sections\n- Weave key messages naturally \u2014 don't just list them\n- Include a relevant data point or stat where possible\n- Conclusion: summarize + CTA\n- Tone: {tone}",
-  "prefab_template": "blog_post"
+  "prefab_template": "blog_post",
+  "renderer": "html"
 }

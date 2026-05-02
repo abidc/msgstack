@@ -26,7 +26,7 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
-from src.models import Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
+from src.models import BrandSettings, Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -68,6 +68,7 @@ class WorkspaceModel(Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     max_token_budget: Mapped[int] = mapped_column(Integer, default=0)  # 0 = unlimited
+    penpot_project_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
@@ -103,18 +104,17 @@ class ChannelModel(Base):
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     description: Mapped[str] = mapped_column(String(500), default="")
-    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_custom: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
-
 _DEFAULT_CHANNELS = [
-    ("all", "All Channels", "Universal — applies to all channels", True),
-    ("email", "Email", "Email campaigns and newsletters", True),
-    ("linkedin", "LinkedIn", "LinkedIn posts and sponsored content", True),
-    ("twitter", "Twitter / X", "Twitter and X posts", True),
-    ("paid_ads", "Paid Ads", "Display, search, and social advertising", True),
-    ("landing_page", "Landing Page", "Website landing pages and hero copy", True),
-    ("sales_deck", "Sales Deck", "Slide decks and pitch presentations", True),
+    ("all", "All Channels", "Universal — applies to all channels", False),
+    ("email", "Email", "Email campaigns and newsletters", False),
+    ("linkedin", "LinkedIn", "LinkedIn posts and sponsored content", False),
+    ("twitter", "Twitter / X", "Twitter and X posts", False),
+    ("paid_ads", "Paid Ads", "Display, search, and social advertising", False),
+    ("landing_page", "Landing Page", "Website landing pages and hero copy", False),
+    ("sales_deck", "Sales Deck", "Slide decks and pitch presentations", False),
 ]
 
 
@@ -135,6 +135,7 @@ class HouseModel(Base):
     differentiation: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="active")
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_reviewed: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     key_messages: Mapped[list["KeyMessageModel"]] = relationship(
         back_populates="message_house", cascade="all, delete-orphan"
@@ -191,12 +192,15 @@ class KeyMessageModel(Base):
     section_type: Mapped[str] = mapped_column(String(30), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     variants: Mapped[dict] = mapped_column(JSON, default=dict)
     personas: Mapped[list] = mapped_column(JSON, default=list)
     channels: Mapped[list] = mapped_column(JSON, default=["all"])
     source_chunk_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    pain_point_ids: Mapped[list] = mapped_column(JSON, default=list)
-    objection_ids: Mapped[list] = mapped_column(JSON, default=list)
+    pain_point_ids: Mapped[list] = mapped_column(JSON, default=list())
+    objection_ids: Mapped[list] = mapped_column(JSON, default=list())
     message_house: Mapped["HouseModel"] = relationship(back_populates="key_messages")
 
 
@@ -239,7 +243,31 @@ class ArtifactHistoryModel(Base):
     house_name: Mapped[str] = mapped_column(String(255), nullable=False)
     sections_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     raw_content: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class ArtifactRatingModel(Base):
+    __tablename__ = "artifact_ratings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    artifact_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("artifact_history.id"), nullable=False
+    )
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5
+    tag: Mapped[str] = mapped_column(String(20), default="good")  # "good" or "bad"
+    rated_by: Mapped[str] = mapped_column(String(255), default="")
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class ChunkUsageStatModel(Base):
+    __tablename__ = "chunk_usage_stats"
+
+    chunk_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    times_used: Mapped[int] = mapped_column(Integer, default=0)
+    avg_rating: Mapped[float] = mapped_column(Float, default=0.0)
+    boost_factor: Mapped[float] = mapped_column(Float, default=1.0)
 
 
 class SourceConnectionModel(Base):
@@ -282,6 +310,36 @@ class SourceFileModel(Base):
     connection: Mapped["SourceConnectionModel"] = relationship(back_populates="source_files")
 
 
+class BrandAssetModel(Base):
+    __tablename__ = "brand_assets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    asset_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    asset_type: Mapped[str] = mapped_column(String(50), nullable=False)  # "logo", "icon", "image"
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), default="")
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class ReviewLogModel(Base):
+    __tablename__ = "review_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    house_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("message_houses.id", ondelete="CASCADE"), nullable=False
+    )
+    message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    performed_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
 # Performance indexes on high-cardinality FK / filter columns
 Index("ix_km_house_id", KeyMessageModel.message_house_id)
 Index("ix_km_pillar_id", KeyMessageModel.pillar_id)
@@ -294,6 +352,10 @@ Index("ix_house_workspace", HouseModel.workspace_id)
 Index("ix_pillar_house_id", PillarModel.house_id)
 Index("ix_source_files_conn", SourceFileModel.connection_id)
 Index("ix_source_files_drive_id", SourceFileModel.drive_file_id)
+Index("ix_review_logs_house_id", ReviewLogModel.house_id)
+Index("ix_review_logs_timestamp", ReviewLogModel.timestamp)
+Index("ix_artifact_rating_artifact_id", ArtifactRatingModel.artifact_id)
+Index("ix_chunk_usage_chunk_id", ChunkUsageStatModel.chunk_id)
 
 
 class Store:
@@ -326,6 +388,16 @@ class Store:
                         "NOT NULL DEFAULT 'message_house'"
                     ))
                     conn.commit()
+
+            # Add penpot_project_id to workspaces if missing
+            if "workspaces" in insp.get_table_names():
+                ws_cols = {c["name"] for c in insp.get_columns("workspaces")}
+                if "penpot_project_id" not in ws_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE workspaces ADD COLUMN penpot_project_id TEXT"))
+                        conn.commit()
+                    except Exception:
+                        pass
 
             # Create pillars table if not exists
             if "pillars" not in insp.get_table_names():
@@ -395,6 +467,33 @@ class Store:
                         except Exception:
                             pass
 
+            # Create artifact_ratings table if not exists
+            if "artifact_ratings" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE artifact_ratings (
+                        id TEXT PRIMARY KEY,
+                        artifact_id TEXT NOT NULL REFERENCES artifact_history(id) ON DELETE CASCADE,
+                        rating INTEGER NOT NULL,
+                        tag TEXT NOT NULL DEFAULT 'good',
+                        rated_by TEXT NOT NULL DEFAULT '',
+                        timestamp DATETIME NOT NULL,
+                        notes TEXT NOT NULL DEFAULT ''
+                    )
+                """))
+                conn.commit()
+
+            # Create chunk_usage_stats table if not exists
+            if "chunk_usage_stats" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE chunk_usage_stats (
+                        chunk_id TEXT PRIMARY KEY,
+                        times_used INTEGER NOT NULL DEFAULT 0,
+                        avg_rating FLOAT NOT NULL DEFAULT 0.0,
+                        boost_factor FLOAT NOT NULL DEFAULT 1.0
+                    )
+                """))
+                conn.commit()
+
             # Create source_connections table
             if "source_connections" not in insp.get_table_names():
                 conn.execute(text("""
@@ -434,12 +533,194 @@ class Store:
                 """))
                 conn.commit()
 
-    def _seed_default_channels(self) -> None:
+            # Migrate channels table: is_default -> is_custom
+            if "channels" in insp.get_table_names():
+                ch_cols = {c["name"] for c in insp.get_columns("channels")}
+                if "is_default" in ch_cols and "is_custom" not in ch_cols:
+                    conn.execute(text("ALTER TABLE channels ADD COLUMN is_custom BOOLEAN DEFAULT FALSE"))
+                    conn.execute(text("UPDATE channels SET is_custom = CASE WHEN is_default = 1 THEN 0 ELSE 1 END"))
+                    conn.commit()
+                elif "is_custom" not in ch_cols:
+                    conn.execute(text("ALTER TABLE channels ADD COLUMN is_custom BOOLEAN DEFAULT FALSE"))
+                    conn.commit()
+
+            # Create pillars table if not exists
+            if "pillars" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE pillars (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        house_id VARCHAR(36) NOT NULL REFERENCES message_houses(id) ON DELETE CASCADE,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        display_order INTEGER DEFAULT 0
+                    )
+                """))
+                conn.commit()
+
+            # Add pillar_id column to key_messages if missing
+            if "key_messages" in insp.get_table_names():
+                km_cols = {c["name"] for c in insp.get_columns("key_messages")}
+                if "pillar_id" not in km_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE key_messages ADD COLUMN pillar_id INTEGER REFERENCES pillars(id) ON DELETE SET NULL"))
+                        conn.commit()
+                    except Exception:
+                        pass  # Column already exists or other issue
+
+            # Create pain_points table
+            if "pain_points" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE pain_points (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+                        content TEXT NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            # Create buying_triggers table
+            if "buying_triggers" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE buying_triggers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+                        content TEXT NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            # Create objections table
+            if "objections" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE objections (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+                        statement TEXT NOT NULL,
+                        response TEXT
+                    )
+                """))
+                conn.commit()
+
+            # Add pain_point_ids and objection_ids to key_messages
+            if "key_messages" in insp.get_table_names():
+                km_cols = {c["name"] for c in insp.get_columns("key_messages")}
+                for col in ("pain_point_ids", "objection_ids"):
+                    if col not in km_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE key_messages ADD COLUMN {col} JSON DEFAULT '[]'"))
+                            conn.commit()
+                        except Exception:
+                            pass
+                # Add status, approved_by, approved_at columns
+                for col, col_def in (
+                    ("status", "VARCHAR(20) DEFAULT 'draft'"),
+                    ("approved_by", "VARCHAR(255)"),
+                    ("approved_at", "DATETIME"),
+                ):
+                    if col not in km_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE key_messages ADD COLUMN {col} {col_def}"))
+                            conn.commit()
+                        except Exception:
+                            pass
+
+            # Add last_reviewed to message_houses
+            if "message_houses" in insp.get_table_names():
+                mh_cols = {c["name"] for c in insp.get_columns("message_houses")}
+                if "last_reviewed" not in mh_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE message_houses ADD COLUMN last_reviewed DATETIME"))
+                        conn.commit()
+                    except Exception:
+                        pass
+
+            # Create review_logs table
+            if "review_logs" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE review_logs (
+                        id TEXT PRIMARY KEY,
+                        house_id TEXT NOT NULL REFERENCES message_houses(id) ON DELETE CASCADE,
+                        message_id TEXT,
+                        action TEXT NOT NULL,
+                        performed_by TEXT NOT NULL,
+                        timestamp DATETIME NOT NULL,
+                        notes TEXT DEFAULT ''
+                    )
+                """))
+                conn.commit()
+
+            # Add status to artifact_history if missing
+            if "artifact_history" in insp.get_table_names():
+                ah_cols = {c["name"] for c in insp.get_columns("artifact_history")}
+                if "status" not in ah_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE artifact_history ADD COLUMN status VARCHAR(20) DEFAULT 'draft'"))
+                        conn.commit()
+                    except Exception:
+                        pass
+
+            # Create source_connections table
+            if "source_connections" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE source_connections (
+                        id TEXT PRIMARY KEY,
+                        workspace_id TEXT NOT NULL DEFAULT 'default',
+                        provider TEXT NOT NULL,
+                        account_email TEXT DEFAULT '',
+                        folder_id TEXT NOT NULL,
+                        folder_name TEXT DEFAULT '',
+                        access_token TEXT DEFAULT '',
+                        refresh_token TEXT DEFAULT '',
+                        page_token TEXT DEFAULT '',
+                        status TEXT DEFAULT 'connected',
+                        last_sync_at DATETIME,
+                        error_message TEXT DEFAULT '',
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            # Create source_files table
+            if "source_files" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE source_files (
+                        id TEXT PRIMARY KEY,
+                        connection_id TEXT NOT NULL REFERENCES source_connections(id) ON DELETE CASCADE,
+                        drive_file_id TEXT NOT NULL,
+                        file_name TEXT NOT NULL,
+                        mime_type TEXT DEFAULT '',
+                        house_id TEXT,
+                        drive_modified_at TEXT DEFAULT '',
+                        sync_status TEXT DEFAULT 'pending',
+                        error_message TEXT DEFAULT '',
+                        synced_at DATETIME
+                    )
+                """))
+                conn.commit()
+
+            # Create brand_settings table
+            if "brand_settings" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE brand_settings (
+                        workspace_id TEXT PRIMARY KEY,
+                        primary_color TEXT DEFAULT '#1e293b',
+                        secondary_color TEXT DEFAULT '#3b82f6',
+                        accent_color TEXT DEFAULT '#f59e0b',
+                        background_color TEXT DEFAULT '#ffffff',
+                        text_color TEXT DEFAULT '#1e293b',
+                        font_heading TEXT DEFAULT 'Inter',
+                        font_body TEXT DEFAULT 'Inter',
+                        logo_path TEXT
+                    )
+                """))
+                conn.commit()
+
+        def _seed_default_channels(self) -> None:
         with self.session() as s:
-            for ch_id, name, description, is_default in _DEFAULT_CHANNELS:
+            for ch_id, name, description, is_custom in _DEFAULT_CHANNELS:
                 if not s.get(ChannelModel, ch_id):
                     s.add(ChannelModel(id=ch_id, name=name, description=description,
-                                       is_default=is_default, created_at=_now()))
+                                       is_custom=is_custom, created_at=_now()))
             s.commit()
 
     def _ensure_default_workspace(self) -> None:
@@ -625,6 +906,60 @@ class Store:
                 _invalidate_graph()
                 return True
             return False
+
+    # --- Review Logs ---
+
+    def log_review_action(
+        self,
+        house_id: UUID,
+        action: str,
+        performed_by: str,
+        message_id: UUID | None = None,
+        notes: str = "",
+    ) -> None:
+        """Append a review action to the audit trail."""
+        with self.session() as s:
+            s.add(ReviewLogModel(
+                id=str(_uuid.uuid4()),
+                house_id=str(house_id),
+                message_id=str(message_id) if message_id else None,
+                action=action,
+                performed_by=performed_by,
+                timestamp=_now(),
+                notes=notes,
+            ))
+            s.commit()
+
+    def get_review_trail(self, house_id: UUID) -> list[dict]:
+        """Return all review log entries for a house, newest first."""
+        with self.session() as s:
+            rows = (
+                s.query(ReviewLogModel)
+                .filter(ReviewLogModel.house_id == str(house_id))
+                .order_by(ReviewLogModel.timestamp.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "house_id": r.house_id,
+                    "message_id": r.message_id,
+                    "action": r.action,
+                    "performed_by": r.performed_by,
+                    "timestamp": r.timestamp.isoformat(),
+                    "notes": r.notes,
+                }
+                for r in rows
+            ]
+
+    def update_house_last_reviewed(self, house_id: UUID) -> None:
+        """Set last_reviewed=now on a house."""
+        with self.session() as s:
+            row = s.get(HouseModel, str(house_id))
+            if row:
+                row.last_reviewed = _now()
+                s.commit()
+
 
     def delete_houses_by_source_id(self, source_id: str) -> int:
         """Delete all houses with the given source_id. Returns count deleted."""
@@ -964,6 +1299,216 @@ class Store:
                 "created_at": row.created_at.isoformat(),
             }
 
+    # --- Artifact Ratings ---
+
+    def rate_artifact(
+        self,
+        artifact_id: str,
+        rating: int,
+        tag: str = "good",
+        rated_by: str = "",
+        notes: str = "",
+    ) -> dict:
+        """Rate an artifact (1-5 stars, or good/bad tag). Updates chunk usage stats."""
+        from src.models import ArtifactRating
+        rating = max(1, min(5, int(rating)))
+        tag = tag if tag in ("good", "bad") else ("good" if rating >= 3 else "bad")
+
+        rating_id = str(uuid4())
+        now = _now()
+        with self.session() as s:
+            s.add(ArtifactRatingModel(
+                id=rating_id,
+                artifact_id=artifact_id,
+                rating=rating,
+                tag=tag,
+                rated_by=rated_by,
+                timestamp=now,
+                notes=notes,
+            ))
+            s.commit()
+
+        # Update chunk usage stats based on this rating
+        self._update_chunk_stats_from_rating(artifact_id, rating)
+        return {"id": rating_id, "artifact_id": artifact_id, "rating": rating, "tag": tag}
+
+    def get_artifact_rating(self, artifact_id: str) -> list[dict]:
+        """Get all ratings for an artifact."""
+        with self.session() as s:
+            rows = (
+                s.query(ArtifactRatingModel)
+                .filter(ArtifactRatingModel.artifact_id == artifact_id)
+                .order_by(ArtifactRatingModel.timestamp.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "artifact_id": r.artifact_id,
+                    "rating": r.rating,
+                    "tag": r.tag,
+                    "rated_by": r.rated_by,
+                    "timestamp": r.timestamp.isoformat(),
+                    "notes": r.notes,
+                }
+                for r in rows
+            ]
+
+    def _update_chunk_stats_from_rating(self, artifact_id: str, rating: int) -> None:
+        """Update chunk_usage_stats for chunks used in this artifact."""
+        artifact = self.get_artifact(UUID(artifact_id))
+        if not artifact:
+            return
+        sections = artifact.get("sections", {})
+        # Extract chunk_ids from sections (they may reference chunks)
+        chunk_ids = self._extract_chunk_ids_from_sections(sections)
+        for chunk_id in chunk_ids:
+            self.record_chunk_usage(chunk_id, rating)
+
+    def _extract_chunk_ids_from_sections(self, sections: dict) -> list[str]:
+        """Extract chunk IDs referenced in artifact sections."""
+        import re
+        chunk_ids = []
+        # Look for chunk references in section content
+        for section_key, content in (sections or {}).items():
+            if isinstance(content, str):
+                # Look for chunk-{uuid} patterns
+                found = re.findall(r"chunk-([0-9a-fA-F-]+)", content)
+                chunk_ids.extend(found)
+        return chunk_ids
+
+    def record_chunk_usage(self, chunk_id: str, artifact_rating: int) -> None:
+        """Record that a chunk was used in an artifact, update stats."""
+        with self.session() as s:
+            row = s.get(ChunkUsageStatModel, chunk_id)
+            if row:
+                # Update running average
+                old_total = row.avg_rating * row.times_used
+                row.times_used += 1
+                row.avg_rating = (old_total + artifact_rating) / row.times_used
+                # Boost factor: higher for highly-rated usage
+                if row.avg_rating >= 4.0:
+                    row.boost_factor = min(2.0, 1.0 + (row.avg_rating - 3.0) * 0.25)
+                elif row.avg_rating <= 2.0:
+                    row.boost_factor = max(0.5, row.avg_rating * 0.5)
+                else:
+                    row.boost_factor = 1.0
+            else:
+                s.add(ChunkUsageStatModel(
+                    chunk_id=chunk_id,
+                    times_used=1,
+                    avg_rating=float(artifact_rating),
+                    boost_factor=1.5 if artifact_rating >= 4 else (0.8 if artifact_rating <= 2 else 1.0),
+                ))
+            s.commit()
+
+    # --- Chunk Usage Heatmap & Coverage ---
+
+    def get_chunk_usage_heatmap(self, house_id: UUID) -> dict:
+        """Get usage heatmap: how many times each chunk was used, with which ratings."""
+        from src.models import ChunkUsageStat
+        messages = self.get_key_messages(house_id)
+        msg_id_to_msg = {str(m.id): m for m in messages}
+
+        with self.session() as s:
+            # Get all usage stats
+            stats_rows = s.query(ChunkUsageStatModel).all()
+            # Get all ratings for artifacts in this house
+            artifact_rows = (
+                s.query(ArtifactHistoryModel)
+                .filter(ArtifactHistoryModel.house_id == str(house_id))
+                .all()
+            )
+            artifact_ids = [r.id for r in artifact_rows]
+            ratings_rows = []
+            if artifact_ids:
+                ratings_rows = (
+                    s.query(ArtifactRatingModel)
+                    .filter(ArtifactRatingModel.artifact_id.in_(artifact_ids))
+                    .all()
+                )
+
+        # Build heatmap
+        heatmap = {}
+        for stat in stats_rows:
+            chunk_id = stat.chunk_id
+            # Check if this chunk belongs to this house
+            msg = msg_id_to_msg.get(chunk_id.replace("chunk-", ""))
+            if not msg and not chunk_id.startswith("chunk-"):
+                msg = msg_id_to_msg.get(chunk_id)
+            if not msg:
+                continue
+            heatmap[chunk_id] = {
+                "chunk_id": chunk_id,
+                "content_preview": msg.content[:100] if msg else "",
+                "section_type": str(msg.section_type) if msg else "",
+                "times_used": stat.times_used,
+                "avg_rating": round(stat.avg_rating, 2),
+                "boost_factor": round(stat.boost_factor, 2),
+                "priority": msg.priority if msg else 0,
+            }
+
+        return {
+            "house_id": str(house_id),
+            "chunks": list(heatmap.values()),
+            "total_chunks_used": len(heatmap),
+            "avg_boost": round(
+                sum(v["boost_factor"] for v in heatmap.values()) / max(len(heatmap), 1), 2
+            ),
+        }
+
+    def get_message_house_coverage(self, house_id: UUID) -> dict:
+        """Which parts of the message house are used most vs ignored."""
+        messages = self.get_key_messages(house_id)
+        personas = self.get_personas(house_id)
+
+        with self.session() as s:
+            stats_rows = s.query(ChunkUsageStatModel).all()
+
+        used_chunk_ids = {s.chunk_id for s in stats_rows}
+        used_times = {s.chunk_id: s.times_used for s in stats_rows}
+
+        # Group by section type
+        by_section: dict = {}
+        for msg in messages:
+            chunk_id = f"chunk-{msg.id}"
+            st = str(msg.section_type)
+            entry = by_section.setdefault(st, {"used": 0, "unused": 0, "total": 0, "times_used": 0})
+            entry["total"] += 1
+            if chunk_id in used_chunk_ids:
+                entry["used"] += 1
+                entry["times_used"] += used_times.get(chunk_id, 0)
+            else:
+                entry["unused"] += 1
+
+        # Most/least used chunks
+        chunk_usage = [(s.chunk_id, s.times_used) for s in stats_rows]
+        chunk_usage.sort(key=lambda x: x[1], reverse=True)
+
+        # Map chunk_id to content
+        msg_map = {f"chunk-{m.id}": m.content[:80] for m in messages}
+
+        return {
+            "house_id": str(house_id),
+            "by_section": by_section,
+            "most_used": [
+                {"chunk_id": cid, "times_used": times, "content": msg_map.get(cid, "")}
+                for cid, times in chunk_usage[:10]
+            ],
+            "unused_chunks": [
+                {"chunk_id": f"chunk-{m.id}", "content": m.content[:80], "section_type": str(m.section_type)}
+                for m in messages
+                if f"chunk-{m.id}" not in used_chunk_ids
+            ],
+            "persona_coverage": {
+                p.name: {
+                    "has_messages": any(p.name in (m.personas or []) for m in messages),
+                    "message_count": sum(1 for m in messages if p.name in (m.personas or [])),
+                }
+                for p in personas
+            },
+        }
+
 
     # --- Workspaces ---
 
@@ -1006,6 +1551,217 @@ class Store:
             s.commit()
             return {"id": row.id, "slug": row.slug, "name": row.name,
                     "max_token_budget": row.max_token_budget}
+
+    def get_penpot_project(self, workspace_id: str) -> str | None:
+        """Get the Penpot project ID for a workspace."""
+        with self.session() as s:
+            row = s.get(WorkspaceModel, workspace_id)
+            return row.penpot_project_id if row else None
+
+    def set_penpot_project(self, workspace_id: str, project_id: str) -> bool:
+        """Set the Penpot project ID for a workspace."""
+        with self.session() as s:
+            row = s.get(WorkspaceModel, workspace_id)
+            if not row:
+                return False
+            row.penpot_project_id = project_id
+            s.commit()
+            return True
+
+    # --- Brand Settings ---
+
+    def get_brand_settings(self, workspace_id: str) -> "BrandSettings | None":
+        from src.models import BrandSettings
+        with self.session() as s:
+            row = s.get(BrandSettingsModel, workspace_id)
+            if not row:
+                return None
+            return BrandSettings(
+                workspace_id=row.workspace_id,
+                primary_color=row.primary_color,
+                secondary_color=row.secondary_color,
+                accent_color=row.accent_color,
+                background_color=row.background_color,
+                text_color=row.text_color,
+                font_heading=row.font_heading,
+                font_body=row.font_body,
+                logo_path=row.logo_path,
+            )
+
+    def upsert_brand_settings(self, workspace_id: str, **kwargs) -> "BrandSettings":
+        from src.models import BrandSettings
+        with self.session() as s:
+            row = s.get(BrandSettingsModel, workspace_id)
+            if row:
+                for k, v in kwargs.items():
+                    if hasattr(row, k) and k != "workspace_id":
+                        setattr(row, k, v)
+            else:
+                data = {"workspace_id": workspace_id}
+                data.update(kwargs)
+                row = BrandSettingsModel(**data)
+                s.add(row)
+            s.commit()
+            return BrandSettings(
+                workspace_id=row.workspace_id,
+                primary_color=row.primary_color,
+                secondary_color=row.secondary_color,
+                accent_color=row.accent_color,
+                background_color=row.background_color,
+                text_color=row.text_color,
+                font_heading=row.font_heading,
+                font_body=row.font_body,
+                logo_path=row.logo_path,
+            )
+
+    def upload_logo(self, workspace_id: str, file_path: str) -> str:
+        import shutil
+        from pathlib import Path
+
+        src = Path(file_path)
+        if not src.exists():
+            raise FileNotFoundError(f"Logo file not found: {file_path}")
+
+        brand_dir = Path("data/brand") / workspace_id
+        brand_dir.mkdir(parents=True, exist_ok=True)
+
+        dest = brand_dir / src.name
+        shutil.copy2(src, dest)
+
+        logo_path = str(dest)
+        self.upsert_brand_settings(workspace_id, logo_path=logo_path)
+        return logo_path
+
+    # --- Brand Assets ---
+
+    def upload_brand_asset(self, workspace_id: str, file_path: str, asset_type: str) -> dict:
+        """Upload a brand asset (logo, icon, image) for a workspace.
+        
+        Args:
+            workspace_id: The workspace ID
+            file_path: Path to the asset file
+            asset_type: Type of asset ("logo", "icon", "image")
+        
+        Returns:
+            dict with asset info including id, asset_name, file_path
+        """
+        import shutil
+        from pathlib import Path
+        from os import path
+
+        src = Path(file_path)
+        if not src.exists():
+            raise FileNotFoundError(f"Asset file not found: {file_path}")
+
+        # Store in data/brand/{workspace_id}/assets/
+        asset_dir = Path("data/brand") / workspace_id / "assets"
+        asset_dir.mkdir(parents=True, exist_ok=True)
+
+        dest = asset_dir / src.name
+        shutil.copy2(src, dest)
+
+        asset_id = str(uuid4())
+        now = _now()
+        asset_name = src.name
+
+        with self.session() as s:
+            s.add(BrandAssetModel(
+                id=asset_id,
+                workspace_id=workspace_id,
+                asset_name=asset_name,
+                asset_type=asset_type,
+                file_path=str(dest),
+                mime_type="image/png",  # Could be detected from file
+                file_size=path.getsize(src),
+                created_at=now,
+                updated_at=now,
+            ))
+            s.commit()
+
+        return {
+            "id": asset_id,
+            "workspace_id": workspace_id,
+            "asset_name": asset_name,
+            "asset_type": asset_type,
+            "file_path": str(dest),
+            "created_at": now.isoformat(),
+        }
+
+    def get_brand_asset(self, workspace_id: str, asset_name: str) -> dict | None:
+        """Get a brand asset by name for a workspace."""
+        with self.session() as s:
+            row = (
+                s.query(BrandAssetModel)
+                .filter(
+                    BrandAssetModel.workspace_id == workspace_id,
+                    BrandAssetModel.asset_name == asset_name,
+                )
+                .first()
+            )
+            if not row:
+                return None
+            return {
+                "id": row.id,
+                "workspace_id": row.workspace_id,
+                "asset_name": row.asset_name,
+                "asset_type": row.asset_type,
+                "file_path": row.file_path,
+                "mime_type": row.mime_type,
+                "file_size": row.file_size,
+                "created_at": row.created_at.isoformat(),
+                "updated_at": row.updated_at.isoformat(),
+            }
+
+    def list_brand_assets(self, workspace_id: str) -> list[dict]:
+        """List all brand assets for a workspace."""
+        with self.session() as s:
+            rows = (
+                s.query(BrandAssetModel)
+                .filter(BrandAssetModel.workspace_id == workspace_id)
+                .order_by(BrandAssetModel.created_at.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "workspace_id": r.workspace_id,
+                    "asset_name": r.asset_name,
+                    "asset_type": r.asset_type,
+                    "file_path": r.file_path,
+                    "mime_type": r.mime_type,
+                    "file_size": r.file_size,
+                    "created_at": r.created_at.isoformat(),
+                    "updated_at": r.updated_at.isoformat(),
+                }
+                for r in rows
+            ]
+
+    def delete_brand_asset(self, workspace_id: str, asset_name: str) -> bool:
+        """Delete a brand asset."""
+        import os
+        from pathlib import Path
+
+        with self.session() as s:
+            row = (
+                s.query(BrandAssetModel)
+                .filter(
+                    BrandAssetModel.workspace_id == workspace_id,
+                    BrandAssetModel.asset_name == asset_name,
+                )
+                .first()
+            )
+            if not row:
+                return False
+            
+            # Delete the file
+            try:
+                Path(row.file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            
+            s.delete(row)
+            s.commit()
+            return True
 
     # --- API Keys ---
 
@@ -1103,9 +1859,9 @@ class Store:
 
     def get_channels(self) -> list[dict]:
         with self.session() as s:
-            rows = s.query(ChannelModel).order_by(ChannelModel.is_default.desc(), ChannelModel.name).all()
+            rows = s.query(ChannelModel).order_by(ChannelModel.is_custom.asc(), ChannelModel.name).all()
             return [{"id": r.id, "name": r.name, "description": r.description,
-                     "is_default": r.is_default, "created_at": r.created_at.isoformat()} for r in rows]
+                     "is_custom": r.is_custom, "created_at": r.created_at.isoformat()} for r in rows]
 
     def upsert_channel(self, ch_id: str, name: str, description: str = "") -> dict:
         with self.session() as s:
@@ -1115,18 +1871,18 @@ class Store:
                 existing.description = description
             else:
                 s.add(ChannelModel(id=ch_id, name=name, description=description,
-                                   is_default=False, created_at=_now()))
+                                   is_custom=True, created_at=_now()))
             s.commit()
             row = s.get(ChannelModel, ch_id)
             return {"id": row.id, "name": row.name, "description": row.description,
-                    "is_default": row.is_default, "created_at": row.created_at.isoformat()}
+                    "is_custom": row.is_custom, "created_at": row.created_at.isoformat()}
 
     def delete_channel(self, ch_id: str) -> bool:
         with self.session() as s:
             row = s.get(ChannelModel, ch_id)
             if not row:
                 return False
-            if row.is_default:
+            if not row.is_custom:
                 raise ValueError("Cannot delete a default channel")
             s.delete(row)
             s.commit()
@@ -1396,10 +2152,12 @@ def _house_from_row(row: HouseModel) -> MessageHouse:
         differentiation=row.differentiation,
         status=HouseStatus(row.status),
         last_synced=row.last_synced,
+        last_reviewed=row.last_reviewed,
     )
 
 
 def _msg_from_row(row: KeyMessageModel) -> KeyMessage:
+    from src.models import MessageStatus
     return KeyMessage(
         id=UUID(row.id),
         message_house_id=UUID(row.message_house_id),
@@ -1407,6 +2165,9 @@ def _msg_from_row(row: KeyMessageModel) -> KeyMessage:
         section_type=_safe_section_type(row.section_type),
         priority=row.priority,
         content=row.content,
+        status=MessageStatus(row.status) if row.status else MessageStatus.DRAFT,
+        approved_by=row.approved_by,
+        approved_at=row.approved_at,
         variants=row.variants or {},
         personas=row.personas or [],
         channels=[_safe_channel(c) for c in (row.channels or ["all"])],

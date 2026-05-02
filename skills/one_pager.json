@@ -33,5 +33,6 @@
     }
   ],
   "prompt_template": "Generate a one-pager for {house_name} grounded in this messaging framework:\n\n{context}\n\nStructure the one-pager with:\n1. Positioning statement (2-3 sentences)\n2. Tagline (7 words or fewer)\n3. Key differentiation points (3 bullets)\n4. Top 3 key messages by section type\n5. Primary and secondary personas with pain points\n\nOutput as structured markdown.",
-  "prefab_template": "one_pager"
+  "prefab_template": "one_pager",
+  "renderer": "html"
 }

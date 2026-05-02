@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ house_name }} — Presentation</title>
+
+  <!-- Reveal.js CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme-link">
+
+  <!-- Brand theme -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='reveal_theme.css') if not workspace_theme else workspace_theme_url }}">
+  <style>
+    :root {
+      --brand-primary: {{ brand.primary_color or '#7c6af7' }};
+      --brand-secondary: {{ brand.secondary_color or '#a89cf8' }};
+      --bg-main: {{ brand.bg_color or '#0c0c10' }};
+      --font-heading: {{ brand.heading_font or "'Inter', system-ui, sans-serif" }};
+      --font-body: {{ brand.body_font or "'Inter', system-ui, sans-serif" }};
+    }
+    {% if workspace_logo %}
+    .reveal .logo img { content: url('{{ workspace_logo }}'); }
+    {% endif %}
+  </style>
+
+  <!-- Optional: MathJax, Highlight.js, etc. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      {% for slide in slides %}
+      <section
+        class="{{ slide.layout }} slide-{{ loop.index }}"
+        data-background-color="{% if slide.layout == 'title' %}transparent{% else %}{{ slide.bg_color or '' }}{% endif %}"
+        {% if slide.notes %}data-notes="{{ slide.notes | e }}"{% endif %}
+      >
+        {% if workspace_logo %}
+        <div class="logo"><img src="{{ workspace_logo }}" alt="Logo"></div>
+        {% endif %}
+
+        {% if slide.layout == 'title' %}
+          <h1>{{ slide.heading }}</h1>
+          {% if slide.content and slide.content[0] %}
+          <p class="tagline">{{ slide.content[0] }}</p>
+          {% endif %}
+          {% if slide.content and slide.content|length > 1 %}
+          <p class="presenter">{{ slide.content[1] }}</p>
+          {% endif %}
+
+        {% elif slide.layout == 'agenda' %}
+          <h2>{{ slide.heading }}</h2>
+          <ul class="agenda-list">
+            {% for item in slide.content %}
+            <li><span class="agenda-number">{{ loop.index }}</span> {{ item }}</li>
+            {% endfor %}
+          </ul>
+
+        {% elif slide.layout == 'side_by_side' %}
+          <h2>{{ slide.heading }}</h2>
+          <div class="content-columns">
+            <div class="col">
+              {% for item in slide.content[:slide.content|length // 2] %}
+              <p>{{ item }}</p>
+              {% endfor %}
+            </div>
+            <div class="col">
+              {% for item in slide.content[slide.content|length // 2:] %}
+              <p>{{ item }}</p>
+              {% endfor %}
+            </div>
+          </div>
+          {% if slide.image_prompt %}
+          <div class="slide-image">{{ slide.image_prompt }}</div>
+          {% endif %}
+
+        {% elif slide.layout == 'content' or slide.layout == 'exec_summary' or slide.layout == 'comparison' %}
+          <h2>{{ slide.heading }}</h2>
+          <div class="slide-content">
+            {% for item in slide.content %}
+            <p>{{ item }}</p>
+            {% endfor %}
+          </div>
+          {% if slide.metrics %}
+          <div class="metrics-row">
+            {% for m in slide.metrics %}
+            <div class="metric-card">
+              <span class="metric-value">{{ m.value }}</span>
+              <span class="metric-label">{{ m.label }}</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+        {% elif slide.layout == 'hook' %}
+          <h2>{{ slide.heading }}</h2>
+          <div class="slide-content">
+            {% for item in slide.content %}
+            <p>{{ item }}</p>
+            {% endfor %}
+          </div>
+
+        {% elif slide.layout == 'quote' or slide.layout == 'closing' %}
+          <div class="quote-slide">
+            {% if slide.content and slide.content[0] %}
+            <blockquote>"{{ slide.content[0] }}"</blockquote>
+            {% endif %}
+            {% if slide.content and slide.content|length > 1 %}
+            <p class="attribution">{{ slide.content[1] }}</p>
+            {% endif %}
+          </div>
+
+        {% elif slide.layout == 'data_focus' %}
+          <h2>{{ slide.heading }}</h2>
+          <div class="content-columns">
+            <div>
+              {% for item in slide.content %}
+              <p>{{ item }}</p>
+              {% endfor %}
+            </div>
+            {% if slide.metrics %}
+            <div>
+              {% for m in slide.metrics %}
+              <div class="metric-card">
+                <span class="metric-value">{{ m.value }}</span>
+                <span class="metric-label">{{ m.label }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+
+        {% else %}
+          <!-- Generic fallback -->
+          <h2>{{ slide.heading }}</h2>
+          <div class="slide-content">
+            {% for item in slide.content %}
+            <p>{{ item }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <!-- Speaker notes -->
+        {% if slide.notes %}
+        <aside class="notes">{{ slide.notes }}</aside>
+        {% endif %}
+
+      </section>
+      {% endfor %}
+
+    </div>
+  </div>
+
+  <!-- Reveal.js -->
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/zoom/zoom.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/search/search.js"></script>
+
+  <script>
+    Reveal.initialize({
+      hash: true,
+      slideNumber: true,
+      transition: 'slide',
+      backgroundTransition: 'fade',
+
+      plugins: [ RevealNotes, RevealHighlight, RevealZoom, RevealSearch ],
+
+      pdfSeparateFragments: false,
+      pdfMaxPagesPerSlide: 1,
+    });
+
+    // PDF export helper: ?print-pdf
+    (function() {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('print-pdf') !== null) {
+        document.getElementById('theme-link').setAttribute(
+          'href', 'https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/css/print/pdf.css'
+        );
+      }
+    })();
+  </script>
+</body>
+</html>

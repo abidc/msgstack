@@ -38,5 +38,6 @@
     }
   ],
   "prompt_template": "Write a channel partner messaging brief for {house_name}.\n\nOur positioning: {positioning}\nOur key differentiators: {key_messages}\n\nStructure:\n1. Joint value proposition (2-3 sentences: what we do together that neither does alone)\n2. Why partners win with us (3 bullets: margin, stickiness, competitive advantage)\n3. Ideal joint customer profile (firmographics + tech environment + pain points)\n4. Co-sell motion (step-by-step: when to bring us in, how to position together)\n5. Field-ready messaging (3 one-liners partners can use in customer conversations)\n6. Available resources (sales tools, demo access, co-marketing options)\n\nTone: partner-first. Focus on what the partner gains, not what we gain.",
-  "prefab_template": "partner_brief"
+  "prefab_template": "partner_brief",
+  "renderer": "html"
 }

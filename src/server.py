@@ -367,7 +367,7 @@ def list_skills() -> dict:
 @mcp.tool()
 def list_mcp_tools() -> dict:
     """List all available MCP tools in this server with their descriptions.
-    
+
     Use this to understand the full capabilities of MsgStack, including
     grounding, research, generation, and visual artifact creation.
     """
@@ -381,8 +381,46 @@ def list_mcp_tools() -> dict:
         {"name": "set_active_house", "description": "Focus the session on a specific brand framework."},
         {"name": "check_framework_completeness", "description": "Audit a framework for missing critical messaging sections."},
         {"name": "get_framework_spec", "description": "See the requirements for a 'Perfect' messaging house."},
+        {"name": "export_to_penpot", "description": "Export a MsgStack artifact to Penpot design file and return the edit link."},
+        {"name": "set_penpot_project", "description": "Link a Penpot project to a MsgStack workspace for design sync."},
     ]
     return {"tools": tool_defs}
+
+
+@mcp.tool()
+def export_to_penpot(
+    artifact_id: str,
+    workspace_id: str,
+    house_id: str,
+) -> dict:
+    """Export a MsgStack artifact to Penpot and return the edit link.
+
+    Creates a fully designed Penpot file with frames, text layers,
+    brand colors, and proper layout matching the artifact's design spec.
+
+    Args:
+        artifact_id: The artifact ID to export.
+        workspace_id: The workspace ID (to find the linked Penpot project).
+        house_id: The message house ID (to get brand tokens and messages).
+
+    Returns:
+        dict with file_id, edit_url, and creation status.
+    """
+    return grounding_tools.export_to_penpot(artifact_id, workspace_id, house_id)
+
+
+@mcp.tool()
+def set_penpot_project(workspace_id: str, project_id: str) -> dict:
+    """Link a Penpot project to a MsgStack workspace.
+
+    Args:
+        workspace_id: The MsgStack workspace ID.
+        project_id: The Penpot project ID to link.
+
+    Returns:
+        dict with status and confirmation.
+    """
+    return grounding_tools.set_penpot_project(workspace_id, project_id)
 
 
 @mcp.tool()

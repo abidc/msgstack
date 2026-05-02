@@ -1,0 +1,43 @@
+{
+  "id": "executive_readout",
+  "name": "Executive Readout",
+  "description": "High-level presentation deck for C-level briefings and board meetings.",
+  "channels": [
+    "all"
+  ],
+  "artifact_type": "executive_readout",
+  "sections": [
+    {
+      "key": "exec_summary",
+      "label": "Executive Summary",
+      "required": true
+    },
+    {
+      "key": "situation",
+      "label": "Situation",
+      "required": true
+    },
+    {
+      "key": "complication",
+      "label": "Complication / Risk",
+      "required": true
+    },
+    {
+      "key": "resolution",
+      "label": "Resolution / Decision",
+      "required": true
+    },
+    {
+      "key": "business_case",
+      "label": "Business Case",
+      "required": true
+    },
+    {
+      "key": "recommendation",
+      "label": "Recommendation",
+      "required": true
+    }
+  ],
+  "prompt_template": "Generate an executive readout presentation for {house_name} using the messaging framework below.\n\nGROUNDING CONTEXT:\n{context}\n\nGenerate exactly 6 slides as a JSON array. Each slide must have:\n- \"layout\": one of [\"title\", \"exec_summary\", \"content\", \"data_focus\", \"comparison\", \"closing\"]\n- \"heading\": slide heading (max 6 words, executive tone)\n- \"content\": array of strings (bullet points, max 4 per slide)\n- \"notes\": speaker notes (2-3 sentences for executive audience — focus on ROI, risk, decision criteria)\n- \"metrics\": optional array of {\"label\":\"...\",\"value\":\"...\"} objects\n\nSlide structure:\n1. Title Slide — company, tagline, \"Executive Readout\"\n2. Executive Summary — 3 bullet points covering situation, resolution, business impact\n3. Situation — current state context (1 paragraph)\n4. Complication — risk/downside if no action (1 paragraph)\n5. Resolution + Business Case — 3 quantified outcomes or ROI data points\n6. Recommendation — decision needed, next steps with owners\n\nOutput ONLY valid JSON array. No markdown fences.",
+  "prefab_template": "reveal_presentation"
+}
