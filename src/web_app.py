@@ -406,9 +406,9 @@ def delete_house(house_id: str):
         uid = UUID(house_id)
     except Exception:
         raise HTTPException(400, "Invalid house ID")
-    if not store.delete_house(uid):
+    if not store.get_house(uid):
         raise HTTPException(404, "House not found")
-    # Remove Pinecone vectors for this house
+    # Delete Pinecone vectors BEFORE DB deletion so key message IDs are still available
     try:
         from src.grounding.search import GroundingEngine
         ge = GroundingEngine(
@@ -418,11 +418,11 @@ def delete_house(house_id: str):
             index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
             namespace="default",
         )
-        ge.ensure_index()
-        ge.index.delete(filter={"message_house_id": house_id}, namespace="default")
+        ge.delete_house_vectors(uid)
     except Exception as exc:
         log.warning("Pinecone cleanup on house delete failed: %s", exc)
-    # Rebuild graph so deleted house is removed from graph explorer immediately
+    store.delete_house(uid)
+    # Rebuild graph so deleted house is removed immediately
     try:
         from src.grounding.graph import get_graph_engine
         get_graph_engine().rebuild()
@@ -1405,9 +1405,9 @@ def generate_artifact(
         visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence", "one_pager_visual"}
         artifact_type = skill_id if skill_id in visual_types else None
         if artifact_type:
-            if artifact_type == "one_pager_visual":
-                # Will open the canvas editor
-                pass
+            if artifact_type in ("one_pager_visual", "one_pager"):
+                # Canvas editor — URL set after save so we have the artifact_id
+                visual_url = None
             else:
                 visual_url = f"{settings.base_url}/artifact/{artifact_type}/{house_id}"
                 if skill_id == "battlecard" and context.get("competitor"):
@@ -1444,8 +1444,8 @@ def generate_artifact(
         except Exception:
             artifact_history_id = None
 
-        # If it's a visual canvas artifact, set the visual url to the canvas route using the saved history ID
-        if artifact_type == "one_pager_visual" and artifact_history_id:
+        # Both one_pager and one_pager_visual open the canvas editor
+        if artifact_type in ("one_pager_visual", "one_pager") and artifact_history_id:
             visual_url = f"{settings.base_url}/canvas?artifact_id={artifact_history_id}"
 
         return {
@@ -1898,11 +1898,11 @@ def save_artifact(data: dict):
 @app.get("/api/artifacts/{artifact_id}/render")
 def render_artifact(artifact_id: str, renderer: str = Query("fabric")):
     """Convert an artifact's sections to a specific renderer format."""
-    from src.store import ArtifactRecord
+    from src.store import ArtifactHistoryModel
     import json
     aid = UUID(artifact_id)
     with store.session() as s:
-        record = s.query(ArtifactRecord).filter(ArtifactRecord.id == aid).first()
+        record = s.query(ArtifactHistoryModel).filter(ArtifactHistoryModel.id == str(aid)).first()
         if not record:
             raise HTTPException(404, "Artifact not found")
         sections = record.sections_json
@@ -1912,14 +1912,29 @@ def render_artifact(artifact_id: str, renderer: str = Query("fabric")):
                 if "design_spec" in sections:
                     return json.loads(sections["design_spec"]) if isinstance(sections["design_spec"], str) else sections["design_spec"]
                 
-                return {
-                    "zones": [
-                        {"type": "hero", "text": record.house_name},
-                        {"type": "positioning", "text": sections.get("positioning_statement", "")},
-                        {"type": "messages", "text": str(sections.get("key_messages_list", ""))}
-                    ],
-                    "raw_sections": sections
-                }
+                positioning = (
+                    sections.get("positioning")
+                    or sections.get("positioning_statement")
+                    or ""
+                )
+                key_messages = (
+                    sections.get("key_messages")
+                    or sections.get("key_messages_list")
+                    or ""
+                )
+                tagline = sections.get("tagline", "")
+                differentiation = sections.get("differentiation", "")
+                personas = sections.get("personas", "")
+                zones = [
+                    {"type": "hero", "text": (tagline or record.house_name)},
+                    {"type": "positioning", "text": positioning},
+                    {"type": "messages", "text": str(key_messages)},
+                ]
+                if differentiation:
+                    zones.append({"type": "differentiation", "text": str(differentiation)})
+                if personas:
+                    zones.append({"type": "personas", "text": str(personas)})
+                return {"zones": zones, "raw_sections": sections}
             except Exception as e:
                 raise HTTPException(500, f"Failed to format for fabric: {str(e)}")
         
@@ -1931,10 +1946,10 @@ class DesignSpecUpdate(BaseModel):
 @app.patch("/api/artifacts/{artifact_id}/design_spec")
 def update_artifact_design_spec(artifact_id: str, data: DesignSpecUpdate):
     """Save the updated Fabric.js design spec back to the artifact."""
-    from src.store import ArtifactRecord
+    from src.store import ArtifactHistoryModel
     aid = UUID(artifact_id)
     with store.session() as s:
-        record = s.query(ArtifactRecord).filter(ArtifactRecord.id == aid).first()
+        record = s.query(ArtifactHistoryModel).filter(ArtifactHistoryModel.id == str(aid)).first()
         if not record:
             raise HTTPException(404, "Artifact not found")
         
@@ -2958,6 +2973,12 @@ def resync_source_file(connection_id: str, drive_file_id: str):
 @app.get("/connections", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(request, "dashboard.html")
+
+
+@app.get("/canvas", response_class=HTMLResponse)
+def serve_canvas(request: Request):
+    """Serve the Fabric.js canvas editor SPA."""
+    return FileResponse("src/web/canvas/index.html")
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)

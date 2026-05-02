@@ -1,15 +1,15 @@
 # MsgStack — Roadmap
 
-**Last Updated:** April 2026
+**Last Updated:** May 2026
 
 This roadmap reflects current state and planned direction. Items are grouped by milestone, not calendar quarter — sequencing depends on usage feedback and priority shifts.
 
 ---
 
-## Current State — v0.6 (April 2026)
+## Current State — v0.6 (May 2026)
 
 **Shipped (Milestones v0.1 - v0.6):**
-- ✅ FastMCP server with 20+ grounding + artifact tools
+- ✅ FastMCP server with 15 grounding + artifact tools over streamable-HTTP
 - ✅ FastAPI admin UI with full Frameworks/Skills/Workspaces management
 - ✅ **Advanced Upload Pipeline:** PDF/DOCX/TXT → Multi-chunk structuring → Vector index
 - ✅ **Preview & Confirm:** Extract and review structured messaging before committing to DB
@@ -21,25 +21,29 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - ✅ **Multi-Tenancy:** Workspace-scoped frameworks, API keys, and Pinecone namespaces
 - ✅ **Production Auth:** Scoped API key authentication (`read`/`write`/`admin`)
 - ✅ **Operations:** Structured logging, rate limiting, and workspace token budgets
-- ✅ **Infrastructure:** Full PostgreSQL support and Docker Compose deployment
-- ✅ **Test Suite:** Comprehensive unit and integration tests (extraction, structure, store)
-- ✅ **Jinja2 UI Architecture:** Admin UI migrated from single HTML to `base.html` + `dashboard.html` template system
-- ✅ **Dark Artifact Visual Page:** `/artifact/one_pager/{id}` renders with dashboard-matching dark theme, color-coded message sections, persona cards, and PDF export
-- ✅ **Tabbed House Detail:** Framework detail view with Overview (editable), Messages (color-coded by section type, drag-to-reorder), and Personas tabs
-- ✅ **Skill Context Inputs:** Skills that require pre-generation context surface input fields in the UI before generation; MCP tool proactively asks for missing required context
-- ✅ **SPA Routing:** Page refresh from any app section works correctly via FastAPI catch-all + `initRouting()`
-- ✅ **Multi-Content-Type:** `document_type` discriminator on message houses (`message_house`, `brand_guide`, `competitive_brief`, `corp_narrative`, `persona_library`) with color-coded badges in the UI
-- ✅ **Knowledge Graph Engine:** NetworkX DiGraph built from SQLite — deterministic retrieval via typed entity relationships (`graph.py` fully implemented)
-- ✅ **Graph Explorer UI:** Interactive Cytoscape.js canvas in the admin UI with node filtering, relationship browser, and detail panel
-- ✅ **Extended Graph Entities:** MessagingPillar, PainPoint, BuyingTrigger, and Objection promoted to first-class graph nodes with typed edges (HAS_PAIN_POINT, HAS_TRIGGER, HAS_OBJECTION, RESOLVES)
-- ✅ **`get_graph_connections` MCP Tool:** Deterministic graph traversal tool for AI assistants — returns verbatim approved content via typed relationships, bypassing vector approximation
-- ✅ **Full-Context Grounding:** `generate_artifact` now loads ALL key messages (grouped by section type, sorted by priority) and ALL personas (with pain points, buying triggers, and objections) — no arbitrary caps; full structured grounding block prepended to every artifact prompt with explicit grounding contract
-- ✅ **Grounding Guardrails:** `list_message_houses` response includes `_next_step` instruction directing AI agents to call `generate_artifact` rather than writing content from metadata alone
+- ✅ **Jinja2 UI Architecture:** Admin UI migrated to `base.html` + `dashboard.html`
+- ✅ **Dark Artifact Visual Page:** `/artifact/one_pager/{id}` renders with dark theme, color-coded sections
+- ✅ **Tabbed House Detail:** Overview (editable), Messages (color-coded, drag-to-reorder), Personas tabs
+- ✅ **Skill Context Inputs:** Skills requiring context surface input fields before generation
+- ✅ **Multi-Content-Type:** `document_type` discriminator with color-coded badges
+- ✅ **Knowledge Graph Engine:** NetworkX DiGraph — deterministic retrieval via typed entity relationships
+- ✅ **Graph Explorer UI:** Interactive Cytoscape.js canvas with node filtering and detail panel
+- ✅ **Extended Graph Entities:** MessagingPillar, PainPoint, BuyingTrigger, Objection as first-class graph nodes
+- ✅ **`get_graph_connections` MCP Tool:** Deterministic graph traversal bypassing vector approximation
+- ✅ **Full-Context Grounding:** ALL key messages + ALL persona attributes in every artifact prompt
+- ✅ **Grounding Guardrails:** `list_message_houses` MANDATORY_NEXT_ACTION field directing agents to call tools
+- ✅ **Google Drive Sync:** Background sync loop with DOCX/PDF native format support
+- ✅ **Fabric.js Canvas Shell:** `/canvas` route + basic `one_pager_visual` skill + design JSON → canvas rendering (primitive — foundation only)
+- ✅ **Canvas Routing:** `one_pager` skill now routes to `/canvas?artifact_id=...` instead of static HTML
 
-**Known gaps:**
+**Known gaps and active issues:**
+- Visual artifact output is primitive — canvas renders basic zones without professional layout, brand system, or template design
+- `one_pager` skill prompt produces truncated/incomplete section content in some cases
+- Design JSON schema is too simple (hero/positioning/messages only) — no brand tokens, column grid, or icon zones
+- No workspace-level brand settings (colors, fonts, logo) — all artifacts use default styling
+- No defined per-artifact-type templates (datasheet, battlecard, social card each need their own design DNA)
+- Canvas app has no interactive editing beyond basic zone display
 - OIDC/OAuth login not yet implemented (API key auth only)
-- Workspace "invites" still manual via API
-- Visual artifact rendering (Fabric.js, reveal.js, Penpot) not yet implemented — planned v0.8
 - Channel still a code enum (DB entity promotion not yet done)
 - Multimodal/vision model fallback not yet implemented
 
@@ -47,107 +51,335 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ## v0.7 — Knowledge Graph Completion
 
-**Goal:** Complete the remaining graph and governance items from the original v0.7 scope.
+**Goal:** Complete the remaining graph and governance items before moving to the visual artifact engine.
 
 ### Channel as a First-Class Entity
 - [ ] **ChannelModel DB table:** Promote `Channel` from a code enum to a SQLAlchemy table with full CRUD endpoints
 - [ ] **Seed defaults:** `all`, `email`, `linkedin`, `twitter`, `paid_ads`, `landing_page`, `sales_deck`
-- [ ] **User-defined channels:** Create custom channels (e.g., `partner_portal`, `in-app`) via UI without code changes
-- [ ] **Graph node upgrade:** Channel nodes in graph engine backed by DB rows with full metadata
+- [ ] **User-defined channels:** Create custom channels via UI without code changes
+- [ ] **Graph node upgrade:** Channel nodes backed by DB rows with full metadata
 
 ### Graph Governance
-- [ ] **Approval Workflow:** Mark Key Messages as `Draft` or `Approved`; grounding search prioritizes `Approved`
-- [ ] **Locking:** Prevent editing of "Core Messaging" once approved by department heads
+- [ ] **Approval Workflow:** Mark Key Messages as `Draft` or `Approved`; grounding prioritizes `Approved`
+- [ ] **Locking:** Prevent editing of "Core Messaging" once approved
 - [ ] **Artifact Status:** Lifecycle tracking: `Draft` → `Internal Review` → `Approved`
 - [ ] **Staleness Alerts:** "Last Reviewed" timestamp per framework; flag frameworks older than 90 days
 - [ ] **Review Trail:** Log of who reviewed/approved messaging updates and when
 
 ### Feedback Loop
-- [ ] **Content Ratings:** Rate generated artifacts (1-5 stars) or "Good/Bad" tags
-- [ ] **Self-Correction:** Boost search relevance for messaging chunks used in "High Rated" artifacts
-- [ ] **Usage Heatmap:** See which parts of the message house are being used most vs ignored
-
-### Last-Mile Design
-- [ ] **Print-First Documents (Paged.js):** Professional typeset PDFs with real margins, page numbers, and bleed — see v0.8 for the full visual artifact engine
+- [ ] **Content Ratings:** Rate generated artifacts (1-5 stars) or Good/Bad tags
+- [ ] **Self-Correction:** Boost relevance for messaging chunks used in high-rated artifacts
+- [ ] **Usage Heatmap:** See which parts of the message house are used most vs ignored
 
 ---
 
-## v0.8 — Visual Artifact Engine (Fabric.js + reveal.js + Penpot)
+## v0.8 — Visual Artifact Engine
 
-**Goal:** Replace server-rendered HTML artifact pages with a browser-side design engine that supports real graphic design capabilities — image and logo insertion, layered layouts, custom typography, and export to PNG/PDF. Three complementary rendering paths cover every artifact class.
+**Goal:** Produce professional, brand-accurate visual artifacts from messaging house data. This is a full design engineering effort — not just a rendering fix. Three interdependent work streams must come together: a design system that defines what artifacts look like, an LLM prompt layer that generates rich structured design specs from messaging content, and a canvas renderer capable of faithfully executing those specs.
 
-### Fabric.js — Visual & Graphic Artifacts
-Canvas-based design engine for one-pagers, battlecards, social cards, and any artifact that needs graphic design fidelity. The LLM generates a **design JSON spec** (not HTML) describing the layout tree; the browser renders it as a Fabric.js canvas. Users can interactively edit before exporting.
-
-- [ ] **Design JSON spec schema:** Define the artifact layout format — zones (hero, body, sidebar, footer), text blocks with font/size/color, image placeholders with type (`logo`, `hero_image`, `icon`), shape layers, brand color tokens
-- [ ] **Fabric.js canvas renderer:** Deserialize the design JSON into Fabric.js objects; render all element types (text, image, rect, SVG) with layer ordering
-- [ ] **Logo & image insertion:** `fabric.Image.fromURL()` support with drag-and-drop replace; accept URL, file upload, or base64 — no server round-trip
-- [ ] **Per-artifact-type templates:** Pre-designed Fabric.js templates for `one_pager`, `battlecard`, `social_card`, `event_brief` — each with defined content zones and brand styling
-- [ ] **Export pipeline:** PNG via `canvas.toDataURL()`; PDF via jsPDF wrapper preserving vector text where possible; SVG export for design hand-off
-- [ ] **Brand token system:** Workspace-level color palette and font settings applied across all Fabric.js templates automatically
-- [ ] **`generate_fabric_artifact` MCP tool:** Returns design JSON spec grounded in the message house; client renders it in the browser
-
-### reveal.js — Presentations & Slide Decks
-HTML-based presentation engine for sales decks, event presentations, partner briefings, and executive readouts. The LLM generates the slide HTML structure; reveal.js handles rendering, transitions, and speaker notes.
-
-- [ ] **Slide skill templates:** New skill types — `sales_deck`, `event_presentation`, `executive_readout` — with structured slide schemas (title, agenda, value prop, proof point, CTA, appendix)
-- [ ] **LLM slide generation:** `generate_artifact(skill_id="sales_deck")` returns structured slide JSON; server renders to reveal.js HTML via Jinja2 template
-- [ ] **Custom theme per workspace:** CSS theme variables mapping brand colors, fonts, and logo to reveal.js theme — applied server-side at render time
-- [ ] **Image & logo zones:** Designated slide sections for logo placement, product screenshots, and background images with URL or upload support
-- [ ] **Speaker notes:** LLM generates presenter notes per slide grounded in the full messaging context
-- [ ] **PDF export:** reveal.js `?print-pdf` mode → `window.print()` → browser PDF engine; output is significantly higher quality than jsPDF
-- [ ] **`build_presentation` MCP tool:** Returns a link to a live reveal.js presentation for a given message house and presentation type
-
-### Penpot — High-Fidelity Design Export
-Penpot is a self-hosted Figma alternative with a full design API. MsgStack already has the Penpot MCP server connected. For artifacts where pixel-perfect design quality matters most, MsgStack can programmatically create a fully designed document in Penpot — complete with brand fonts, vector assets, image frames, and design tokens — and hand the user an edit link.
-
-- [ ] **Penpot project per workspace:** Auto-create a MsgStack workspace in Penpot mapped to each MsgStack workspace; store the Penpot project ID on the workspace record
-- [ ] **Design token sync:** Map MsgStack brand color tokens and font settings to Penpot design tokens; push on workspace update
-- [ ] **Programmatic artifact creation:** Use the Penpot API to create a fully designed page for each artifact type — frames, text layers, image frames, brand colors, logo placeholder
-- [ ] **`export_to_penpot` MCP tool:** Creates the artifact in Penpot and returns an edit link; user lands in Penpot to do final polish and export
-- [ ] **Penpot → MsgStack round-trip (stretch):** Pull approved design decisions (updated logo, adjusted color) back from Penpot into MsgStack brand tokens
-
-### Shared Infrastructure
-- [ ] **`ArtifactRenderer` abstraction:** Common interface (`render_html`, `render_fabric`, `render_reveal`, `render_penpot`) so new rendering targets can be added without touching `generate_artifact`
-- [ ] **Artifact type → renderer routing:** Skill metadata includes a `renderer` field (`html`, `fabric`, `reveal`, `penpot`) — `generate_artifact` routes accordingly
-- [ ] **Brand asset store:** Per-workspace storage for logos, icons, and brand images referenced by all renderers; API endpoints for upload and retrieval
+The current canvas shell is a starting point only. This milestone rebuilds it from the ground up with production-quality output as the success criterion. A generated HR datasheet should be indistinguishable in quality from one a designer produced manually in Figma.
 
 ---
 
-## v0.9 — Document Source Integrations (Google Drive + OneDrive/SharePoint)
+### Stream 1 — Design System Foundation
+
+Everything visual artifacts need before any template or renderer work begins.
+
+#### 1a. Design JSON Schema (v2)
+The current schema (`{zones: [{type, text}]}`) is too primitive to express a professional layout. Replace it with a structured spec that captures every visual decision a renderer needs.
+
+- [ ] **Page spec:** `{width, height, orientation, margin}` — support Letter (8.5×11), A4, and 16:9 slide presets
+- [ ] **Layout grid:** Column count, gutter width, row rhythm — renderers snap zones to the grid
+- [ ] **Zone types (expanded):**
+  - `header` — brand bar with logo zone + product name + optional tagline
+  - `hero` — large headline text with optional background color or image
+  - `positioning_block` — 2-3 sentence body paragraph with optional lead-in label
+  - `pillar_grid` — N-column grid of differentiator cards, each with icon zone + headline + body
+  - `message_list` — labeled list of key messages, optionally grouped by section type
+  - `persona_strip` — horizontal row of persona cards, each with name + role + 2 pain points
+  - `proof_block` — stat callout or pull quote with large number + label
+  - `cta_footer` — call to action + URL + contact info + logo
+- [ ] **Zone properties:** `row`, `col`, `colspan`, `text_content`, `text_style` (heading/body/caption), `background`, `icon_type`, `image_zone`, `list_items[]`, `emphasis` (primary/secondary/muted)
+- [ ] **Brand token references in zones:** `{{brand.primary}}`, `{{brand.font_heading}}` — resolved at render time from workspace brand settings
+- [ ] **Schema version field:** enables forward compatibility when schema evolves
+
+#### 1b. Workspace Brand Settings
+- [ ] **Brand token model:** `primary_color`, `secondary_color`, `accent_color`, `background_color`, `text_color`, `font_heading`, `font_body` stored per workspace
+- [ ] **Logo storage:** Per-workspace logo upload (PNG/SVG); stored in `data/brand/{workspace_id}/`; API endpoints for upload and retrieval
+- [ ] **Brand settings UI:** Settings page section — color pickers, font selectors, logo upload with preview
+- [ ] **Token resolution at render time:** Canvas renderer and reveal.js theme renderer both resolve `{{brand.*}}` tokens from workspace settings before drawing
+- [ ] **Default brand palette:** Professional neutral default (slate + indigo accent) applied when no brand settings exist — better than no styling at all
+
+#### 1c. Artifact Template Registry
+- [ ] **Template definition format:** JSON files in `data/templates/` defining the zone layout, ordering, and styling defaults for each artifact type
+- [ ] **Template fields:** `artifact_type`, `page_spec`, `zones[]` (with type + position + default styling), `brand_zones[]` (which zones receive brand token replacement)
+- [ ] **Built-in templates (see Stream 2 for design specs):** `datasheet`, `battlecard`, `social_card`, `event_brief`, `executive_summary`, `sales_deck_slide`
+- [ ] **Template selection:** `generate_artifact` looks up the template for the skill's `artifact_type` before calling the LLM; template structure is injected into the LLM prompt
+- [ ] **Template UI:** Admin UI view for browsing and previewing available templates
+
+---
+
+### Stream 2 — Default Template Designs
+
+This stream defines what each artifact type should actually look like — the design decisions a skilled designer would make. These are the reference specifications that both the LLM prompts and the canvas renderer implement.
+
+#### 2a. Datasheet / One-Pager Template
+
+The primary artifact type. Portrait orientation, letter size. B2B sales motion. High information density with clear visual hierarchy.
+
+**Layout (top to bottom):**
+1. **Brand Header bar** (full-width, brand primary color): logo left + product/service name center + optional "Powered by [brand]" badge right
+2. **Hero section** (full-width, brand secondary or neutral): Tagline in large heading font, 1-line positioning statement below in body size
+3. **3-Column Differentiator Grid**: Each column has an icon zone (placeholder or icon font), bold differentiator headline (max 6 words), and 1-2 sentence supporting body. This is the most visually prominent section.
+4. **Key Messages section**: 2-column grid of message cards. Each card has a section-type label (Headline / Benefit / Use Case / Proof Point), the message text, and an optional channel tag. Grouped by priority — top 6 messages shown.
+5. **Audience section**: Horizontal strip with persona cards. Each card: persona name + role title + 2 bullet pain points. Up to 3 personas. If more exist, truncate to fit.
+6. **Proof / Social Proof strip** (optional): 3 stat blocks in a row — large number + label (e.g., "40% reduction in HR case volume"). Omit if no stats in the messaging house.
+7. **CTA Footer** (full-width, brand primary): One-line CTA statement + URL + logo small
+
+**Typography:** Heading font for headlines, body font for supporting copy. Font sizes: H1 36pt, H2 22pt, H3 16pt, body 11pt, caption 9pt.
+
+**Color use:** Brand primary for header/footer/accent. Brand secondary or light neutral for differentiator grid background. White or off-white for body sections. Section labels in brand accent color.
+
+- [ ] **Design spec JSON for datasheet template** — codify the above as a `data/templates/datasheet.json` template definition
+- [ ] **LLM mapping logic** — define which messaging house fields map to which zones: `tagline → hero headline`, `positioning → hero body`, `differentiation bullets → pillar_grid`, `top 6 key messages by priority → message_list`, `personas → persona_strip`, `proof points → proof_block`
+
+#### 2b. Battlecard Template
+
+Landscape orientation. Competitive sales aid. Two-column structure: "Us" vs "Them" or "Us" vs "Objection + Response."
+
+**Layout:**
+1. **Header**: Product name left, competitor name right, battlecard label center
+2. **Positioning row** (full-width): Our one-line positioning
+3. **2-Column grid** — left column: key differentiators and strengths; right column: common objections with verbatim responses from messaging house
+4. **Bottom strip**: Top 3 proof points or win stats; key personas targeted
+
+- [ ] **Design spec JSON for battlecard template**
+- [ ] **LLM mapping logic for battlecard** — requires `competitor` context input; uses `differentiation`, `objections`, `proof_points` sections
+
+#### 2c. Social Card Template
+
+Square (1:1) or Story (9:16). Single focused message for LinkedIn, Twitter/X, or Instagram. Minimal text, bold visual hierarchy.
+
+**Layout:**
+1. Full-bleed background (brand gradient or solid)
+2. Single headline (the most relevant key message, max 12 words) — large, centered
+3. 1-line supporting context — small, centered below headline
+4. Logo bottom right + optional URL
+
+- [ ] **Design spec JSON for social card template**
+- [ ] **LLM mapping logic** — select highest-priority message for the target channel; apply channel-specific tone
+
+#### 2d. Executive Summary Template
+
+Portrait, Letter, minimal and clean. For C-suite briefings and board materials. Minimal graphics, maximum copy clarity.
+
+**Layout:**
+1. Title + subtitle header
+2. Full-width positioning paragraph (slightly larger body text)
+3. 3 key strategic pillars — numbered, bold headline + 3-4 sentences each
+4. Audience and use case table (2-column: Persona | Primary Value Delivered)
+5. Clean footer
+
+- [ ] **Design spec JSON for executive summary template**
+
+---
+
+### Stream 3 — LLM Prompt Engineering for Visual Spec
+
+The current `one_pager_visual` prompt asks the LLM to "return a JSON object" with minimal guidance. The output is unreliable and the content is sparse. This stream rewrites the generation path so the LLM produces rich, accurate, brand-ready design specs.
+
+#### 3a. Skill Prompt Rewrites
+
+- [ ] **`one_pager_visual` prompt rewrite:** Inject the template zone structure into the prompt so the LLM maps messaging house content to specific zones by name. Include field-level instructions ("tagline → hero.text_content; keep under 10 words"), output format examples with realistic content, and a grounding reminder ("use only content from the messaging house — no invented statistics").
+- [ ] **New `datasheet` skill:** Separate from `one_pager_visual`. Uses the datasheet template. Prompt instructs the LLM to populate each zone from the correct messaging source field. Section-type priority rules baked in (Headline messages → pillar headlines; Benefit messages → pillar bodies; Proof Point messages → proof_block stats).
+- [ ] **`battlecard_visual` prompt:** Populates battlecard template zones. Requires competitor name. Pulls objections + responses from graph for verbatim accuracy.
+
+#### 3b. Content-to-Zone Mapping Engine
+
+The LLM shouldn't have to figure out which message goes in which zone on its own — the context block should do this work.
+
+- [ ] **`_build_visual_context()` function:** Extend `generator.py` with a visual-specific context builder that pre-assigns messaging house content to template zones before the LLM call. The LLM's job becomes copy-editing and tone-polishing, not data organization.
+- [ ] **Priority-based selection:** When a zone has a capacity constraint (e.g., pillar_grid shows 3 items, proof_block shows 3 stats), `_build_visual_context()` pre-selects the highest-priority candidates before passing them to the LLM.
+- [ ] **Persona truncation rules:** Persona strip shows max 3 personas. Selection order: primary persona first, then by completeness score (most complete pain points + triggers shown first).
+
+#### 3c. Design Spec Validation
+
+The LLM output must be validated before it reaches the renderer. Malformed specs cause silent rendering failures that are hard to debug.
+
+- [ ] **Pydantic schema for design spec:** `DesignSpec`, `Zone`, `ZoneContent` models — validate LLM output before saving; auto-fill missing optional fields with template defaults
+- [ ] **Fallback fill:** If LLM omits a required zone, the validator injects the template default content (pulled from the messaging house directly)
+- [ ] **Token budget guardrail:** Design spec generation prompt has a tighter token budget than prose generation — zone content should be concise; validator truncates oversized text blocks to zone capacity limits
+
+---
+
+### Stream 4 — Canvas Renderer (Fabric.js)
+
+The current canvas app renders basic zones. This stream rebuilds the renderer to faithfully execute the v2 design spec with production-quality output.
+
+#### 4a. Zone Renderer Implementation
+
+- [ ] **Zone type renderers:** Implement a Fabric.js renderer function for each zone type defined in Stream 1a — `header`, `hero`, `positioning_block`, `pillar_grid`, `message_list`, `persona_strip`, `proof_block`, `cta_footer`
+- [ ] **Grid layout engine:** Parse the zone's `row`/`col`/`colspan` properties to place zones on the page grid. Zones that overflow their column collapse gracefully rather than overlapping.
+- [ ] **Typography rendering:** Apply `text_style` values to Fabric.js text objects — heading/body/caption each map to a configured font size, weight, and line height
+- [ ] **Brand token resolution:** Before rendering, resolve all `{{brand.*}}` placeholders from workspace brand settings fetched via `/api/workspaces/{id}/brand`
+- [ ] **Image zones:** Render logo and image placeholder zones as styled rectangles with centered label text ("Your Logo Here"); support `fabric.Image.fromURL()` for live URL replacement
+
+#### 4b. Interactive Editing
+
+- [ ] **Text click-to-edit:** Double-click any text zone to enter edit mode using Fabric.js's native `IText` — changes persist to the artifact's `design_spec` via `PATCH /api/artifacts/{id}/design_spec`
+- [ ] **Logo drag-and-drop:** Click logo zone → file picker → `fabric.Image.fromURL(base64)` replaces placeholder; save button persists to artifact
+- [ ] **Color override:** Zone background color picker; updates `background` in the zone spec
+- [ ] **Section reorder:** Drag zones vertically to reorder (updates `row` values in spec, triggers re-render)
+- [ ] **Reset to AI version:** One-click restore to the LLM-generated spec before edits
+
+#### 4c. Export Pipeline
+
+- [ ] **PNG export:** `canvas.toDataURL('image/png', 2.0)` at 2× resolution for retina quality; download triggered client-side
+- [ ] **PDF export (jsPDF):** Serialize each canvas object to jsPDF; preserve vector text where possible; fallback to image embed for complex zones
+- [ ] **SVG export:** `canvas.toSVG()` for design hand-off to Figma or Illustrator
+- [ ] **Print-ready mode:** 300 DPI equivalent scaling before PNG export; web fonts loaded and resolved before capture
+
+---
+
+### Stream 5 — reveal.js (Presentations)
+
+- [ ] **Slide skill templates:** `sales_deck`, `event_presentation`, `executive_readout` — each with structured slide schemas
+- [ ] **LLM slide generation:** `generate_artifact(skill_id="sales_deck")` returns structured slide JSON; Jinja2 renders to reveal.js HTML
+- [ ] **Custom workspace theme:** CSS variables mapping brand colors, fonts, logo to reveal.js theme applied server-side
+- [ ] **Image & logo zones:** Designated slide sections with placeholder support
+- [ ] **Speaker notes:** Generated per slide from full grounding context
+- [ ] **PDF export:** reveal.js `?print-pdf` + browser print engine (higher quality than jsPDF)
+- [ ] **`build_presentation` MCP tool:** Returns live reveal.js presentation URL
+
+---
+
+### Stream 6 — Penpot (Highest-Fidelity Design Export)
+
+- [ ] **Penpot project per workspace:** Auto-create MsgStack workspace in Penpot; store Penpot project ID on workspace record
+- [ ] **Design token sync:** Map MsgStack brand tokens to Penpot design tokens; push on workspace update
+- [ ] **Programmatic artifact creation:** Use Penpot API to create fully designed pages — frames, text layers, image frames, brand colors
+- [ ] **`export_to_penpot` MCP tool:** Creates artifact in Penpot, returns edit link
+- [ ] **Penpot → MsgStack round-trip (stretch):** Pull approved design decisions back from Penpot into MsgStack brand tokens
+
+---
+
+### Shared Infrastructure (v0.8)
+- [ ] **`ArtifactRenderer` abstraction:** Common interface (`render_html`, `render_fabric`, `render_reveal`, `render_penpot`) — new rendering targets added without touching `generate_artifact`
+- [ ] **Renderer routing via skill metadata:** `renderer` field on each skill JSON routes `generate_artifact` to the correct path
+- [ ] **Brand asset store:** Per-workspace storage for logos, icons, and brand images; API endpoints for upload and retrieval; referenced by all renderers
+
+---
+
+## v0.9 — Governance & Alignment Engine
+
+**Goal:** Make MsgStack the messaging governance layer, not just a generation tool. This milestone introduces the features that give marketing ops a reason to open MsgStack every week — not just when they need a new artifact.
+
+### Alignment Scoring
+The most novel capability in the roadmap. Evaluates any piece of content against the structured message house and returns a per-section alignment report. Possible only because the message house is machine-readable — no other tool can do this.
+
+- [ ] **`score_alignment` API endpoint:** Accepts arbitrary text + house_id; returns per-section scores (0–100) plus specific gaps and contradictions against approved messaging
+- [ ] **`score_alignment` MCP tool:** AI assistants can score a draft before submitting it — "check this LinkedIn post against the CHRO persona messaging before I publish"
+- [ ] **Alignment report UI:** Paste content into the admin UI → receive color-coded alignment breakdown with specific suggestions ("Missing: proof point about efficiency. Contradicts: positioning on AI autonomy.")
+- [ ] **Batch scoring:** Connect a HubSpot content library or Google Drive folder → score all assets against the active house → report sorted by alignment score
+- [ ] **Drift report:** Weekly summary of all generated artifacts that have diverged from the message house since it was last updated
+- [ ] **Alignment score on artifact history:** Every saved artifact record shows its alignment score at time of generation; re-scored automatically when the house is updated
+
+### Message Approval Workflow
+- [ ] **Message status field:** `Draft` | `In Review` | `Approved` | `Outdated` | `Locked` on every key message, persona, and house field
+- [ ] **Approval-gated generation:** `generate_artifact` and grounding search skip non-`Approved` messages by default; optional `include_drafts` override for authoring sessions
+- [ ] **Review request flow:** Author marks message as "Ready for Review" → reviewer receives notification → approves or comments → status updates → vector index refreshed
+- [ ] **Drift detection:** When a message is updated, all artifact history records that used it are flagged as potentially outdated
+- [ ] **Locked messages:** "Core Messaging" locked status prevents any edits without admin override; graph retrieval always returns locked messages verbatim
+
+### Self-Service Field Portal
+- [ ] **Portal URL per workspace:** Shareable link (no MsgStack account required) scoped to one or more approved message houses
+- [ ] **Simplified generation UI:** Persona selector → artifact type selector → optional context inputs → generate → download/share
+- [ ] **Generation-only access:** Portal users cannot view or edit the message house; they only see approved messages in the artifact output
+- [ ] **Agency submission mode:** Generated artifacts go to a "Pending Approval" queue rather than being immediately downloadable; marketing manager approves before agency can use
+- [ ] **Portal analytics:** Log all field portal generation activity — who generated what, when, with which inputs — for audit and usage insight
+
+---
+
+## v1.0 — Competitive Intelligence
+
+**Goal:** Make battlecards and competitive content accurate against what competitors are actually saying, not just what you wish they were saying.
+
+- [ ] **Competitor document import:** Upload competitor website pages, datasheets, or sales decks → structuring pipeline extracts their message structure into a `competitive_brief` house
+- [ ] **Competitive gap analysis:** Compare your message house to a competitor's extracted house — where are you weak? Where are you differentiated? Surface specific messages that counter their actual claims.
+- [ ] **Battlecard auto-sharpen:** When generating a battlecard, automatically load the competitor's extracted house and ensure each response directly counters their stated positioning
+- [ ] **Competitor change detection (stretch):** Periodic re-fetch of monitored competitor URLs; alert when messaging has materially changed and existing battlecards need refreshing
+- [ ] **Competitive landscape view:** Admin UI panel showing all imported competitor houses with last-updated timestamp and key positioning differences
+
+---
+
+## v1.1 — Publishing Integrations
+
+**Goal:** Close the gap between "generated" and "published." Content should move from MsgStack to the channel it's destined for without copy-paste, which is where grounding breaks.
+
+- [ ] **HubSpot integration:** Push email templates directly into HubSpot email drafts; push social posts to HubSpot social publish queue; pull existing HubSpot assets for alignment scoring
+- [ ] **LinkedIn integration:** Publish social card artifacts to LinkedIn company page or personal profile via LinkedIn API; pull recent posts for alignment scoring
+- [ ] **Salesforce integration:** Push approved key messages and battlecard content into Salesforce CRM as content snippets accessible to reps in opportunity records
+- [ ] **Google Docs export:** Export any artifact as a formatted Google Doc into a designated Drive folder — closes the agency collaboration loop without email
+- [ ] **Slack app:** `/msgstack generate one-pager [house name]` slash command returns grounded content in Slack; no admin UI required for field teams
+- [ ] **Webhook outbound:** Generic webhook on artifact generation — send any generated artifact to any external system via POST
+
+---
+
+## v1.2 — Activation & Built-In AI Interface
+
+**Goal:** A VP of Marketing can evaluate and adopt MsgStack without involving IT or a developer. First artifact in under 5 minutes from landing on the product.
+
+### Onboarding & Activation
+- [ ] **Hosted SaaS mode:** Cloud-hosted instance with managed database, vector index, and server — no infrastructure decisions required
+- [ ] **Onboarding wizard:** Upload document → review extracted message house → generate first artifact → share link — no configuration steps
+- [ ] **Industry starter templates:** Pre-built message house skeletons for B2B SaaS, Professional Services, Enterprise Software, Financial Services — shows users what a complete house looks like before they build one
+- [ ] **Completeness coaching:** Admin UI actively prompts to fill gaps with specific value-add language ("Your house is missing proof points — battlecard generation requires at least 2")
+- [ ] **Sample house:** "Try MsgStack with an example" — loads a pre-built demo house so users can explore generation before committing to their own content
+
+### Built-In AI Chat Interface
+- [ ] **Chat panel in admin UI:** Embedded chat interface — model pre-instructed with `system_instructions`, active house pre-loaded, grounding automatic; no MCP client required
+- [ ] **Conversation starters:** Pre-configured prompt links for common tasks — "Generate CHRO LinkedIn post," "Write a battlecard vs Workday," "Summarize this framework for a new hire"
+- [ ] **Shareable session links:** Marketing manager creates a pre-configured session link and sends it to a colleague or agency — they click it and are dropped into a ready-to-use chat with the right house and persona context already set
+- [ ] **Multi-LLM support:** Bring-your-own API key for OpenAI, Anthropic Claude, Azure OpenAI, or Google Gemini — workspace-level model setting with fallback
+
+### Content Analytics
+- [ ] **Message usage heatmap:** Which key messages appear most in generated artifacts — surface dead messages that need to be revised or removed
+- [ ] **Artifact engagement:** Views, downloads, and shares of hosted artifact links
+- [ ] **Generation → export rate:** Percentage of generated artifacts that were downloaded (proxy for quality)
+- [ ] **Per-persona coverage:** Are all personas in the house served by the key message set? Flag gaps.
+
+---
+
+## v1.3 — Document Source Integrations
 
 **Goal:** Connect MsgStack directly to where marketing documents already live — eliminating the manual upload step and keeping frameworks automatically in sync as source documents evolve.
 
 ### Google Drive Integration
-- [ ] **OAuth2 Connector:** Authenticate with a Google account and authorize Drive access via OAuth2 PKCE flow
-- [ ] **Drive Picker UI:** Embed the Google Drive file picker in the Upload section for manual selection from Drive without leaving MsgStack
-- [ ] **Folder Watch:** Monitor a designated Drive folder for new or modified files (PDF, DOCX, Google Docs, Slides) — auto-trigger the extraction + structuring pipeline when a file is added or updated
-- [ ] **Google Docs native export:** Export Google Docs directly via the Drive export API (preserving heading structure and tables) rather than converting to PDF — higher extraction fidelity
-- [ ] **Sync status per framework:** "Source in Drive" badge with last synced timestamp; "outdated" warning badge when the Drive file is newer than the structured framework
-- [ ] **Conflict diff UI:** When a monitored file is updated, show a structured diff of changed sections before auto-accepting and re-ingesting
-- [ ] **Push back to Drive (optional):** Export the finalized Message House as a formatted Google Doc and save it back to a specified Drive folder
+- ✅ OAuth2 Connector — authenticate and authorize Drive access
+- ✅ Background sync loop — monitor folder for changed files, auto-ingest
+- ✅ DOCX native format support — binary DOCX correctly detected and extracted
+- [ ] **Drive Picker UI:** Embed Google Drive file picker in the Upload section
+- [ ] **Sync status UI:** "Source in Drive" badge; "outdated" warning when Drive file is newer
+- [ ] **Conflict diff UI:** Show structured diff of changed sections before re-ingesting
+- [ ] **Push back to Drive (optional):** Export finalized Message House as a formatted Google Doc
 
 ### OneDrive & SharePoint Integration
-- [ ] **Microsoft MSAL Auth:** OAuth2 PKCE flow for OneDrive personal accounts and SharePoint Online via Microsoft Graph API
-- [ ] **OneDrive Folder Watch:** Monitor a OneDrive folder for new/updated files — same auto-ingest trigger as Google Drive
-- [ ] **SharePoint Document Library Watch:** Monitor a SharePoint site's document library; support multiple sites per workspace
-- [ ] **Microsoft Graph Webhooks:** Real-time change notifications via Microsoft Graph webhook subscriptions (avoids polling for SharePoint Online)
-- [ ] **Word Online Documents:** Native extraction via Microsoft Graph `content` endpoint — pull `.docx` bytes directly without manual download
-- [ ] **Sync Scheduler Fallback:** Configurable polling interval for organizations that can't use webhooks (on-prem SharePoint, firewall restrictions)
-- [ ] **SharePoint Site Browser:** UI panel to browse SharePoint sites and document libraries within MsgStack
+- [ ] **Microsoft MSAL Auth:** OAuth2 PKCE flow for OneDrive and SharePoint Online via Microsoft Graph API
+- [ ] **OneDrive Folder Watch:** Same auto-ingest trigger as Google Drive
+- [ ] **SharePoint Document Library Watch:** Monitor a SharePoint site's document library
+- [ ] **Microsoft Graph Webhooks:** Real-time change notifications (avoids polling)
+- [ ] **Word Online Documents:** Native extraction via Microsoft Graph `content` endpoint
+- [ ] **Sync Scheduler Fallback:** Configurable polling interval for organizations that can't use webhooks
+- [ ] **SharePoint Site Browser:** UI panel to browse sites and document libraries within MsgStack
 
 ### Source Sync Infrastructure
-- [ ] **SourceConnector Abstraction:** Pluggable connector interface (`connect()`, `watch()`, `fetch()`, `push()`) so Notion, Confluence, and Box can be added in future milestones without touching core pipeline code
-- [ ] **Sync Job Queue:** SQLite-backed background job queue for processing ingest triggers asynchronously (no Celery dependency for single-process deployments)
-- [ ] **Sync Dashboard Widget:** Dashboard panel showing all connected sources, per-framework last sync status, and failed/pending sync jobs with retry controls
-- [ ] **Per-Framework Source Record:** Store `source_type` (`google_drive`, `onedrive`, `sharepoint`, `upload`, `manual`), `source_id` (file/folder ID), and `source_last_modified` on each framework
-- [ ] **Manual Re-Sync Button:** Per-framework "Sync from source" button to force an immediate refresh from the connected source
+- [ ] **SourceConnector Abstraction:** Pluggable connector interface (`connect()`, `watch()`, `fetch()`, `push()`) for Notion, Confluence, Box in future milestones
+- [ ] **Sync Dashboard Widget:** Dashboard panel showing all connected sources, per-framework sync status, failed/pending jobs with retry controls
+- [ ] **Manual Re-Sync Button:** Per-framework "Sync from source" button to force an immediate refresh
 
 ---
 
-## v1.0 — Advanced Graph Operations & Visualization
-
-**Goal:** Enable graph-powered insights and cross-document intelligence.
+## v1.4 — Advanced Graph Operations & Visualization
 
 ### Graph-Powered Queries
 - [ ] **Persona Coverage Analysis:** Which messages address which personas? Identify coverage gaps.
@@ -155,20 +387,18 @@ Penpot is a self-hosted Figma alternative with a full design API. MsgStack alrea
 - [ ] **Cross-Framework Comparison:** Compare messaging relationships across multiple houses
 
 ### Cross-Document Intelligence
-- [ ] **GroundingCollection:** Bundle multiple documents (brand guide + message house + persona library) into a named collection. MCP tools target the entire collection for search and artifact generation.
-- [ ] **INFORMS Edge:** `(GroundingDocument) -[:INFORMS]-> (GroundingDocument)` cross-document relationship. Graph traversal follows `INFORMS` edges to surface the source-of-truth document behind a message.
-- [ ] **Path Finder UI:** Visualize relationship paths between entities (e.g., "how does this message reach this persona?")
+- [ ] **GroundingCollection:** Bundle multiple documents (brand guide + message house + persona library) into a named collection
+- [ ] **INFORMS Edge:** Cross-document relationship — graph traversal surfaces the source-of-truth document behind a message
+- [ ] **Path Finder UI:** Visualize relationship paths between entities
 
 ### Graph Maintenance
 - [ ] **Sync Pipeline:** Keep graph in sync with SQLite/PostgreSQL changes on every write
-- [ ] **Backup & Restore:** Include graph state in the snapshot system
-- [ ] **Neo4j Migration Path:** Adapter layer enabling drop-in replacement of in-process NetworkX graph with Neo4j for scale
+- [ ] **Backup & Restore:** Include graph state in snapshot system
+- [ ] **Neo4j Migration Path:** Adapter layer enabling drop-in replacement of NetworkX with Neo4j for scale
 
 ---
 
-## v1.1 — Platform & Ecosystem
-
-**Goal:** MsgStack as a platform other tools and workflows integrate with.
+## v1.5 — Platform & Ecosystem
 
 ### Additional Integrations
 - [ ] **Notion connector** — Sync frameworks to/from Notion pages
@@ -176,14 +406,14 @@ Penpot is a self-hosted Figma alternative with a full design API. MsgStack alrea
 - [ ] **HubSpot / Salesforce** — Push approved messaging to CRM as snippet library
 - [ ] **Confluence connector** — Watch a Confluence space for source documents
 
+### Auth & Identity
+- [ ] **OIDC / OAuth login** — Replace manual API key distribution with SSO (Google, Okta, Azure AD)
+- [ ] **Workspace invites** — Email-based invite flow with role assignment
+
 ### Advanced Search & Governance
 - [ ] **Cross-framework search** — "What do all our product teams say about security?"
 - [ ] **Gap analysis** — "Which frameworks lack proof points for the CISO persona?"
 - [ ] **Audit Trail** — Comprehensive changelog of all framework modifications
-
-### Auth & Identity
-- [ ] **OIDC / OAuth login** — Replace manual API key distribution with SSO (Google, Okta, Azure AD)
-- [ ] **Workspace invites** — Email-based invite flow with role assignment
 
 ---
 
@@ -194,14 +424,17 @@ Penpot is a self-hosted Figma alternative with a full design API. MsgStack alrea
 - Import from PPTX
 - CLI tool (`msgstack search "..."`)
 - VS Code extension for inline messaging suggestions
-- Inline rich-text editor (TinyMCE/Quill) for polishing AI drafts
+- Inline rich-text editor for polishing AI drafts
+- Print-First Documents via Paged.js (typeset PDFs with real margins and bleed)
 
 ---
 
 ## What We're Not Building
 
-- A full CMS or social media scheduling tool
-- A CRM replacement
-- Real-time chat/collaboration
+- A full CMS or content calendar (we generate and publish; we don't manage the editorial schedule)
+- A social media scheduling platform (publishing integrations push to existing schedulers, not replace them)
+- A CRM (Salesforce/HubSpot integrations push content into CRMs; we don't replace them)
+- A design tool (Fabric.js canvas and Penpot export complement design tools; they don't replace Figma)
+- A localization platform (localization is a quality-of-life feature, not the core problem)
 
-MsgStack is messaging infrastructure — the data layer and search/generation API.
+MsgStack is **messaging governance infrastructure** — the structured, machine-readable data layer that ensures every piece of content your company produces, regardless of who or what created it, is anchored in approved positioning.

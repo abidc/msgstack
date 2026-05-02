@@ -452,3 +452,31 @@ class GroundingEngine:
                 log.error("Pinecone upsert failed for house %s: %s", house_id, e)
                 raise
         return len(vectors)
+
+    def delete_house_vectors(self, house_id: UUID) -> int:
+        """Delete all Pinecone vectors for a house by ID (works on all Pinecone tiers).
+
+        Must be called BEFORE the house is deleted from the DB so key message IDs
+        are still available.
+        """
+        self.ensure_index()
+        messages = self.store.get_key_messages(house_id)
+        ids = [f"chunk-{msg.id}" for msg in messages]
+
+        for field in ("summary", "audience", "positioning", "differentiation", "tagline"):
+            ids.append(f"field-{house_id}-{field}")
+        ids.append(f"kym-{house_id}")
+
+        if not ids:
+            return 0
+
+        # Pinecone delete accepts up to 1000 IDs per call; batch for safety
+        batch_size = 200
+        deleted = 0
+        try:
+            for i in range(0, len(ids), batch_size):
+                self.index.delete(ids=ids[i:i + batch_size], namespace=self.namespace)
+                deleted += len(ids[i:i + batch_size])
+        except PineconeException as exc:
+            log.warning("Pinecone vector delete failed for house %s: %s", house_id, exc)
+        return deleted

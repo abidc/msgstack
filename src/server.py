@@ -188,16 +188,17 @@ def generate_artifact(
 ) -> str:
     """Generate marketing content from a message house framework using an AI skill.
 
-    ALWAYS use this tool when the user asks to:
-    - "build", "make", "create", "generate", "write", "draft", "produce", or "put together"
-      any of: one-pager, one pager, battlecard, battle card, email, LinkedIn post, blog post,
-      press release, FAQ, talk track, objection handler, executive summary, partner brief,
-      event brief, or any other marketing document or copy.
-    - "show me", "give me", "can you make" a one pager / battlecard / email etc.
+    CALL THIS TOOL IMMEDIATELY — do not explain, do not show code, do not ask for confirmation —
+    whenever the user says anything like: "generate", "create", "write", "build", "make", "draft",
+    "give me", "show me", "produce", or "put together" followed by any of:
+    one-pager, one pager, datasheet, battlecard, battle card, email, LinkedIn post, blog post,
+    press release, FAQ, talk track, objection handler, executive summary, partner brief, event brief,
+    or any other marketing document or copy.
 
+    You can pass house_name instead of house_id — no prior lookup needed.
     NEVER write the content yourself. ALWAYS call this tool instead.
 
-    The tool runs the AI generator and returns the full content PLUS a visual link.
+    The tool runs the AI generator and returns the full content PLUS a canvas visual link.
     For battlecard, you MUST also pass custom_context={"competitor": "<name>"}.
     For email_template, optionally pass custom_context={"stage": "awareness|consideration|decision"}.
 
@@ -278,7 +279,7 @@ def generate_artifact(
 
     content = artifact.raw_content
     if skill_id in visual_types:
-        if skill_id == "one_pager_visual" and artifact_history_id:
+        if skill_id in ("one_pager_visual", "one_pager") and artifact_history_id:
             url = f"{base_url}/canvas?artifact_id={artifact_history_id}"
         else:
             url = f"{base_url}/artifact/{skill_id}/{house.id}"
@@ -380,7 +381,6 @@ def list_mcp_tools() -> dict:
         {"name": "set_active_house", "description": "Focus the session on a specific brand framework."},
         {"name": "check_framework_completeness", "description": "Audit a framework for missing critical messaging sections."},
         {"name": "get_framework_spec", "description": "See the requirements for a 'Perfect' messaging house."},
-        {"name": "seed_database", "description": "Reset or load sample B2B SaaS data."},
     ]
     return {"tools": tool_defs}
 
@@ -531,15 +531,6 @@ def list_channels() -> dict:
     return {"channels": store.get_channels()}
 
 
-@mcp.tool()
-def seed_database() -> dict:
-    """Seed the database with sample messaging content.
-
-    Loads a realistic B2B SaaS messaging house for testing.
-    """
-    from seed_data.seed import seed as run_seed
-    run_seed()
-    return {"message": "Database seeded with sample messaging content."}
 
 
 # ── MCP Prompts ──────────────────────────────────────────────────────────────
@@ -597,23 +588,14 @@ a brand's positioning, personas, or full messaging structure.
 @mcp.prompt()
 def quick_start() -> str:
     """One-paragraph quick-start guide shown to users new to MsgStack."""
-    from src.store import get_store as _get_store
-    try:
-        store = _get_store()
-        houses = store.list_houses()
-        names = ", ".join(h.name for h in houses[:5])
-        house_line = f"Available frameworks: {names}{'...' if len(houses) > 5 else ''}."
-    except Exception:
-        house_line = "Use list_message_houses to see available frameworks."
+    return """MsgStack gives you AI-generated marketing artifacts grounded in your brand messaging.
 
-    return f"""MsgStack gives you AI-generated marketing artifacts grounded in your brand messaging.
-
-{house_line}
+Call `list_message_houses` to see available frameworks, then use the returned house_id for all other tools.
 
 **To generate a document**, just say what you want and which brand, e.g.:
-- "Write a one-pager for Apex Financial Analytics"
-- "Build a battlecard for Helix HR vs Workday"
-- "Draft a LinkedIn post for the Forge DevOps framework"
+- "Write a one-pager for [framework name]"
+- "Build a battlecard for [framework name] vs [competitor]"
+- "Draft a LinkedIn post for [framework name]"
 
 Available artifact types: one-pager, battlecard, email template, LinkedIn post, blog post,
 press release, FAQ, talk track, objection handler, executive summary, partner brief, event brief.
