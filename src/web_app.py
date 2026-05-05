@@ -1168,6 +1168,17 @@ def graph_house(house_id: str):
     return {"house_id": house_id, "chunks": chunks, "count": len(chunks)}
 
 
+
+@app.get("/api/graph/house/{house_id}/sections")
+def graph_house_sections(house_id: str):
+    from src.grounding.graph import get_graph_engine
+    try:
+        UUID(house_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid house_id UUID")
+    sections = get_graph_engine().get_sections_for_house(house_id)
+    return {"house_id": house_id, "sections": sections, "count": len(sections)}
+
 @app.get("/api/graph/data")
 def graph_data():
     from src.grounding.graph import get_graph_engine
