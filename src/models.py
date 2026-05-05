@@ -37,9 +37,8 @@ class DocumentType(str, Enum):
     CORP_NARRATIVE = "corp_narrative"
     PERSONA_LIBRARY = "persona_library"
 
-
 class Channel(str, Enum):
-    """Enum kept for backward compatibility; DB channels are now first-class entities."""
+    """Enum kept for backward compatibility; channel IDs used in Pydantic layer."""
     ALL = "all"
     LINKEDIN = "linkedin"
     EMAIL = "email"
@@ -47,17 +46,6 @@ class Channel(str, Enum):
     PAID = "paid"
     TWITTER = "twitter"
     BLOG = "blog"
-
-
-class ChannelModel(BaseModel):
-    """Pydantic model for channel API responses."""
-    model_config = ConfigDict(use_enum_values=True)
-
-    id: str
-    name: str
-    description: str = ""
-    is_custom: bool = False
-    created_at: datetime | None = None
 
 
 class HouseStatus(str, Enum):
@@ -128,30 +116,7 @@ class KeyMessage(BaseModel):
             return 3
     variants: dict[str, str] = Field(default_factory=dict)
     personas: list[str] = Field(default_factory=list)
-    channels: list[Channel] = Field(default_factory=lambda: [Channel.ALL])
-    source_chunk_id: str | None = None
-
-
-class KeyMessage(BaseModel):
-    model_config = ConfigDict(use_enum_values=True)
-
-    id: UUID = Field(default_factory=uuid4)
-    message_house_id: UUID
-    pillar_id: int | None = None
-    section_type: SectionType
-    priority: int = Field(ge=1, le=5)
-    content: str
-
-    @field_validator('priority', mode='before')
-    @classmethod
-    def clamp_priority(cls, v):
-        try:
-            return max(1, min(5, int(v)))
-        except (TypeError, ValueError):
-            return 3
-    variants: dict[str, str] = Field(default_factory=dict)
-    personas: list[str] = Field(default_factory=list)
-    channels: list[Channel] = Field(default_factory=lambda: [Channel.ALL])
+    channels: list[str] = Field(default_factory=list)
     source_chunk_id: str | None = None
 
 

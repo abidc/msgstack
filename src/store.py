@@ -15,6 +15,9 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Table,
+    Column,
+    PrimaryKeyConstraint,
     create_engine,
 )
 from sqlalchemy.orm import (
@@ -26,7 +29,8 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
-from src.models import BrandSettings, Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
+from src.models import BrandSettings, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -117,6 +121,14 @@ _DEFAULT_CHANNELS = [
     ("sales_deck", "Sales Deck", "Slide decks and pitch presentations", False),
 ]
 
+# Association table for KeyMessageModel and ChannelModel (many-to-many)
+key_message_channel_association = Table(
+    "key_message_channel_association",
+    Base.metadata,
+    Column("key_message_id", String(36), ForeignKey("key_messages.id", ondelete="CASCADE")),
+    Column("channel_id", String(50), ForeignKey("channels.id", ondelete="CASCADE")),
+    PrimaryKeyConstraint("key_message_id", "channel_id")
+)
 
 class HouseModel(Base):
     __tablename__ = "message_houses"
@@ -197,10 +209,12 @@ class KeyMessageModel(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     variants: Mapped[dict] = mapped_column(JSON, default=dict)
     personas: Mapped[list] = mapped_column(JSON, default=list)
-    channels: Mapped[list] = mapped_column(JSON, default=["all"])
+    # Many-to-many relationship with ChannelModel
+    channels: Mapped[list["ChannelModel"]] = relationship(
+        secondary=key_message_channel_association,
+        backref="key_messages"
+    )
     source_chunk_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    pain_point_ids: Mapped[list] = mapped_column(JSON, default=list())
-    objection_ids: Mapped[list] = mapped_column(JSON, default=list())
     message_house: Mapped["HouseModel"] = relationship(back_populates="key_messages")
 
 
@@ -456,18 +470,40 @@ class Store:
                 """))
                 conn.commit()
 
-            # Add pain_point_ids and objection_ids to key_messages
+            # Migrate key_messages channels: JSON column → many-to-many association table
             if "key_messages" in insp.get_table_names():
                 km_cols = {c["name"] for c in insp.get_columns("key_messages")}
-                for col in ("pain_point_ids", "objection_ids"):
-                    if col not in km_cols:
-                        try:
-                            conn.execute(text(f"ALTER TABLE key_messages ADD COLUMN {col} JSON DEFAULT '[]'"))
-                            conn.commit()
-                        except Exception:
-                            pass
 
-            # Create artifact_ratings table if not exists
+                # Drop the old JSON channels column if it exists
+                if "channels" in km_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE key_messages DROP COLUMN channels"))
+                        conn.commit()
+                    except Exception as e:
+                        print(f"Warning: Could not drop old key_messages.channels JSON column: {e}")
+
+                # Create the association table if not yet present
+                if "key_message_channel_association" not in insp.get_table_names():
+                    conn.execute(text('''
+                        CREATE TABLE key_message_channel_association (
+                            key_message_id VARCHAR(36) NOT NULL,
+                            channel_id VARCHAR(50) NOT NULL,
+                            PRIMARY KEY (key_message_id, channel_id),
+                            FOREIGN KEY (key_message_id) REFERENCES key_messages(id) ON DELETE CASCADE,
+                            FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+                        )
+                    '''))
+                    conn.commit()
+
+                # Drop deprecated pain_point_ids and objection_ids JSON columns
+                for col in ("pain_point_ids", "objection_ids"):
+                    if col in km_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE key_messages DROP COLUMN {col}"))
+                            conn.commit()
+                        except Exception as e:
+                            print(f"Warning: Could not drop old key_messages.{col} JSON column: {e}")
+
             if "artifact_ratings" not in insp.get_table_names():
                 conn.execute(text("""
                     CREATE TABLE artifact_ratings (
@@ -1871,13 +1907,80 @@ class Store:
 
     # --- Channels ---
 
-    def get_channels(self) -> list[dict]:
+    def get_channel(self, channel_id: str) -> ChannelModel | None:
         with self.session() as s:
-            rows = s.query(ChannelModel).order_by(ChannelModel.is_custom.asc(), ChannelModel.name).all()
-            return [{"id": r.id, "name": r.name, "description": r.description,
-                     "is_custom": r.is_custom, "created_at": r.created_at.isoformat()} for r in rows]
+            return s.get(ChannelModel, channel_id)
+
+    def create_channel(self, name: str, description: str = "", is_custom: bool = True) -> ChannelModel:
+        with self.session() as s:
+            # Check for existing channel with the same name
+            existing_by_name = s.query(ChannelModel).filter_by(name=name).first()
+            if existing_by_name:
+                raise ValueError(f"Channel with name '{name}' already exists.")
+
+            channel_id = name.lower().replace(" ", "_").replace("/", "_").replace("-", "_")
+            # Ensure ID is unique
+            existing_by_id = s.get(ChannelModel, channel_id)
+            if existing_by_id:
+                channel_id = f"{channel_id}-{uuid4().hex[:4]}" # Append a short hash if collision
+
+            new_channel = ChannelModel(
+                id=channel_id,
+                name=name,
+                description=description,
+                is_custom=is_custom,
+                created_at=_now()
+            )
+            s.add(new_channel)
+            s.commit()
+            s.refresh(new_channel)
+            return new_channel
+
+    def list_channels(self, include_custom: bool = True) -> list[ChannelModel]:
+        with self.session() as s:
+            q = s.query(ChannelModel)
+            if not include_custom:
+                q = q.filter(ChannelModel.is_custom == False)
+            return q.order_by(ChannelModel.is_custom.asc(), ChannelModel.name).all()
+
+    def update_channel(self, channel_id: str, name: str | None = None, description: str | None = None) -> ChannelModel | None:
+        with self.session() as s:
+            channel = s.get(ChannelModel, channel_id)
+            if not channel:
+                return None
+            if name:
+                # Check for existing channel with the same name (excluding itself)
+                existing_by_name = s.query(ChannelModel).filter(
+                    ChannelModel.name == name, ChannelModel.id != channel_id
+                ).first()
+                if existing_by_name:
+                    raise ValueError(f"Channel with name '{name}' already exists.")
+                channel.name = name
+            if description is not None:
+                channel.description = description
+            s.commit()
+            s.refresh(channel)
+            return channel
+
+    def delete_channel(self, channel_id: str) -> bool:
+        with self.session() as s:
+            channel = s.get(ChannelModel, channel_id)
+            if not channel:
+                return False
+            if not channel.is_custom:
+                raise ValueError("Cannot delete a default channel")
+            s.delete(channel)
+            s.commit()
+            return True
+
+    def get_channels(self) -> list[dict]:
+        """Backward-compat wrapper; returns channels serialised as dicts."""
+        rows = self.list_channels()
+        return [{"id": r.id, "name": r.name, "description": r.description,
+                 "is_custom": r.is_custom, "created_at": r.created_at.isoformat()} for r in rows]
 
     def upsert_channel(self, ch_id: str, name: str, description: str = "") -> dict:
+        """Backward-compat: create or update a channel by explicit ID."""
         with self.session() as s:
             existing = s.get(ChannelModel, ch_id)
             if existing:
@@ -1890,17 +1993,6 @@ class Store:
             row = s.get(ChannelModel, ch_id)
             return {"id": row.id, "name": row.name, "description": row.description,
                     "is_custom": row.is_custom, "created_at": row.created_at.isoformat()}
-
-    def delete_channel(self, ch_id: str) -> bool:
-        with self.session() as s:
-            row = s.get(ChannelModel, ch_id)
-            if not row:
-                return False
-            if not row.is_custom:
-                raise ValueError("Cannot delete a default channel")
-            s.delete(row)
-            s.commit()
-            return True
 
     # --- Workspace-scoped house list ---
 
