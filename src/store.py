@@ -29,7 +29,7 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
-from src.models import BrandSettings, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
+from src.models import BrandSettings, Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
 
 
 def _now() -> datetime:

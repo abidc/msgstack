@@ -19,6 +19,7 @@ services:
       - ./skills:/app/skills
     env_file:
       - .env
+    entrypoint: ["python", "run_server.py"]
     environment:
       DATABASE_URL: sqlite:///data/msgstack.db
       MSGSTACK_BASE_URL: ${MSGSTACK_BASE_URL:-https://mcp.abidc.dev}
