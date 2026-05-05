@@ -1346,8 +1346,18 @@ class Store:
                 "house_name": row.house_name,
                 "sections": row.sections_json,
                 "raw_content": row.raw_content,
+                "status": row.status,
                 "created_at": row.created_at.isoformat(),
             }
+
+    def update_artifact_status(self, artifact_id: UUID, status: str) -> bool:
+        with self.session() as s:
+            row = s.get(ArtifactHistoryModel, str(artifact_id))
+            if not row:
+                return False
+            row.status = status
+            s.commit()
+            return True
 
     # --- Artifact Ratings ---
 

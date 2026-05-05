@@ -27,7 +27,7 @@ configure_logging()
 log = logging.getLogger(__name__)
 
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
-from src.models import Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, MessageStatus, Persona, SectionType
+from src.models import ArtifactStatus, Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, MessageStatus, Persona, SectionType
 from src.store import init_store
 from src.pipeline.extract import ExtractionError, extract_text, chunk_text, save_upload
 from src.pipeline.structure import HouseStructurer, StructuredHouse
@@ -484,6 +484,8 @@ def update_message(msg_id: str, data: MessageUpdate):
     msg = _find_message(msg_id)
     if not msg:
         raise HTTPException(404, "Message not found")
+    if msg.status == MessageStatus.LOCKED:
+        raise HTTPException(409, "Message is locked and cannot be edited. Unlock it first via the status endpoint.")
     for k, v in data.model_dump(exclude_none=True).items():
         if k == "section_type":
             msg.section_type = SectionType(v)
@@ -497,6 +499,11 @@ def update_message(msg_id: str, data: MessageUpdate):
 
 @app.delete("/api/messages/{msg_id}")
 def delete_message(msg_id: str):
+    msg = _find_message(msg_id)
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    if msg.status == MessageStatus.LOCKED:
+        raise HTTPException(409, "Message is locked and cannot be deleted. Unlock it first via the status endpoint.")
     if not store.delete_key_message(UUID(msg_id)):
         raise HTTPException(404, "Message not found")
     return {"ok": True, "deleted_id": msg_id}
@@ -2247,6 +2254,50 @@ def update_artifact(artifact_id: str, data: dict):
             s.commit()
 
     return {"ok": True, "updated_id": artifact_id}
+
+
+class ArtifactStatusUpdate(BaseModel):
+    status: str
+    notes: Optional[str] = None
+
+
+_ARTIFACT_STATUS_TRANSITIONS = {
+    "draft": {"internal_review"},
+    "internal_review": {"draft", "approved"},
+    "approved": {"internal_review"},
+}
+
+
+@app.patch("/api/artifacts/{artifact_id}/status")
+def update_artifact_status(artifact_id: str, data: ArtifactStatusUpdate):
+    """Transition an artifact through its review lifecycle.
+
+    Valid transitions:
+      draft → internal_review
+      internal_review → draft | approved
+      approved → internal_review
+    """
+    try:
+        valid_statuses = {s.value for s in ArtifactStatus}
+    except Exception:
+        valid_statuses = {"draft", "internal_review", "approved"}
+
+    if data.status not in valid_statuses:
+        raise HTTPException(400, f"Invalid status '{data.status}'. Must be one of: {sorted(valid_statuses)}")
+
+    record = store.get_artifact(UUID(artifact_id))
+    if not record:
+        raise HTTPException(404, "Artifact not found")
+
+    current = record.get("status", "draft")
+    allowed = _ARTIFACT_STATUS_TRANSITIONS.get(current, set())
+    if data.status not in allowed:
+        raise HTTPException(409, f"Cannot transition artifact from '{current}' to '{data.status}'. Allowed: {sorted(allowed)}")
+
+    if not store.update_artifact_status(UUID(artifact_id), data.status):
+        raise HTTPException(500, "Failed to update artifact status")
+
+    return {"ok": True, "id": artifact_id, "status": data.status}
 
 
 # --- DOCX Download ---

@@ -421,12 +421,12 @@ def build_presentation(
     }
 
 
-def export_to_penpot(
+def generate_penpot_render(
     house_id: str,
     skill_id: str = "one_pager_visual",
     custom_context: Optional[dict] = None,
 ) -> dict:
-    """Export an artifact to Penpot format.
+    """Generate an artifact and render it to Penpot JSON format (no file creation).
 
     Args:
         house_id: The message house ID or name
