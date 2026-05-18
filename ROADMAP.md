@@ -1,8 +1,25 @@
 # MsgStack — Roadmap
 
-**Last Updated:** May 2026
+**Last Updated:** May 2026  
+**License:** Apache 2.0 — open source, self-hostable  
+**Contributing:** See [CONTRIBUTING.md](CONTRIBUTING.md)
 
-This roadmap reflects current state and planned direction. Items are grouped by milestone, not calendar quarter — sequencing depends on usage feedback and priority shifts.
+This roadmap reflects current state and planned direction. Items are grouped by milestone, not calendar quarter — sequencing depends on community feedback and priority shifts. Items marked `[OSS]` are well-suited for community contribution.
+
+---
+
+## v0.6.1 — OSS Launch Polish
+
+**Goal:** Make the repository welcoming and navigable for first-time contributors and self-hosters.
+
+- [x] MIT → Apache 2.0 license
+- [x] Rewritten README — community-focused, clear quick start
+- [x] `CONTRIBUTING.md` with dev setup guide
+- [x] GitHub issue templates (bug report, feature request)
+- [x] PR template
+- [x] Removed internal dev-only files from repo root
+- [x] `docs/` directory for architecture and brand docs
+- [x] `.gitignore` cleaned up
 
 ---
 

@@ -1,20 +1,39 @@
 __pycache__/
 *.pyc
-*.db
+*.pyo
+*.pyd
+
+# Environment
 .env
 .venv/
 venv/
+venv_linux/
+
+# Database (never commit live data)
+*.db
+data/
+
+# Logs
+logs/
+*.log
+
+# Python packaging
 *.egg-info/
-.pytest_cache/
-.mypy_cache/
+*.egg
 dist/
 build/
-*.egg
-data/
-server.log
-server_err.log
-check_db.py
-test_init.json
-venv_linux/
-server_out.log
+
+# Test/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Internal task tracking
+tasks/
+
+# Node (admin UI deps if any)
 node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

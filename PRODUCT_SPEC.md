@@ -2,7 +2,9 @@
 
 **Version:** 0.6  
 **Last Updated:** May 2026  
-**Status:** Active Development
+**Status:** Active Development — Open Source (Apache 2.0)  
+**Repository:** https://github.com/abidc/msgstack-mcp  
+**Website:** https://www.msgstack.ai
 
 ---
 
@@ -28,6 +30,24 @@ MsgStack solves this by making messaging frameworks **structured, searchable, an
 The long-term goal is not a content creation tool. It's the **messaging governance layer** for B2B marketing organizations — the system of record for what the company is authorized to say, and the engine that enforces it across every channel, team, and tool.
 
 ---
+
+## 2.5 Open Source Model
+
+MsgStack is **Apache 2.0 licensed** and fully self-hostable. The core product — MCP server, admin UI, knowledge graph, artifact generation — will always be open source.
+
+### Why Apache 2.0?
+Apache 2.0 is the industry standard for open core commercial projects (GitLab, Elastic, Databricks). It is permissive enough to maximize adoption and community contribution, while including an explicit patent grant that protects both users and the project as it grows. Unlike MIT, it requires attribution and provides legal clarity for enterprise adopters.
+
+### Why open source the core?
+The market for messaging governance only exists if teams can try it without procurement cycles or sales calls. Open source removes the adoption friction. The community builds integrations (Slack, HubSpot, Notion connectors, additional MCP clients) faster than a closed team could. And being open source makes MsgStack trustworthy as infrastructure — teams can inspect exactly how their approved messaging is stored, retrieved, and used in generation.
+
+### Monetization path
+The open core model: the self-hosted product is fully featured and always free. Revenue comes from:
+- **Hosted SaaS** (v1.2) — managed infrastructure, no ops burden, organizational dashboards
+- **Enterprise tier** — SSO (OIDC/SAML), audit logs, role-based access, SLA support
+- **Professional services** — onboarding, custom connectors, messaging framework consulting
+
+The self-hosted experience will never be artificially limited to push users toward paid tiers.
 
 ## 3. Target Users
 
