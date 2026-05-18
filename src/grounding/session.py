@@ -1,9 +1,12 @@
 """In-memory session tracking for grounding context across a conversation."""
 
+import time
 from typing import Optional
 from uuid import UUID
 
 from src.models import GroundingContext, GroundingResult
+
+_SESSION_TTL_SECONDS = 1800  # 30 minutes
 
 
 class Session:
@@ -16,6 +19,14 @@ class Session:
         self.recent_searches: list[str] = []
         self.used_chunks: list[str] = []
         self._context = GroundingContext()
+        self._created_at: float = time.time()
+        self._last_used: float = time.time()
+
+    def is_expired(self) -> bool:
+        return (time.time() - self._last_used) > _SESSION_TTL_SECONDS
+
+    def touch(self) -> None:
+        self._last_used = time.time()
 
     def set_active_house(
         self, house_id: UUID, house_name: str, house_summary: str, personas: list[str], workspace_id: str = "default"
@@ -66,8 +77,9 @@ _session: Optional[Session] = None
 
 def get_session() -> Session:
     global _session
-    if _session is None:
+    if _session is None or _session.is_expired():
         _session = Session()
+    _session.touch()
     return _session
 
 

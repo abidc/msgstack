@@ -321,12 +321,15 @@ class GraphEngine:
             by_p = {c["id"] for c in self.get_chunks_for_persona(house_id, persona)}
             by_c = {c["id"] for c in self.get_chunks_for_channel(house_id, channel)}
             ids = by_p & by_c
-            return [c for c in self.get_chunks_for_house(house_id) if c.get("id") in ids]
-        if persona:
-            return self.get_chunks_for_persona(house_id, persona)
-        if channel:
-            return self.get_chunks_for_channel(house_id, channel)
-        return self.get_chunks_for_house(house_id)
+            results = [c for c in self.get_chunks_for_house(house_id) if c.get("id") in ids]
+        elif persona:
+            results = self.get_chunks_for_persona(house_id, persona)
+        elif channel:
+            results = self.get_chunks_for_channel(house_id, channel)
+        else:
+            results = self.get_chunks_for_house(house_id)
+        # Filter out nodes with no content (fix #8)
+        return [c for c in results if c.get("content", "").strip()]
 
     def get_graph_data(self) -> dict:
         """Serialise all nodes and edges for the graph explorer UI."""

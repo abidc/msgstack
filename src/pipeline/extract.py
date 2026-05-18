@@ -19,6 +19,15 @@ def extract_text(file_path: str | Path, mime_type: Optional[str] = None) -> str:
     if not path.exists():
         raise ExtractionError(f"File not found: {file_path}")
 
+    # Guard against very large files that could OOM the container (fix #12)
+    max_bytes = 10 * 1024 * 1024  # 10 MB
+    file_size = path.stat().st_size
+    if file_size > max_bytes:
+        raise ExtractionError(
+            f"File '{path.name}' is {file_size // (1024*1024):.1f} MB — "
+            f"maximum supported size is 10 MB. Please split the document and re-upload."
+        )
+
     inferred = mime_type or _infer_type(path)
     text = ""
 

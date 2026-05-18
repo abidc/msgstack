@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MsgStack{% endblock %}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
@@ -12,18 +12,20 @@
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
-            --bg: #0c0c10;
-            --bg-1: #131318;
-            --bg-2: #1a1a21;
-            --bg-3: #222230;
-            --border: #2c2c3a;
-            --border-light: #3a3a4a;
-            --text: #f0f0f5;
-            --text-2: #a0a0b5;
-            --text-3: #606075;
-            --primary: #7c6af7;
-            --primary-dim: rgba(124,106,247,0.15);
-            --primary-hover: #9585f9;
+            --bg: #0B0F19;
+            --bg-1: #1A2235;
+            --bg-2: #2A3655;
+            --bg-3: #38466b;
+            --border: #2A3655;
+            --border-light: #38466b;
+            --text: #F8FAFC;
+            --text-2: #94A3B8;
+            --text-3: #64748b;
+            --primary: #00E5FF;
+            --primary-dim: rgba(0,229,255,0.15);
+            --primary-hover: #33eaff;
+            --accent-graph: #651FFF;
+            --accent-purple: #B388FF;
             --success: #34d399;
             --success-dim: rgba(52,211,153,0.12);
             --warn: #fbbf24;
@@ -54,6 +56,8 @@
             --danger-dim: rgba(217,48,37,0.10);
         }
         body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+        h1, h2, h3, .page-title, .card-title, .logo, .stat-value { font-family: 'Outfit', sans-serif; }
+        code, pre, .monospace { font-family: 'JetBrains Mono', monospace; color: #38BDF8; }
         .app { display: flex; height: 100vh; overflow: hidden; }
 
         /* ── Sidebar ── */

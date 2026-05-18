@@ -27,6 +27,7 @@ def search_messaging(
     min_confidence: Optional[float] = None,
     workspace_id: Optional[str] = None,
     retrieval_mode: Optional[str] = None,
+    limit: Optional[int] = None,
 ) -> dict:
     """Search marketing messaging frameworks for grounding content.
 
@@ -48,11 +49,13 @@ def search_messaging(
         workspace_id: Filter to a specific workspace (optional).
         retrieval_mode: "hybrid" (default), "vector", "graph" (deterministic — bypasses
                         vector approximation, returns exact approved content), or "keyword".
+        limit: Maximum number of results to return (default: no cap). Set to 5–10 to
+               avoid flooding the context window.
 
     Returns:
         Matched messaging chunks with confidence scores and grounding context.
     """
-    return grounding_tools.search_messaging(
+    result = grounding_tools.search_messaging(
         query=query,
         section_types=section_types,
         personas=personas,
@@ -64,6 +67,9 @@ def search_messaging(
         workspace_id=workspace_id,
         retrieval_mode=retrieval_mode or "hybrid",
     ).model_dump()
+    if limit and "results" in result:
+        result["results"] = result["results"][:limit]
+    return result
 
 
 @mcp.tool()
@@ -327,7 +333,7 @@ def build_ui_artifact(
         all_houses = store.list_houses()
         return "House not found. Available: " + ", ".join(h.name for h in all_houses)
 
-    valid_types = ["one_pager", "social_posts", "email_template"]
+    valid_types = ["one_pager", "social_posts", "email_template", "battlecard"]
     if artifact_type not in valid_types:
         return f"Unknown artifact_type. Choose: {', '.join(valid_types)}"
 
@@ -357,7 +363,14 @@ def list_skills() -> dict:
                 "id": s["id"],
                 "name": s["name"],
                 "description": s["description"],
-                "recommended_for": s.get("channels", ["all"])
+                "recommended_for": s.get("channels", ["all"]),
+                "requires_context": {
+                    "battlecard": {"competitor": "Competitor name (required)"},
+                    "blog_post": {"topic": "Blog topic (required)"},
+                    "press_release": {"announcement": "Announcement summary (required)"},
+                    "event_brief": {"event_name": "Event name (required)"},
+                    "email_template": {"stage": "awareness|consideration|decision (optional)"},
+                }.get(s["id"], {}),
             }
             for s in skills.list_skills()
         ]
@@ -507,6 +520,32 @@ def check_framework_completeness(house_id: Optional[str] = None, house_name: Opt
 
     score = round((passed / total) * 100) if total else 0
 
+    # Generate actionable recommendations for failing checks
+    recommendations = []
+    for c in checks:
+        if not c["passed"]:
+            label = c["check"]
+            if "Positioning" in label:
+                recommendations.append("Expand the positioning statement to be more specific (50+ characters).")
+            elif "Tagline" in label:
+                recommendations.append("Add a tagline under 60 characters that captures the core value proposition.")
+            elif "Differentiation" in label:
+                recommendations.append("Fill in the differentiation field with a concrete competitive advantage.")
+            elif "Audience" in label:
+                recommendations.append("Define the primary target audience in the house metadata.")
+            elif "Brand personality" in label:
+                recommendations.append("Add brand personality traits (e.g., bold, empathetic, technical).")
+            elif "personas" in label.lower():
+                recommendations.append("Define at least 2 distinct buyer personas with pain points and triggers.")
+            elif "LinkedIn" in label:
+                recommendations.append("Add LinkedIn channel variants to at least 5 key messages.")
+            elif "Email" in label:
+                recommendations.append("Add email channel variants to at least 5 key messages.")
+            else:
+                # section-level check: extract section name
+                section = label.split(":")[0].strip()
+                recommendations.append(f"Add more {section} messages (minimum required not met).")
+
     return {
         "house_name": house.name,
         "score": score,
@@ -514,6 +553,7 @@ def check_framework_completeness(house_id: Optional[str] = None, house_name: Opt
         "total": total,
         "checks": checks,
         "missing": [c["check"] for c in checks if not c["passed"]],
+        "recommendations": recommendations,
         "message_count": len(messages),
         "persona_count": len(personas),
         "sections_covered": list(by_section.keys()),
@@ -620,6 +660,13 @@ a brand's positioning, personas, or full messaging structure.
 - press_release: `custom_context={"announcement": "<summary>"}` — REQUIRED
 - event_brief: `custom_context={"event_name": "<name>"}` — REQUIRED
 - email_template: `custom_context={"stage": "awareness|consideration|decision"}` — optional
+
+## When to use get_graph_connections vs search_messaging
+
+- Use `get_graph_connections` when you need **exact, verbatim approved content** — locked taglines,
+  specific proof points, or all messages for a persona. Confidence is always 1.0 (no approximation).
+- Use `search_messaging` for **exploratory or semantic queries** where you want the closest match
+  to a natural language request. Use `retrieval_mode="graph"` as a shortcut for the same effect.
 """
 
 
