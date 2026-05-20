@@ -31,7 +31,7 @@ MsgStack fixes this by making your messaging frameworks **machine-readable and d
 Your Source Document (PDF / DOCX / Google Drive)
          ↓  extract → LLM structure
 MessageHouse  (positioning · tagline · personas · key messages · pillars)
-         ↓  embed → Pinecone  +  build → Knowledge Graph
+         ↓  embed → Turbovec  +  build → Knowledge Graph
     ┌─────────────────────────────────────────┐
     │  Semantic Search   │  Graph Traversal   │
     │  (vector approx.)  │  (verbatim exact)  │
@@ -41,7 +41,7 @@ Grounded Artifact  (one-pager · email · battlecard · LinkedIn · blog · …)
 ```
 
 **Two retrieval modes — neither approximates approved content:**
-- **Vector (Pinecone):** semantic similarity for exploratory queries — finds thematically relevant messaging
+- **Vector (Turbovec):** local semantic similarity for exploratory queries — finds thematically relevant messaging (in-process, <0.1ms database latency)
 - **Graph (NetworkX):** deterministic traversal for verbatim approved content — returns exact taglines, locked proof points, specific buying triggers — never approximated
 
 ---
@@ -55,7 +55,6 @@ git clone https://github.com/abidc/msgstack-mcp.git
 cd msgstack-mcp
 cp .env.example .env
 # Add OPENAI_API_KEY to .env (required)
-# Add PINECONE_API_KEY to .env (optional — falls back to keyword search)
 
 docker compose up -d
 ```
@@ -186,7 +185,7 @@ run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
 │   └── skills.py        # JSON skill file manager (12 built-in templates)
 │
 ├── src/grounding/
-│   ├── search.py        # Pinecone hybrid vector + metadata search
+│   ├── search.py        # Turbovec local vector search + SQLite pre-filtering
 │   ├── graph.py         # NetworkX DiGraph — deterministic retrieval
 │   ├── session.py       # In-memory session (active house, used chunks, 30-min TTL)
 │   └── tools.py         # Grounding tool implementations
@@ -251,8 +250,7 @@ MessageHouse
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `OPENAI_API_KEY` | **Yes** | — | LLM structuring, generation, embeddings |
-| `PINECONE_API_KEY` | No | — | Vector search; falls back to keyword search without it |
-| `PINECONE_INDEX` | No | `msgstack-chunks` | Pinecone index name |
+| `TURBOVEC_INDEX_PATH` | No | `data/msgstack_vectors.tvim` | Path to store the local vector index |
 | `MSGSTACK_BASE_URL` | No | `http://localhost:8001` | Base URL for artifact links returned by MCP tools |
 | `DATABASE_URL` | No | `sqlite:///msgstack.db` | SQLAlchemy URL — use `postgresql://...` for production |
 | `MSGSTACK_AUTH_ENABLED` | No | `false` | Enable API key auth on admin endpoints |
@@ -279,7 +277,7 @@ pytest tests/
 ruff check src/
 ```
 
-### Re-indexing to Pinecone
+### Re-indexing vectors
 ```bash
 # Single house
 curl -X POST http://localhost:8001/api/houses/{house_id}/index
