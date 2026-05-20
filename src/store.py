@@ -354,6 +354,22 @@ class ReviewLogModel(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
 
 
+class VectorMetadataModel(Base):
+    __tablename__ = "vector_metadata"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)  # e.g., 'chunk-UUID', 'field-UUID-field', 'kym-UUID'
+    message_house_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    house_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    house_summary: Mapped[str] = mapped_column(Text, default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    section_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=3)
+    persona: Mapped[str] = mapped_column(String(255), default="general")
+    channel: Mapped[str] = mapped_column(String(255), default="all")
+    key_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 # Performance indexes on high-cardinality FK / filter columns
 Index("ix_km_house_id", KeyMessageModel.message_house_id)
 Index("ix_km_pillar_id", KeyMessageModel.pillar_id)
@@ -370,6 +386,7 @@ Index("ix_review_logs_house_id", ReviewLogModel.house_id)
 Index("ix_review_logs_timestamp", ReviewLogModel.timestamp)
 Index("ix_artifact_rating_artifact_id", ArtifactRatingModel.artifact_id)
 Index("ix_chunk_usage_chunk_id", ChunkUsageStatModel.chunk_id)
+Index("ix_vector_metadata_house_id", VectorMetadataModel.message_house_id)
 
 
 class Store:
@@ -789,6 +806,80 @@ class Store:
     def session(self) -> Session:
         return self.session_factory()
 
+    def upsert_vector_metadata(
+        self,
+        id: str,
+        message_house_id: UUID,
+        house_name: str,
+        house_summary: str,
+        content: str,
+        section_type: str,
+        priority: int,
+        persona: str,
+        channel: str,
+        key_message_id: Optional[UUID] = None,
+        last_synced: Optional[datetime] = None,
+    ) -> None:
+        with self.session() as s:
+            existing = s.get(VectorMetadataModel, id)
+            data = {
+                "id": id,
+                "message_house_id": str(message_house_id),
+                "house_name": house_name,
+                "house_summary": house_summary,
+                "content": content,
+                "section_type": section_type,
+                "priority": priority,
+                "persona": persona,
+                "channel": channel,
+                "key_message_id": str(key_message_id) if key_message_id else None,
+                "last_synced": last_synced,
+            }
+            if existing:
+                for k, v in data.items():
+                    if k != "id":
+                        setattr(existing, k, v)
+            else:
+                s.add(VectorMetadataModel(**data))
+            s.commit()
+
+    def delete_vector_metadata(self, id: str) -> None:
+        with self.session() as s:
+            existing = s.get(VectorMetadataModel, id)
+            if existing:
+                s.delete(existing)
+                s.commit()
+
+    def delete_vector_metadata_for_house(self, house_id: UUID) -> int:
+        with self.session() as s:
+            deleted = s.query(VectorMetadataModel).filter(
+                VectorMetadataModel.message_house_id == str(house_id)
+            ).delete()
+            s.commit()
+            return deleted
+
+    def list_vector_metadata_matching_filters(
+        self,
+        message_houses: Optional[list[str]] = None,
+        section_types: Optional[list[str]] = None,
+        personas: Optional[list[str]] = None,
+        channels: Optional[list[str]] = None,
+        min_priority: Optional[int] = None,
+    ) -> list[VectorMetadataModel]:
+        with self.session() as s:
+            query = s.query(VectorMetadataModel)
+            if message_houses:
+                query = query.filter(VectorMetadataModel.message_house_id.in_(message_houses))
+            if section_types:
+                query = query.filter(VectorMetadataModel.section_type.in_(section_types))
+            if personas:
+                query = query.filter(VectorMetadataModel.persona.in_(personas))
+            if channels:
+                query = query.filter(VectorMetadataModel.channel.in_(channels))
+            if min_priority is not None:
+                query = query.filter(VectorMetadataModel.priority <= min_priority)
+            return query.all()
+
     def upsert_house(self, house: MessageHouse, workspace_id: str = "default") -> None:
         with self.session() as s:
             existing = s.get(HouseModel, str(house.id))
@@ -825,13 +916,27 @@ class Store:
 
     def upsert_key_message(self, msg: KeyMessage) -> None:
         with self.session() as s:
+            channel_models = []
+            if msg.channels:
+                for ch in msg.channels:
+                    ch_id = getattr(ch, "value", str(ch))
+                    ch_model = s.get(ChannelModel, ch_id)
+                    if ch_model:
+                        channel_models.append(ch_model)
+
             existing = s.get(KeyMessageModel, str(msg.id))
+            data = _to_db(msg.model_dump())
+            data.pop("channels", None)
+
             if existing:
-                for k, v in _to_db(msg.model_dump()).items():
+                for k, v in data.items():
                     if k != "id":
                         setattr(existing, k, v)
+                existing.channels = channel_models
             else:
-                s.add(KeyMessageModel(**_to_db(msg.model_dump())))
+                db_msg = KeyMessageModel(**data)
+                db_msg.channels = channel_models
+                s.add(db_msg)
             s.commit()
         _invalidate_graph()
 
@@ -2286,7 +2391,7 @@ def _msg_from_row(row: KeyMessageModel) -> KeyMessage:
         approved_at=row.approved_at,
         variants=row.variants or {},
         personas=row.personas or [],
-        channels=[_safe_channel(c) for c in (row.channels or ["all"])],
+        channels=[_safe_channel(c.id if hasattr(c, "id") else str(c)) for c in (row.channels or [])] or ["all"],
         source_chunk_id=row.source_chunk_id,
     )
 

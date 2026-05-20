@@ -239,7 +239,7 @@ class SyncEngine:
         # from failed retries that were never linked back to the source_file record).
         store.delete_houses_by_source_id(file_info.file_id)
 
-        # Commit to DB + Pinecone + graph
+        # Commit to DB + Turbovec + graph
         from src.web_app import _commit_structured_house
         try:
             house, indexed, _ = _commit_structured_house(

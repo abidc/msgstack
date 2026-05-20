@@ -81,7 +81,6 @@ def client(tmp_path):
     })
 
     with patch("src.pipeline.structure.OpenAI") as mock_oai_cls, \
-         patch("src.grounding.search.Pinecone"), \
          patch("src.grounding.search.GroundingEngine.ensure_index"), \
          patch("src.grounding.search.GroundingEngine.index_house", return_value=5):
 
@@ -104,8 +103,8 @@ def client(tmp_path):
         web_app_module.store.init()
 
         from src.pipeline.structure import HouseStructurer
-        web_app_module.structurer = HouseStructurer.__new__(HouseStructurer)
-        web_app_module.structurer.client = mock_client_instance
+        web_app_module.structurer = HouseStructurer(openai_api_key="test-key")
+        web_app_module.structurer._client = mock_client_instance
         web_app_module.structurer.model = "gpt-4o-mini"
 
         from fastapi.testclient import TestClient
@@ -201,8 +200,7 @@ def mock_engine(tmp_path):
     )
     store.upsert_key_message(msg)
 
-    with patch("src.grounding.search.OpenAI"), \
-         patch("src.grounding.search.Pinecone"):
+    with patch("src.grounding.search.OpenAI"):
         from src.grounding.search import GroundingEngine
         engine = GroundingEngine.__new__(GroundingEngine)
         engine.store = store

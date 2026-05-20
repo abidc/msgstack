@@ -76,20 +76,18 @@ def _get_oai_client():
 
 @app.on_event("startup")
 async def startup_event():
-    """Ensure Pinecone index exists on startup, seed if no houses, start sync."""
+    """Ensure vector index exists on startup, seed if no houses, start sync."""
     from src.grounding.search import GroundingEngine
     try:
         engine = GroundingEngine(
             store=store,
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
-            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-            index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
             namespace="default",
         )
         engine.ensure_index()
-        log.info("Pinecone index ensured on startup")
+        log.info("Vector index ensured on startup")
     except Exception as e:
-        log.warning("Pinecone index creation skipped: %s", e)
+        log.warning("Vector index creation skipped: %s", e)
 
     # Start the background source sync loop (engine already initialized at module level)
     _sync_engine.start()
@@ -417,19 +415,17 @@ def delete_house(house_id: str):
         raise HTTPException(400, "Invalid house ID")
     if not store.get_house(uid):
         raise HTTPException(404, "House not found")
-    # Delete Pinecone vectors BEFORE DB deletion so key message IDs are still available
+    # Delete vectors BEFORE DB deletion so key message IDs are still available
     try:
         from src.grounding.search import GroundingEngine
         ge = GroundingEngine(
             store=store,
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
-            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-            index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
             namespace="default",
         )
         ge.delete_house_vectors(uid)
     except Exception as exc:
-        log.warning("Pinecone cleanup on house delete failed: %s", exc)
+        log.warning("Vector index cleanup on house delete failed: %s", exc)
     store.delete_house(uid)
     # Rebuild graph so deleted house is removed immediately
     try:
@@ -1083,15 +1079,13 @@ def _commit_structured_house(structured: StructuredHouse, filename: str, documen
     engine = GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
-        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
         namespace=house_row_ws or "default",
     )
     try:
         engine.index_house(house.id)
         indexed = True
     except Exception as exc:
-        log.warning("Pinecone indexing skipped for %s: %s", house.id, exc)
+        log.warning("Vector indexing skipped for %s: %s", house.id, exc)
         indexed = False
 
     return house, indexed, markdown
@@ -1319,7 +1313,7 @@ def get_stats():
 
 @app.post("/api/seed")
 def run_seed():
-    """Run the seed script and index all houses to Pinecone."""
+    """Run the seed script and index all houses to vector index."""
     from seed_data.seed import seed as run_seed_script
     from src.grounding.search import GroundingEngine
 
@@ -1335,8 +1329,6 @@ def run_seed():
         engine = GroundingEngine(
             store=store,
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
-            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-            index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
             namespace=ws_id,
         )
         try:
@@ -1355,7 +1347,7 @@ def run_seed():
 
 @app.post("/api/houses/{house_id}/index")
 def index_house(house_id: str):
-    """Index a single house to Pinecone."""
+    """Index a single house to vector index."""
     from src.grounding.search import GroundingEngine
 
     try:
@@ -1371,8 +1363,6 @@ def index_house(house_id: str):
     engine = GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
-        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
         namespace=ws_id,
     )
 
@@ -1387,7 +1377,7 @@ def index_house(house_id: str):
 
 @app.post("/api/index-all")
 def index_all_houses():
-    """Index all houses to Pinecone."""
+    """Index all houses to vector index."""
     from src.grounding.search import GroundingEngine
 
     houses = store.list_houses()
@@ -1398,15 +1388,13 @@ def index_all_houses():
         engine = GroundingEngine(
             store=store,
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
-            pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-            index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
             namespace=ws_id,
         )
         try:
             vectors = engine.index_house(house.id)
             total_vectors += vectors
         except Exception as exc:
-            log.warning("Pinecone index failed for %s: %s", house.id, exc)
+            log.warning("Vector index failed for %s: %s", house.id, exc)
 
     return {
         "indexed_houses": len(houses),
@@ -1416,10 +1404,7 @@ def index_all_houses():
 
 @app.get("/api/houses/{house_id}/index-status")
 def get_house_index_status(house_id: str):
-    """Check Pinecone index status for a house: indexed / not_indexed / stale."""
-    from src.grounding.search import GroundingEngine
-    from pinecone import PineconeException
-
+    """Check vector index status for a house: indexed / not_indexed / stale."""
     try:
         house_uuid = UUID(house_id)
     except Exception:
@@ -1429,52 +1414,37 @@ def get_house_index_status(house_id: str):
     if not house:
         raise HTTPException(404, "House not found")
 
-    ws_id = store.get_house_workspace_id(house_uuid) or "default"
-    engine = GroundingEngine(
-        store=store,
-        openai_api_key=os.environ.get("OPENAI_API_KEY"),
-        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-        index_name=os.environ.get("PINECONE_INDEX", "msgstack-chunks"),
-        namespace=ws_id,
-    )
-
-    if engine.index is None:
-        return {"status": "unavailable", "message": "Pinecone index not reachable"}
-
     try:
-        # Query with a zero vector + house filter to check if any vectors exist
-        dummy = [0.0] * 1536
-        results = engine.index.query(
-            vector=dummy,
-            filter={"message_house_id": {"$eq": str(house_uuid)}},
-            top_k=1,
-            include_metadata=True,
-            namespace=engine.namespace,
-        )
-        matches = results.get("matches", [])
-        if not matches:
+        from src.store import VectorMetadataModel
+        with store.session() as s:
+            record = s.query(VectorMetadataModel).filter(
+                VectorMetadataModel.message_house_id == str(house_uuid)
+            ).first()
+
+        if not record:
             return {"status": "not_indexed", "house_id": house_id}
 
         # Check staleness: compare last_synced in vector metadata vs house.last_synced
-        meta_synced_str = matches[0].get("metadata", {}).get("last_synced")
-        if meta_synced_str and house.last_synced:
-            meta_dt = datetime.fromisoformat(meta_synced_str)
+        meta_dt = record.last_synced
+        if meta_dt and house.last_synced:
             house_dt = house.last_synced
             # Make both offset-naive for comparison
             if meta_dt.tzinfo is not None:
                 meta_dt = meta_dt.replace(tzinfo=None)
+            if house_dt.tzinfo is not None:
+                house_dt = house_dt.replace(tzinfo=None)
             stale = meta_dt < house_dt
             return {
                 "status": "stale" if stale else "indexed",
                 "house_id": house_id,
-                "indexed_at": meta_synced_str,
+                "indexed_at": meta_dt.isoformat(),
                 "house_synced": house.last_synced.isoformat(),
             }
 
         return {"status": "indexed", "house_id": house_id}
 
-    except PineconeException as e:
-        log.error("Pinecone index-status query failed for %s: %s", house_id, e)
+    except Exception as e:
+        log.error("Index status query failed for %s: %s", house_id, e)
         return {"status": "error", "message": str(e)}
 
 
