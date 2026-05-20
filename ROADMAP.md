@@ -23,7 +23,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 
 ---
 
-## Current State — v0.6 (May 2026)
+## Current State — v0.8.2 (May 2026)
 
 **Shipped (Milestones v0.1 - v0.6):**
 - ✅ FastMCP server with 15 grounding + artifact tools over streamable-HTTP
@@ -35,7 +35,7 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - ✅ **Versioning:** Snapshot system for history, diffing, and restoration
 - ✅ **Artifact Pro:** Generate 12+ artifact types with DOCX/PDF export and visual previews
 - ✅ **Artifact History:** Persistent storage and retrieval of all generated content
-- ✅ **Multi-Tenancy:** Workspace-scoped frameworks, API keys, and Pinecone namespaces
+- ✅ **Multi-Tenancy:** Workspace-scoped frameworks, API keys, and vector namespaces
 - ✅ **Production Auth:** Scoped API key authentication (`read`/`write`/`admin`)
 - ✅ **Operations:** Structured logging, rate limiting, and workspace token budgets
 - ✅ **Jinja2 UI Architecture:** Admin UI migrated to `base.html` + `dashboard.html`
@@ -52,6 +52,8 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 - ✅ **Google Drive Sync:** Background sync loop with DOCX/PDF native format support
 - ✅ **Fabric.js Canvas Shell:** `/canvas` route + basic `one_pager_visual` skill + design JSON → canvas rendering (primitive — foundation only)
 - ✅ **Canvas Routing:** `one_pager` skill now routes to `/canvas?artifact_id=...` instead of static HTML
+- ✅ **Turbovec Local Vector DB** (`v0.8.1`): replaced Pinecone with in-process quantized vector search — zero external dependencies, <0.1ms query latency
+- ✅ **Automatic Markdown Translation Layer** (`v0.8.2`): high-fidelity DOCX/PDF proxy files saved to `data/sources/{id}.md` and indexed under `source_markdown` section type for full-content RAG including tables and complex formatting
 
 **Known gaps and active issues:**
 - Visual artifact output is primitive — canvas renders basic zones without professional layout, brand system, or template design

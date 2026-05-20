@@ -1,6 +1,6 @@
 # MsgStack — Product Specification
 
-**Version:** 0.6  
+**Version:** 0.8.2  
 **Last Updated:** May 2026  
 **Status:** Active Development — Open Source (Apache 2.0)  
 **Repository:** https://github.com/abidc/msgstack-mcp  
@@ -136,10 +136,10 @@ Every artifact generated in MsgStack needs to be copy-pasted into another tool b
 
 ### Gap 6 — Activation Path for Non-Technical Buyers
 
-A marketing manager who is not a developer cannot currently set up MsgStack. The setup requires configuring a Python environment, obtaining a Pinecone API key, setting up a Cloudflare tunnel, and running a server process. This kills adoption at the evaluation stage.
+A marketing manager who is not a developer cannot currently set up MsgStack. The setup requires configuring a Python environment, setting up a Cloudflare tunnel, and running a server process. This kills adoption at the evaluation stage.
 
 **What "activation in 5 minutes" looks like:**
-- Hosted SaaS mode: cloud-hosted instance with no infrastructure to manage (Pinecone, server, DB all managed)
+- Hosted SaaS mode: cloud-hosted instance with no infrastructure to manage (server and DB all managed — no external vector DB required; Turbovec runs in-process)
 - Onboarding wizard: upload a document → review the extracted message house → generate first artifact → done
 - Industry-specific starter templates: pre-built message house skeletons for B2B SaaS, Professional Services, Enterprise Software, Financial Services — so users understand what a complete message house looks like before they build one
 - Completeness coaching: the admin UI actively prompts users to fill gaps ("Your house is missing proof points — add 2 to unlock battlecard generation")
@@ -207,17 +207,25 @@ Three-stage pipeline triggered on file upload:
 
 **Stage 3 — Persistence + Indexing**
 - SQLite/PostgreSQL: `MessageHouse`, `KeyMessage[]`, `Persona[]`, `MessagingPillar[]` saved via SQLAlchemy ORM
-- Pinecone: each message + house fields + KYM block vectorized and upserted (`text-embedding-3-small`, 1536 dims)
+- **Markdown Proxy File** (`v0.8.2`): raw extracted text saved as `data/sources/{house_id}.md` — a clean, complete, structure-preserving document that is never LLM-truncated
+- Turbovec (local, in-process): each message + house fields + KYM block vectorized and upserted (`text-embedding-3-small`, 1536 dims); no external vector DB required
+- Source Markdown chunks indexed separately under `source_markdown` section type for full-content RAG retrieval including tables and complex formatting
 - Knowledge Graph: rebuilt in-memory (NetworkX DiGraph) from DB with full entity-relationship structure
 
 ### 4.3 Grounding Architecture
 
 Two complementary retrieval layers:
 
-**Vector Layer (Pinecone)**
-- Query pipeline: embed → Pinecone query → metadata filter → keyword overlap rerank
+**Vector Layer (Turbovec — local, in-process)**
+- Query pipeline: embed → Turbovec query → metadata filter → keyword overlap rerank
 - Use case: exploratory queries, thematic similarity, broad searches
 - Results approximate by design — "nearest neighbor" semantics
+- No external service required; index stored at `data/msgstack_vectors.tvim`
+
+**Source Markdown Layer** (`v0.8.2`)
+- Raw extracted document text (full tables, headings, structured sections) chunked and indexed under `source_markdown` section type
+- Solves the problem of LLM structuring truncating or losing complex formatting from source documents
+- Retrieved alongside structured chunks during grounding to provide verbatim document context
 
 **Graph Layer (NetworkX DiGraph)**
 - Query pipeline: graph traversal via typed edges — no approximation
@@ -226,12 +234,12 @@ Two complementary retrieval layers:
 - Edge types: `CONTAINS`, `TARGETS`, `ADDRESSES`, `APPLIES_TO`, `HAS_PAIN_POINT`, `HAS_TRIGGER`, `HAS_OBJECTION`, `RESOLVES`
 
 **Retrieval Mode Routing** (via `retrieval_mode` parameter):
-- `vector` — Pinecone semantic search only
+- `vector` — Turbovec semantic search only
 - `graph` — Graph traversal for deterministic retrieval
 - `hybrid` — Vector first, graph for related context (default)
 - `keyword` — SQLite full-text fallback
 
-**Fallback chain:** Vector → Keyword (if Pinecone unavailable). Graph traversal works regardless of Pinecone status.
+**Fallback chain:** Vector → Keyword (if Turbovec index missing or empty). Graph traversal works regardless of vector index status.
 
 **Session tracking:** Active house, used chunks, confidence level, persona context.
 
@@ -450,10 +458,12 @@ Jinja2 template system (`base.html` + `dashboard.html`) served at `/`. No build 
 - Generation: GPT-4o-mini (higher temperature for creativity)
 - Embeddings: text-embedding-3-small (1536 dims)
 
-### Pinecone
-- Index: `msgstack-chunks`
-- Serverless, AWS us-east-1, cosine metric
-- Optional — system degrades gracefully to keyword search without it
+### Turbovec (Local Vector Index)
+- In-process quantized vector index (4-bit, `IdMapIndex`)
+- Stored at `data/msgstack_vectors.tvim` by default
+- No external account, API key, or network call required
+- <0.1ms query latency (in-process memory)
+- Indexes both structured message chunks and raw `source_markdown` proxy document chunks
 
 ---
 
@@ -461,15 +471,16 @@ Jinja2 template system (`base.html` + `dashboard.html`) served at `/`. No build 
 
 ```
 Upload (file)
-  → extract_text()              [pypdf / python-docx]
+  → extract_text()              [pypdf / python-docx — high-fidelity Markdown tables preserved]
+  → save_proxy_markdown()       [data/sources/{house_id}.md — raw, untruncated source proxy]
   → structurer.structure()      [GPT-4o-mini]
   → store.upsert_house()        [SQLite/PostgreSQL]
-  → engine.index_house()        [Pinecone + OpenAI embeddings]
+  → engine.index_house()        [Turbovec: structured chunks + source_markdown proxy chunks]
   → graph_engine.rebuild()      [NetworkX DiGraph from DB]
 
 MCP search_messaging(query)
   → _embed(query)               [OpenAI]
-  → index.query(...)            [Pinecone]
+  → index.query(...)            [Turbovec in-process]
   → _rerank(matches)
   → GroundingResponse
 
@@ -503,7 +514,7 @@ GET /artifact/{type}/{house_id}
 | Knowledge Graph | NetworkX DiGraph (in-process, rebuilt from DB on start) |
 | LLM | OpenAI API (GPT-4o-mini) |
 | Embeddings | OpenAI text-embedding-3-small |
-| Vector DB | Pinecone serverless |
+| Vector DB | Turbovec (local, in-process, 4-bit quantized) |
 | PDF extraction | pypdf |
 | DOCX extraction | python-docx |
 | Frontend | Jinja2 templates (base.html + dashboard.html) + vanilla JS |
@@ -517,7 +528,7 @@ GET /artifact/{type}/{house_id}
 
 ## 8. Constraints
 
-- Pinecone is optional — system degrades gracefully to keyword search; graph traversal always available
+- Turbovec is embedded in-process — system degrades gracefully to keyword search if index is missing; graph traversal always available
 - Document text is truncated at 24,000 chars before LLM structuring (multi-chunk for larger documents)
 - Artifact HTML is stateless — generated fresh from the store on each request
 - Knowledge graph is in-memory (NetworkX) — rebuilt from DB on server start; eventual consistency on writes

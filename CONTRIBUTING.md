@@ -30,7 +30,7 @@ pip install -r requirements.txt
 # Configure environment
 cp .env.example .env
 # Add OPENAI_API_KEY (required)
-# PINECONE_API_KEY is optional — search falls back to keyword without it
+# TURBOVEC_INDEX_PATH is optional — defaults to data/msgstack_vectors.tvim (no external service needed)
 
 # Seed sample data
 python -c "from seed_data.seed import seed; seed()"

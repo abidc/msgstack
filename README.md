@@ -179,17 +179,18 @@ run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
 ├── src/store.py         # SQLAlchemy ORM → SQLite (default) / PostgreSQL
 │
 ├── src/pipeline/
-│   ├── extract.py       # PDF / DOCX / TXT → text (pypdf, python-docx); 10MB guard
+│   ├── extract.py       # PDF / DOCX / TXT → high-fidelity Markdown text (pypdf, python-docx); 10MB guard
 │   ├── structure.py     # Text → StructuredHouse via GPT-4o-mini
 │   ├── generator.py     # Skill template + full grounding context → artifact
 │   └── skills.py        # JSON skill file manager (12 built-in templates)
 │
 ├── src/grounding/
-│   ├── search.py        # Turbovec local vector search + SQLite pre-filtering
+│   ├── search.py        # Turbovec local vector search + SQLite pre-filtering + source_markdown indexing
 │   ├── graph.py         # NetworkX DiGraph — deterministic retrieval
 │   ├── session.py       # In-memory session (active house, used chunks, 30-min TTL)
 │   └── tools.py         # Grounding tool implementations
 │
+├── data/sources/        # Auto-generated raw Markdown proxy files (one per house)
 └── seed_data/seed.py    # Sample message houses for development
 ```
 
@@ -250,10 +251,11 @@ MessageHouse
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `OPENAI_API_KEY` | **Yes** | — | LLM structuring, generation, embeddings |
-| `TURBOVEC_INDEX_PATH` | No | `data/msgstack_vectors.tvim` | Path to store the local vector index |
+| `TURBOVEC_INDEX_PATH` | No | `data/msgstack_vectors.tvim` | Path to store the local Turbovec vector index |
 | `MSGSTACK_BASE_URL` | No | `http://localhost:8001` | Base URL for artifact links returned by MCP tools |
 | `DATABASE_URL` | No | `sqlite:///msgstack.db` | SQLAlchemy URL — use `postgresql://...` for production |
 | `MSGSTACK_AUTH_ENABLED` | No | `false` | Enable API key auth on admin endpoints |
+| `MSGSTACK_SOURCES_DIR` | No | `data/sources` | Directory where raw Markdown proxy files are saved |
 | `LOG_FORMAT` | No | `text` | `text` or `json` |
 
 ---
@@ -292,9 +294,14 @@ curl -X POST http://localhost:8001/api/index-all
 
 See [ROADMAP.md](ROADMAP.md) for the full versioned roadmap.
 
-**In progress / next:**
-- `v0.7` — Channel as first-class entity, approval workflow, staleness alerts
-- `v0.8` — Visual Artifact Engine (Fabric.js canvas, reveal.js presentations, Penpot export)
+**Current version: v0.8.2**
+
+**Recent shipped:**
+- `v0.8.1` — Turbovec local vector search replacing Pinecone (zero external vector DB dependency)
+- `v0.8.2` — Automatic Markdown Translation Layer: high-fidelity DOCX/PDF proxy files persisted and indexed under `source_markdown` section type for full-content RAG retrieval
+
+**Coming next:**
+- `v0.8.x` — Visual Artifact Engine (Fabric.js canvas, reveal.js presentations, Penpot export)
 - `v0.9` — Governance & Alignment Engine (score any content against the message house)
 - `v1.0` — Competitive Intelligence (import competitor docs, auto-sharpen battlecards)
 
@@ -316,7 +323,7 @@ Areas where community help is most useful right now:
 
 ## License
 
-[MIT](LICENSE) — free to use, self-host, modify, and distribute.
+[Apache 2.0](LICENSE) — free to use, self-host, modify, and distribute.
 
 ---
 

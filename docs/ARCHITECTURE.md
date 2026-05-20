@@ -117,8 +117,9 @@ Extension to the extraction pipeline for complex document formats and visual con
 - PDF table extraction and vision-based table parsing are planned for this module
 
 **Unified Hybrid Indexing:**
-- On ingest, route text chunks to Pinecone and simultaneously write entity relationships to the graph store
+- On ingest, route text chunks to Turbovec (in-process) and simultaneously write entity relationships to the graph store
 - Dual-index strategy enables semantic queries (vector) and deterministic retrieval (graph)
+- Source Markdown proxy documents additionally indexed under `source_markdown` section type for full-content retrieval
 
 #### 4b. Structure — `structure.py`
 Converts raw document text into a `StructuredHouse` Pydantic model.
@@ -226,15 +227,16 @@ MsgStack already has the Penpot MCP server connected. The `export_to_penpot` MCP
 
 ### 5. Grounding Engine — `src/grounding/search.py`
 
-Hybrid search combining vector similarity and keyword overlap.
+Hybrid search combining Turbovec local vector similarity and keyword overlap. No external vector database required.
 
 ```
 Query string
   │
   ├── _embed(query)  [text-embedding-3-small, 1536 dims]
   │
-  ├── Pinecone.query(vector, top_k=20, namespace, filter)
-  │     └── filter: section_types, personas, channels, house_ids
+  ├── TurbovecIndex.query(vector, top_k=20)
+  │     └── in-memory IdMapIndex (4-bit quantized, <0.1ms)
+  │     └── post-filter: section_types, personas, channels, house_ids (via metadata store)
   │
   ├── _keyword_overlap_score(query, chunk_content)
   │     └── token intersection / query token count
@@ -244,9 +246,11 @@ Query string
   └── return top-k GroundingResult[]
 ```
 
-**Index schema:** each Pinecone vector stores metadata: `house_id`, `house_name`, `section_type`, `priority`, `persona`, `channel`, `content`, `last_synced`.
+**Index schema:** each Turbovec vector is keyed by a `uint64` hash of the chunk ID. Metadata (`house_id`, `house_name`, `section_type`, `priority`, `persona`, `channel`, `content`, `last_synced`) stored in a parallel SQLite `vector_metadata` table.
 
-Grounding is **optional** — if Pinecone is not configured the engine returns an empty result set and the MCP tools fall back to direct DB lookups.
+**Source Markdown indexing** (`v0.8.2`): on ingest, the raw extracted Markdown proxy (`data/sources/{house_id}.md`) is chunked with 1200-char window / 200-char overlap and indexed under the `source_markdown` section type alongside structured message chunks. This ensures tables, headings, and complex formatting from source documents are retrievable verbatim during grounding.
+
+Grounding degrades gracefully — if the Turbovec index file is missing or empty, the engine returns an empty vector result set and the MCP tools fall back to direct DB lookups. Graph traversal always works regardless of vector index status.
 
 ---
 
@@ -389,8 +393,8 @@ All config read from environment variables in `Settings.__init__()`. Singleton `
 |---|---|---|
 | `OPENAI_API_KEY` | — | Required |
 | `DATABASE_URL` | `sqlite:///msgstack.db` | SQLAlchemy URL |
-| `PINECONE_API_KEY` | — | Optional; disables vector search if unset |
-| `PINECONE_INDEX` | `msgstack-chunks` | Index name |
+| `TURBOVEC_INDEX_PATH` | `data/msgstack_vectors.tvim` | Local vector index file path |
+| `MSGSTACK_SOURCES_DIR` | `data/sources` | Directory for raw Markdown proxy files |
 | `MSGSTACK_AUTH_ENABLED` | `false` | Enable API key auth |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
 | `LOG_LEVEL` | `INFO` | Python logging level |
@@ -502,7 +506,8 @@ localhost:8001
   └── run_server.py (uvicorn, single process)
         ├── PathRouter → FastMCP + FastAPI
         ├── SQLite: msgstack.db
-        └── Pinecone: cloud serverless
+        ├── Turbovec: data/msgstack_vectors.tvim (in-process, no external service)
+        └── Markdown proxies: data/sources/{house_id}.md
 
 Cloudflare Tunnel (cloudflared-tunnel container)
   └── mcp.abidc.dev → http://localhost:8001
@@ -547,7 +552,7 @@ msgstack-mcp/
 │   │   ├── generator.py   # Artifact generation — full-context grounding, all messages + personas
 │   │   └── skills.py      # SkillManager + DEFAULT_SKILLS (12) — always-overwrite on start
 │   ├── grounding/
-│   │   ├── search.py      # Hybrid vector+keyword search, Pinecone
+│   │   ├── search.py      # Turbovec local vector search + source_markdown proxy indexing
 │   │   ├── graph.py       # Knowledge graph engine — NetworkX DiGraph, deterministic retrieval
 │   │   ├── session.py     # In-memory session state
 │   │   └── tools.py       # Grounding tool implementations (list_message_houses w/ _next_step)
@@ -611,10 +616,10 @@ graph TB
         POSTGRES["PostgreSQL\n(prod)"]
     end
 
-    subgraph EXTERNAL["External Services"]
+    subgraph EXTERNAL["External & Local Services"]
         OPENAI_STRUCT["OpenAI\ngpt-4o-mini\nstructuring · generation"]
         OPENAI_EMBED["OpenAI\ntext-embedding-3-small\n1536 dims"]
-        PINECONE["Pinecone\nvector index\ncosine similarity"]
+        TURBOVEC["Turbovec\nlocal vector index\n4-bit quantized"]
     end
 
     AGENT -->|streamable-HTTP| CF
@@ -635,9 +640,9 @@ graph TB
     STRUCTURE -->|LLM call + usage| OPENAI_STRUCT
     GENERATOR -->|LLM call + usage| OPENAI_STRUCT
     GROUNDING -->|embed query| OPENAI_EMBED
-    GROUNDING -->|vector search| PINECONE
+    GROUNDING -->|vector search| TURBOVEC
     STRUCTURE -->|index chunks| OPENAI_EMBED
-    STRUCTURE -->|upsert vectors| PINECONE
+    STRUCTURE -->|upsert vectors| TURBOVEC
     DB --> SQLITE
     DB --> POSTGRES
 ```
@@ -668,9 +673,9 @@ Below both, three small boxes: "Rate Limiter", "Auth (API Keys)", "Metrics"
 LAYER 4 — PIPELINE (light yellow background, four boxes in a row):
 "Extract (PDF/DOCX)", "Structure (LLM → StructuredHouse)", "Generator (Skill → Artifact)", "Grounding Engine (vector + keyword)"
 
-LAYER 5 — STORAGE & EXTERNAL (two sub-sections):
+LAYER 5 — STORAGE & LOCAL SERVICES (two sub-sections):
 Left sub-section (light green): "SQLAlchemy ORM" with two small boxes below: "SQLite (dev)" and "PostgreSQL (prod)"
-Right sub-section (light orange): Three boxes: "OpenAI gpt-4o-mini (structuring · generation)", "OpenAI text-embedding-3-small (1536 dims)", "Pinecone (cosine similarity vector index)"
+Right sub-section (light orange): Three boxes: "OpenAI gpt-4o-mini (structuring · generation)", "OpenAI text-embedding-3-small (1536 dims)", "Turbovec (local in-process 4-bit quantized vector index, data/msgstack_vectors.tvim)"
 
 Arrows:
 - Downward arrows from Client Layer → Cloudflare Tunnel → PathRouter
@@ -679,7 +684,7 @@ Arrows:
 - FastMCP connects down-left to Grounding Engine
 - Both Pipeline and Grounding connect down to Storage & External
 - Dashed arrows from Structure and Generator to OpenAI boxes
-- Dashed arrows from Grounding Engine to OpenAI embeddings and Pinecone
+- Dashed arrows from Grounding Engine to OpenAI embeddings and Turbovec local index
 
 The overall style is a clean technical diagram like those from AWS or Stripe engineering blogs. 
 No decorative elements, no gradients on boxes, minimal shadows. 
@@ -735,7 +740,7 @@ package "Data Store" #E8F5E9 {
 package "External Services" #FFF3E0 {
   [OpenAI\ngpt-4o-mini] as GPT
   [OpenAI\nembeddings] as EMB
-  [Pinecone\nvectors] as PC
+  [Turbovec\nlocal vectors] as TV
 }
 
 BROWSER --> CF : HTTPS
@@ -755,9 +760,9 @@ GEN --> SKL
 STR --> GPT : structure
 GEN --> GPT : generate
 GRD --> EMB : embed query
-GRD --> PC : vector search
+GRD --> TV : vector search
 STR --> EMB : index chunks
-STR --> PC : upsert
+STR --> TV : upsert
 ORM --> SQLITE
 ORM --> PG
 
@@ -766,4 +771,4 @@ ORM --> PG
 
 ---
 
-*Reflects MsgStack MCP v0.6. Knowledge graph engine (`graph.py`) is fully implemented. v0.7 completes Channel as a DB entity and messaging governance. v0.8 introduces the Visual Artifact Engine (Fabric.js, reveal.js, Penpot). v0.9 adds Google Drive and OneDrive/SharePoint source integrations.*
+*Reflects MsgStack MCP v0.8.2. Turbovec local vector search (v0.8.1) replaced Pinecone — zero external vector DB dependency. Automatic Markdown Translation Layer (v0.8.2) adds source_markdown proxy indexing for full-content RAG retrieval. Knowledge graph engine (`graph.py`) is fully implemented. v0.8.x adds Visual Artifact Engine (Fabric.js, reveal.js, Penpot). v0.9 adds Governance & Alignment scoring.*

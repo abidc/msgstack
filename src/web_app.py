@@ -893,7 +893,7 @@ async def preview_structure(
 
 @app.post("/api/confirm-structure")
 async def confirm_structure(data: dict):
-    """Persist a previewed structure to DB and index to Pinecone.
+    """Persist a previewed structure to DB and index to Turbovec.
 
     Body: {"preview_token": "...", "edits": {optional field overrides}}
     """
@@ -944,7 +944,7 @@ def _commit_structured_house(
     document_type: str = "message_house",
     raw_markdown: Optional[str] = None
 ) -> tuple:
-    """Save a StructuredHouse to DB, write markdown, and index to Pinecone.
+    """Save a StructuredHouse to DB, write markdown, and index to Turbovec.
 
     Returns (house, indexed_bool, markdown_str).
     """

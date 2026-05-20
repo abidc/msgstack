@@ -37,7 +37,7 @@ def _get_engine(workspace_id: Optional[str] = None) -> GroundingEngine:
     return GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
-        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
+        turbovec_index_path=os.environ.get("TURBOVEC_INDEX_PATH"),
         namespace=namespace,
     )
 
