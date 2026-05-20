@@ -114,16 +114,25 @@ def _extract_docx(path: Path) -> str:
 
         elif tag == "tbl":
             table = DocxTable(child, doc)
-            for row in table.rows:
+            table_lines = []
+            for i, row in enumerate(table.rows):
                 seen = set()
                 cells = []
                 for cell in row.cells:
                     cid = id(cell._tc)
                     if cid not in seen:
                         seen.add(cid)
-                        cells.append(cell.text.strip().replace("\n", " "))
+                        # Clean cell text and replace inner newlines with spaces or HTML breaks
+                        cell_txt = cell.text.strip().replace("\n", " ").replace("|", "\\|")
+                        cells.append(cell_txt)
                 if any(cells):
-                    parts.append(" | ".join(cells))
+                    table_lines.append("| " + " | ".join(cells) + " |")
+                    if i == 0:
+                        # Add Markdown table divider row
+                        table_lines.append("| " + " | ".join(["---"] * len(cells)) + " |")
+            if table_lines:
+                parts.extend(table_lines)
+                parts.append("")  # Empty line after the table
 
     return "\n".join(parts)
 

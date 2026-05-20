@@ -523,7 +523,37 @@ class GroundingEngine:
                             last_synced=house.last_synced,
                         )
 
-            # 4. Upsert to Turbovec IdMapIndex
+            # 4. Chunk and index raw source markdown (high-fidelity proxy) if available
+            raw_source_path = Path("data/sources") / f"{house_id}.md"
+            if raw_source_path.exists():
+                raw_md = raw_source_path.read_text(encoding="utf-8")
+                if raw_md.strip():
+                    from src.pipeline.extract import chunk_text
+                    # Chunk the raw source markdown into ~1200-char blocks with ~200-char overlap
+                    md_chunks = chunk_text(raw_md, chunk_size=1200, overlap=200)
+                    for chunk in md_chunks:
+                        content = chunk["text"]
+                        vec = self._embed(content)
+                        str_id = f"raw-{house_id}-{chunk['chunk_id']}"
+                        uint_id = string_to_uint64(str_id)
+
+                        vectors_to_add.append(vec)
+                        ids_to_add.append(uint_id)
+
+                        self.store.upsert_vector_metadata(
+                            id=str_id,
+                            message_house_id=house_id,
+                            house_name=house.name,
+                            house_summary=house.summary or "",
+                            content=content,
+                            section_type="source_markdown",
+                            priority=3,
+                            persona="general",
+                            channel="all",
+                            last_synced=house.last_synced,
+                        )
+
+            # 5. Upsert to Turbovec IdMapIndex
             if vectors_to_add:
                 vec_arr = np.array(vectors_to_add, dtype=np.float32)
                 ids_arr = np.array(ids_to_add, dtype=np.uint64)

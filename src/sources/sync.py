@@ -246,6 +246,7 @@ class SyncEngine:
                 structured,
                 filename=file_info.file_id,
                 document_type=doc_type,
+                raw_markdown=raw_text,
             )
             house.source = "google_drive"
             house.source_id = file_info.file_id

@@ -28,6 +28,7 @@ class SectionType(str, Enum):
     COMPANY_VALUE = "company_value"
     FOUNDING_STORY = "founding_story"
     PERSONA_DETAIL = "persona_detail"
+    SOURCE_MARKDOWN = "source_markdown"
 
 
 class DocumentType(str, Enum):

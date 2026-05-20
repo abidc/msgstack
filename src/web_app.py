@@ -792,7 +792,12 @@ async def extract_upload(
         pass
 
     try:
-        house, indexed, markdown = _commit_structured_house(structured, file.filename, document_type=document_type)
+        house, indexed, markdown = _commit_structured_house(
+            structured,
+            file.filename,
+            document_type=document_type,
+            raw_markdown=text
+        )
     except Exception as e:
         log.error("DB commit failed for %s: %s", file.filename, e)
         return JSONResponse(status_code=500, content={
@@ -933,7 +938,12 @@ async def confirm_structure(data: dict):
     }
 
 
-def _commit_structured_house(structured: StructuredHouse, filename: str, document_type: str = "message_house") -> tuple:
+def _commit_structured_house(
+    structured: StructuredHouse,
+    filename: str,
+    document_type: str = "message_house",
+    raw_markdown: Optional[str] = None
+) -> tuple:
     """Save a StructuredHouse to DB, write markdown, and index to Pinecone.
 
     Returns (house, indexed_bool, markdown_str).
@@ -1073,6 +1083,11 @@ def _commit_structured_house(structured: StructuredHouse, filename: str, documen
     save_path = DATA_DIR / "frames" / f"{house.id}.md"
     save_path.parent.mkdir(exist_ok=True)
     save_path.write_text(markdown, encoding="utf-8")
+
+    if raw_markdown:
+        raw_path = DATA_DIR / "sources" / f"{house.id}.md"
+        raw_path.parent.mkdir(exist_ok=True, parents=True)
+        raw_path.write_text(raw_markdown, encoding="utf-8")
 
     from src.grounding.search import GroundingEngine
     house_row_ws = store.get_house_workspace_id(house.id)
@@ -3250,7 +3265,7 @@ def serve_canvas(request: Request):
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 def catch_all(request: Request, full_path: str):
     """Serve the SPA for any unmatched path so page refreshes don't 404."""
-    return templates.TemplateResponse("dashboard.html")
+    return templates.TemplateResponse(request, "dashboard.html")
 
 
 # --- Penpot Webhook ---
