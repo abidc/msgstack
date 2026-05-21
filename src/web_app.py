@@ -100,6 +100,14 @@ async def startup_event():
     except Exception as e:
         log.warning("Graph rebuild on startup failed: %s", e)
 
+    # Seed default templates for v0.8 visual system
+    try:
+        from src.design.template_registry import seed_default_templates
+        seed_default_templates()
+        log.info("Default templates seeded successfully")
+    except Exception as e:
+        log.warning("Default templates seeding failed: %s", e)
+
 def _check_token_budget(workspace_id: str) -> None:
     """Raise HTTP 402 if workspace token budget is exhausted."""
     ws = store.get_workspace(workspace_id)
@@ -2486,6 +2494,89 @@ def update_workspace(workspace_id: str, data: WorkspaceUpdate, auth: AuthContext
     if not result:
         raise HTTPException(404, "Workspace not found")
     return result
+
+
+# --- Brand Settings & logo ---
+
+class BrandSettingsUpdate(BaseModel):
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    accent_color: Optional[str] = None
+    background_color: Optional[str] = None
+    text_color: Optional[str] = None
+    font_heading: Optional[str] = None
+    font_body: Optional[str] = None
+
+
+@app.get("/api/workspaces/{workspace_id}/brand")
+def get_brand_settings(workspace_id: str):
+    """Fetch brand settings for a workspace, returning defaults if not found."""
+    brand = store.get_brand_settings(workspace_id)
+    if not brand:
+        from src.models import BrandSettings
+        brand = BrandSettings(workspace_id=workspace_id)
+    return brand.model_dump()
+
+
+@app.post("/api/workspaces/{workspace_id}/brand")
+def update_brand_settings(workspace_id: str, data: BrandSettingsUpdate):
+    """Upsert brand settings for a workspace."""
+    updates = data.model_dump(exclude_none=True)
+    brand = store.upsert_brand_settings(workspace_id, **updates)
+    return brand.model_dump()
+
+
+@app.post("/api/workspaces/{workspace_id}/brand/logo")
+def upload_brand_logo(workspace_id: str, file: UploadFile = File(...)):
+    """Upload a PNG or SVG logo for a workspace."""
+    ext = file.filename.split(".")[-1].lower() if file.filename else "png"
+    if ext not in ("png", "svg", "jpg", "jpeg"):
+        raise HTTPException(400, "Only PNG, SVG, and JPG logos are supported.")
+    
+    brand_dir = DATA_DIR / "brand" / workspace_id
+    brand_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_path = brand_dir / f"logo.{ext}"
+    try:
+        with open(file_path, "wb") as f:
+            f.write(file.file.read())
+    except Exception as e:
+        raise HTTPException(500, f"Failed to save logo file: {e}")
+        
+    rel_path = f"/api/workspaces/{workspace_id}/brand/logo"
+    store.upsert_brand_settings(workspace_id, logo_path=rel_path)
+    return {"logo_path": rel_path}
+
+
+@app.get("/api/workspaces/{workspace_id}/brand/logo")
+def get_brand_logo(workspace_id: str):
+    """Serve the brand logo file."""
+    brand_dir = DATA_DIR / "brand" / workspace_id
+    files = list(brand_dir.glob("logo.*"))
+    if not files:
+        raise HTTPException(404, "Logo not found")
+    return FileResponse(files[0])
+
+
+# --- Template Registry ---
+
+@app.get("/api/templates")
+def list_templates():
+    """List registered templates."""
+    from src.design.template_registry import TemplateRegistry
+    registry = TemplateRegistry()
+    return registry.list_templates()
+
+
+@app.get("/api/templates/{artifact_type}")
+def get_template(artifact_type: str):
+    """Get detailed zone layout template."""
+    from src.design.template_registry import TemplateRegistry
+    registry = TemplateRegistry()
+    template = registry.get_template(artifact_type)
+    if not template:
+        raise HTTPException(404, "Template not found")
+    return template.model_dump()
 
 
 # --- API Key Management ---

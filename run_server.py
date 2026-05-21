@@ -32,13 +32,23 @@ class PathRouter:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":
-            # Intercept startup to also boot the sync engine background loop
+            # Intercept startup to boot sync engine, seed default templates, and rebuild graph
             async def patched_receive():
                 msg = await receive()
                 if msg["type"] == "lifespan.startup":
                     try:
                         from src.web_app import _sync_engine
                         _sync_engine.start()
+                    except Exception:
+                        pass
+                    try:
+                        from src.design.template_registry import seed_default_templates
+                        seed_default_templates()
+                    except Exception:
+                        pass
+                    try:
+                        from src.grounding.graph import get_graph_engine
+                        get_graph_engine().rebuild()
                     except Exception:
                         pass
                 return msg

@@ -381,13 +381,135 @@
     <div class="page">
         <div class="page-header">
             <div>
-                <div class="page-title">System Settings</div>
-                <div class="page-subtitle">Manage API keys, workspaces, and production configuration</div>
+                <div class="page-title">Workspace Settings</div>
+                <div class="page-subtitle">Manage brand identity, colors, and document templates</div>
             </div>
         </div>
-        <div class="card">
-            <div class="card-title">Production Readiness</div>
-            <p class="text-[13px] text-slate-400 mt-2">v0.8.2 Governance & Operations Active</p>
+
+        <div class="grid-2">
+            <!-- Brand Settings Card -->
+            <div class="card" style="display:flex;flex-direction:column;gap:16px;">
+                <div class="card-header" style="margin-bottom:4px;">
+                    <span class="card-title">Brand Identity</span>
+                </div>
+                <div style="display:flex;gap:20px;align-items:center;background:var(--bg-2);padding:14px;border-radius:var(--radius-lg);border:1px solid var(--border);">
+                    <div id="brand-logo-preview-container" style="width:70px;height:70px;border:1px dashed var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;background:var(--bg-1);overflow:hidden;flex-shrink:0;">
+                        <span id="brand-logo-placeholder" style="color:var(--text-3);font-size:11px;">No Logo</span>
+                        <img id="brand-logo-preview" src="" style="max-width:100%;max-height:100%;object-fit:contain;display:none;" />
+                    </div>
+                    <div style="flex:1;">
+                        <label class="form-label" style="margin-bottom:6px;">Workspace Logo</label>
+                        <input type="file" id="brand-logo-input" accept="image/*" style="display:none;" onchange="uploadLogo(event)" />
+                        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('brand-logo-input').click()">Upload New Image</button>
+                        <div style="font-size:10px;color:var(--text-3);margin-top:5px;">PNG, JPG, SVG supported.</div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Primary Color</label>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input type="color" id="brand-color-primary" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-primary').value = this.value" />
+                            <input type="text" id="brand-text-primary" class="form-input" value="#1e293b" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-primary').value = this.value" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Secondary Color</label>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input type="color" id="brand-color-secondary" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-secondary').value = this.value" />
+                            <input type="text" id="brand-text-secondary" class="form-input" value="#3b82f6" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-secondary').value = this.value" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Accent Color</label>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input type="color" id="brand-color-accent" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-accent').value = this.value" />
+                            <input type="text" id="brand-text-accent" class="form-input" value="#f59e0b" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-accent').value = this.value" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Background Color</label>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input type="color" id="brand-color-bg" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-bg').value = this.value" />
+                            <input type="text" id="brand-text-bg" class="form-input" value="#ffffff" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-bg').value = this.value" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Text Color</label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input type="color" id="brand-color-text" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-text').value = this.value" />
+                        <input type="text" id="brand-text-text" class="form-input" value="#1e293b" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-text').value = this.value" />
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Heading Font</label>
+                        <select id="brand-font-heading" class="form-select" style="font-size:13px;">
+                            <option value="Inter">Inter</option>
+                            <option value="Outfit">Outfit</option>
+                            <option value="Roboto">Roboto</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="JetBrains Mono">JetBrains Mono</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Body Font</label>
+                        <select id="brand-font-body" class="form-select" style="font-size:13px;">
+                            <option value="Inter">Inter</option>
+                            <option value="Outfit">Outfit</option>
+                            <option value="Roboto">Roboto</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Arial">Arial</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="saveBrandSettings()" style="align-self:flex-start;margin-top:6px;">Save Brand Settings</button>
+            </div>
+
+            <!-- Templates Card -->
+            <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+                <div class="card-header">
+                    <span class="card-title">Layout Template Registry</span>
+                </div>
+                <div style="font-size:12px;color:var(--text-3);">Select a template below to preview its v2 grid structure and zone capacity mappings.</div>
+                
+                <div id="templates-list-container" style="flex:1;display:flex;flex-direction:column;gap:8px;max-height:360px;overflow-y:auto;">
+                    <!-- Templates list will render here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Template detail section below the columns if selected -->
+        <div id="template-detail-container" class="card" style="display:none;margin-top:16px;">
+            <div class="card-header">
+                <div>
+                    <span class="card-title" id="template-detail-title">Template Details</span>
+                    <div id="template-detail-subtitle" style="font-size:11px;color:var(--text-3);margin-top:2px;"></div>
+                </div>
+                <button class="btn btn-ghost btn-xs" onclick="document.getElementById('template-detail-container').style.display='none'">Close</button>
+            </div>
+            
+            <div class="grid-2" style="margin-bottom:0px;">
+                <div>
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);margin-bottom:8px;letter-spacing:0.04em;">Visual Grid Layout Preview</div>
+                    <div id="template-layout-grid-preview" style="border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;background:var(--bg-2);min-height:220px;display:flex;flex-direction:column;gap:8px;">
+                        <!-- Grid mock preview -->
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);margin-bottom:8px;letter-spacing:0.04em;">Zones Definition</div>
+                    <div id="template-zones-list" style="max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px;">
+                        <!-- Zones text -->
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -1320,7 +1442,173 @@
     // ── Settings ──────────────────────────────────────────────────────────────────
 
     async function loadSettings() {
-        // Settings section exists — could add workspace/token info here later
+        // Load Brand Settings
+        try {
+            const brand = await fetch(`${API}/workspaces/default/brand`).then(r => r.json());
+            document.getElementById('brand-color-primary').value = brand.primary_color;
+            document.getElementById('brand-text-primary').value = brand.primary_color;
+            document.getElementById('brand-color-secondary').value = brand.secondary_color;
+            document.getElementById('brand-text-secondary').value = brand.secondary_color;
+            document.getElementById('brand-color-accent').value = brand.accent_color;
+            document.getElementById('brand-text-accent').value = brand.accent_color;
+            document.getElementById('brand-color-bg').value = brand.background_color;
+            document.getElementById('brand-text-bg').value = brand.background_color;
+            document.getElementById('brand-color-text').value = brand.text_color;
+            document.getElementById('brand-text-text').value = brand.text_color;
+            document.getElementById('brand-font-heading').value = brand.font_heading;
+            document.getElementById('brand-font-body').value = brand.font_body;
+
+            const preview = document.getElementById('brand-logo-preview');
+            const placeholder = document.getElementById('brand-logo-placeholder');
+            if (brand.logo_path) {
+                preview.src = brand.logo_path + '?t=' + Date.now();
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+            } else {
+                preview.style.display = 'none';
+                placeholder.style.display = 'block';
+            }
+        } catch(e) {
+            console.error('Failed to load brand settings:', e);
+        }
+
+        // Load templates registry
+        try {
+            const list = document.getElementById('templates-list-container');
+            list.innerHTML = '<div style="color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading templates…</div>';
+            const templates = await fetch(`${API}/templates`).then(r => r.json());
+            if (!templates.length) {
+                list.innerHTML = '<div style="color:var(--text-3);font-size:13px;">No templates registered.</div>';
+                return;
+            }
+            list.innerHTML = templates.map(t => `
+                <div class="skill-opt" onclick="viewTemplate('${t.artifact_type}')" style="margin-bottom:0px; display:flex; flex-direction:column; gap:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span class="skill-opt-name" style="margin:0;">${esc(t.artifact_type.replace(/_/g, ' ').replace(/\b\w/g, c=>c.toUpperCase()))}</span>
+                        <span style="font-size:9.5px;background:var(--bg-3);color:var(--text-2);padding:1px 6px;border-radius:4px;font-weight:600;letter-spacing:0.02em;">${t.zone_count} ZONES</span>
+                    </div>
+                    <div class="skill-opt-desc">File: ${esc(t.file)}</div>
+                </div>`).join('');
+        } catch(e) {
+            document.getElementById('templates-list-container').innerHTML = `<div style="color:var(--danger);font-size:13px;">Failed to load templates: ${e.message}</div>`;
+        }
+    }
+
+    async function saveBrandSettings() {
+        const primary_color = document.getElementById('brand-text-primary').value.trim();
+        const secondary_color = document.getElementById('brand-text-secondary').value.trim();
+        const accent_color = document.getElementById('brand-text-accent').value.trim();
+        const background_color = document.getElementById('brand-text-bg').value.trim();
+        const text_color = document.getElementById('brand-text-text').value.trim();
+        const font_heading = document.getElementById('brand-font-heading').value;
+        const font_body = document.getElementById('brand-font-body').value;
+
+        try {
+            await apiFetch(`${API}/workspaces/default/brand`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    primary_color, secondary_color, accent_color, background_color, text_color, font_heading, font_body
+                })
+            });
+            toast('Brand settings saved', 'success');
+        } catch(e) {
+            toast('Save failed: ' + e.message, 'error');
+        }
+    }
+
+    async function uploadLogo(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const form = new FormData();
+        form.append('file', file);
+
+        try {
+            const res = await fetch(`${API}/workspaces/default/brand/logo`, {
+                method: 'POST',
+                body: form
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+
+            const preview = document.getElementById('brand-logo-preview');
+            const placeholder = document.getElementById('brand-logo-placeholder');
+            preview.src = data.logo_path + '?t=' + Date.now();
+            preview.style.display = 'block';
+            placeholder.style.display = 'none';
+            toast('Logo uploaded successfully', 'success');
+        } catch(e) {
+            toast('Logo upload failed: ' + e.message, 'error');
+        }
+    }
+
+    async function viewTemplate(artifact_type) {
+        // Highlight selected
+        document.querySelectorAll('#templates-list-container .skill-opt').forEach(el => {
+            el.style.borderColor = '';
+            el.style.background = '';
+        });
+        // Find clicked item (might be clicked inside parent element)
+        const clicked = event.currentTarget;
+        if (clicked) {
+            clicked.style.borderColor = 'var(--primary)';
+            clicked.style.background = 'var(--primary-dim)';
+        }
+
+        try {
+            const t = await fetch(`${API}/templates/${artifact_type}`).then(r => r.json());
+            document.getElementById('template-detail-container').style.display = 'block';
+            document.getElementById('template-detail-title').textContent = `Template: ${artifact_type.replace(/_/g, ' ').replace(/\b\w/g, c=>c.toUpperCase())}`;
+
+            const spec = t.page_spec || {};
+            document.getElementById('template-detail-subtitle').textContent = `Preset: ${spec.preset || 'custom'} (${spec.width}x${spec.height} pt, ${spec.orientation})`;
+
+            // Render zones list
+            const zonesList = document.getElementById('template-zones-list');
+            zonesList.innerHTML = t.zones.map(z => {
+                const alignmentInfo = `Row: ${z.row} · Col: ${z.col} · Colspan: ${z.colspan}`;
+                const textPreview = z.text_content ? `<div style="color:var(--text-2);margin-top:4px;font-size:11px;font-style:italic;">"${esc(z.text_content)}"</div>` : '';
+                const listPreview = z.list_items && z.list_items.length ? `<div style="color:var(--text-3);margin-top:2px;font-size:11px;">List items: ${z.list_items.map(x=>`"${esc(x)}"`).join(', ')}</div>` : '';
+                return `
+                <div style="font-size:12px;padding:8px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);">
+                    <div style="display:flex;justify-content:space-between;font-weight:600;margin-bottom:3px;">
+                        <span>Zone: ${esc(z.id)}</span>
+                        <span style="color:var(--primary);text-transform:uppercase;font-size:9.5px;font-weight:700;letter-spacing:0.04em;">${esc(z.type)}</span>
+                    </div>
+                    <div style="color:var(--text-3);font-family:monospace;font-size:10px;">${alignmentInfo}</div>
+                    ${textPreview}
+                    ${listPreview}
+                </div>`;
+            }).join('');
+
+            // Build grid visualization
+            let maxRow = 0;
+            let maxCol = 0;
+            for (const z of t.zones) {
+                if (z.row > maxRow) maxRow = z.row;
+                if (z.col + z.colspan > maxCol) maxCol = z.col + z.colspan;
+            }
+            if (maxCol < 1) maxCol = 1;
+
+            const rowsHtml = [];
+            for (let r = 0; r <= maxRow; r++) {
+                const rowZones = t.zones.filter(z => z.row === r).sort((a,b)=>a.col - b.col);
+                const colsHtml = rowZones.map(z => {
+                    const emColor = z.emphasis === 'primary' ? 'var(--primary)' : z.emphasis === 'secondary' ? 'var(--accent-purple)' : 'var(--border-light)';
+                    return `
+                    <div style="flex:${z.colspan};border:1px solid var(--border);border-left-width:3px;border-left-color:${emColor};padding:8px;background:var(--bg-1);border-radius:4px;display:flex;flex-direction:column;justify-content:center;min-height:54px;min-width:0;">
+                        <span style="font-weight:600;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(z.id)}</span>
+                        <span style="font-size:9px;color:var(--text-3);text-transform:uppercase;font-weight:600;letter-spacing:0.02em;">${esc(z.type)}</span>
+                    </div>`;
+                }).join('');
+                rowsHtml.push(`<div style="display:flex;gap:6px;width:100%;">${colsHtml}</div>`);
+            }
+            document.getElementById('template-layout-grid-preview').innerHTML = rowsHtml.join('');
+
+        } catch(e) {
+            toast('Failed to load template: ' + e.message, 'error');
+        }
     }
 
     // ── Upload flow ───────────────────────────────────────────────────────────────

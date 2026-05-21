@@ -177,16 +177,25 @@ class ArtifactGenerator:
             renderer_output=render_output,
         )
 
-    def _get_template(self, artifact_type: str) -> dict | None:
-        """Load template for the given artifact type."""
-        import json
-        from pathlib import Path
-
-        template_path = Path(f"templates/{artifact_type}.json")
-        if not template_path.exists():
-            return None
-        with open(template_path) as f:
-            return json.load(f)
+    def _get_template(self, artifact_type: str) -> Optional[dict]:
+        """Load template for the given artifact type via TemplateRegistry."""
+        try:
+            from src.design.template_registry import TemplateRegistry
+            registry = TemplateRegistry()
+            norm_type = artifact_type
+            if norm_type == "one_pager_visual":
+                norm_type = "datasheet"
+            elif norm_type == "battlecard_visual":
+                norm_type = "battlecard"
+            
+            template = registry.get_template(norm_type)
+            if template:
+                data = template.model_dump()
+                data["id"] = template.artifact_type
+                return data
+        except Exception as e:
+            log.warning("Failed to load template %s: %s", artifact_type, e)
+        return None
 
     def _build_visual_context(
         self,
