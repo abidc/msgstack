@@ -823,6 +823,7 @@
             {id:'overview',  label:'Overview'},
             {id:'messages',  label:`Messages (${(house.key_messages||[]).length})`},
             {id:'personas',  label:`Personas (${(house.personas||[]).length})`},
+            {id:'history',   label:'Review Log'},
         ];
 
         detail.innerHTML = `
@@ -884,6 +885,16 @@
                 </div>
             </div>
             <div id="personas-container">${_renderPersonas(house.personas||[], house.id)}</div>
+        </div>
+        
+        <div id="house-tab-history" style="display:none;">
+            <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <div style="font-weight:600;font-size:14px;color:var(--text);">Framework Review Trail</div>
+                    <button class="btn btn-primary btn-sm" onclick="markHouseReviewedFromDetail('${house.id}')">Mark as Reviewed (Reset Staleness)</button>
+                </div>
+                <div id="review-log-content">Loading review log...</div>
+            </div>
         </div>`;
         window._currentPillarData = pillarGrouped;
         window._sectionGrouped = grouped;
@@ -975,7 +986,7 @@
     }
 
     function switchHouseTab(tab) {
-        ['overview','messages','personas'].forEach(t => {
+        ['overview','messages','personas','history'].forEach(t => {
             const el = document.getElementById(`house-tab-${t}`);
             const btn = document.getElementById(`htab-${t}`);
             if (el) el.style.display = t===tab?'':'none';
@@ -985,6 +996,57 @@
                 btn.style.borderBottomColor = t===tab?'var(--primary)':'transparent';
             }
         });
+        if (tab === 'history') {
+            loadReviewLog(currentHouseId);
+        }
+    }
+
+    async function markHouseReviewedFromDetail(houseId) {
+        try {
+            await apiFetch(`${API}/houses/${houseId}/mark-reviewed`, { method: 'POST' });
+            toast('Framework marked as reviewed', 'success');
+            viewHouse(houseId);
+        } catch(e) {
+            toast('Failed: ' + e.message, 'error');
+        }
+    }
+
+    async function loadReviewLog(houseId) {
+        const container = document.getElementById('review-log-content');
+        if (!container) return;
+        container.innerHTML = '<span class="spinner"></span> Loading review log...';
+        try {
+            const logs = await apiFetch(`${API}/houses/${houseId}/review-log`);
+            if (!logs || !logs.length) {
+                container.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:12px 0;">No review logs recorded yet. Changes and status updates will be logged here.</div>';
+                return;
+            }
+            container.innerHTML = `
+                <table style="width:100%;border-collapse:collapse;font-size:12.5px;color:var(--text-2);">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--text-3);font-size:11px;text-transform:uppercase;">
+                            <th style="padding:8px 6px;">Timestamp</th>
+                            <th style="padding:8px 6px;">User</th>
+                            <th style="padding:8px 6px;">Action</th>
+                            <th style="padding:8px 6px;">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${logs.map(log => {
+                            const date = new Date(log.timestamp).toLocaleString();
+                            return `
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                                <td style="padding:8px 6px;white-space:nowrap;">${esc(date)}</td>
+                                <td style="padding:8px 6px;">${esc(log.performed_by || 'system')}</td>
+                                <td style="padding:8px 6px;"><span style="font-weight:600;color:var(--primary);">${esc(log.action)}</span></td>
+                                <td style="padding:8px 6px;color:var(--text-3);">${esc(log.notes || '')}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+        } catch(e) {
+            container.innerHTML = `<div style="color:var(--danger);">Failed to load review log: ${e.message}</div>`;
+        }
     }
 
     // ── Drag-to-reorder ──────────────────────────────────────────────────────────
@@ -1315,7 +1377,55 @@
         const dlBtns = artId ? `<a href="/api/artifacts/${artId}/pdf" target="_blank" class="btn btn-ghost btn-sm">↓ PDF</a>
             <a href="/api/artifacts/${artId}/docx" class="btn btn-ghost btn-sm">↓ DOCX</a>` : '';
         const visBtn = data.visual_url ? `<a href="${data.visual_url}" target="_blank" class="btn btn-ghost btn-sm">Visual →</a>` : '';
-        return `<div class="card">
+        
+        // Build status actions based on current status (default to draft if not present)
+        const currentStatus = data.status || 'draft';
+        let statusBadgeColor = 'var(--text-3)';
+        let statusBadgeText = 'Draft';
+        let transitionButtons = '';
+
+        if (currentStatus === 'draft') {
+            statusBadgeColor = 'rgba(100,116,139,.15)';
+            statusBadgeText = 'Draft';
+            transitionButtons = `<button class="btn btn-ghost btn-sm" onclick="updateArtifactStatus('${artId}', 'internal_review')">Submit for Review</button>`;
+        } else if (currentStatus === 'internal_review') {
+            statusBadgeColor = 'rgba(245,158,11,.15)';
+            statusBadgeText = 'Internal Review';
+            transitionButtons = `
+                <button class="btn btn-ghost btn-sm" style="color:var(--success);border-color:var(--success);margin-right:4px;" onclick="updateArtifactStatus('${artId}', 'approved')">✓ Approve</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="updateArtifactStatus('${artId}', 'draft')">✕ Reject</button>
+            `;
+        } else if (currentStatus === 'approved') {
+            statusBadgeColor = 'var(--success-dim)';
+            statusBadgeText = 'Approved';
+            transitionButtons = `<button class="btn btn-ghost btn-sm" onclick="updateArtifactStatus('${artId}', 'internal_review')">↩ Revert to Review</button>`;
+        }
+
+        const ratingAndStatusHtml = artId ? `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap;gap:12px;">
+                <!-- Rating controls -->
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:12.5px;color:var(--text-2);">Rate this content:</span>
+                    <div style="display:flex;gap:4px;" class="rating-stars">
+                        ${[1,2,3,4,5].map(star => `
+                            <button onclick="rateArtifact('${artId}', ${star}, this)" 
+                                    style="background:none;border:none;color:var(--text-3);font-size:18px;cursor:pointer;padding:0;transition:color .1s;"
+                                    onmouseenter="this.style.color='#f59e0b'" onmouseleave="this.style.color=''">★</button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Status lifecycle controls -->
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:12px;font-weight:600;padding:3px 9px;border-radius:100px;background:${statusBadgeColor};color:var(--text-2);border:1px solid var(--border);">${statusBadgeText}</span>
+                    <div style="display:flex;gap:6px;">
+                        ${transitionButtons}
+                    </div>
+                </div>
+            </div>
+        ` : '';
+
+        return `<div class="card" id="artifact-result-${artId}">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
                 <div>
                     <div class="card-title">${esc(data.house_name)}</div>
@@ -1328,7 +1438,57 @@
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:7px;">Full Content</div>
                 <div style="font-size:13.5px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;">${esc(data.raw_content)}</div>
             </div>`:''}
+            ${ratingAndStatusHtml}
         </div>`;
+    }
+
+    async function rateArtifact(artifactId, stars, btn) {
+        try {
+            await apiFetch(`${API}/artifacts/${artifactId}/rate`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ rating: stars })
+            });
+            toast('Content rated successfully', 'success');
+            const parent = btn.parentNode;
+            const buttons = Array.from(parent.children);
+            buttons.forEach((b, idx) => {
+                b.style.color = idx < stars ? '#f59e0b' : 'var(--text-3)';
+            });
+        } catch(e) {
+            toast('Failed to rate: ' + e.message, 'error');
+        }
+    }
+
+    async function updateArtifactStatus(artifactId, status) {
+        try {
+            await apiFetch(`${API}/artifacts/${artifactId}/status`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ status })
+            });
+            toast(`Artifact status updated to ${status.replace('_', ' ')}`, 'success');
+            // Refresh preview container by retrieving artifact detail
+            const container = document.getElementById('artifact-preview-container');
+            const data = await apiFetch(`${API}/artifacts/${artifactId}`);
+            // Remap keys to match the generator response
+            data.artifact_id = data.id;
+            // Get visual url
+            const visualTypes = ["one_pager", "social_posts", "email_template", "battlecard", "email_sequence", "one_pager_visual"];
+            const artifactType = visualTypes.includes(data.skill_id) ? data.skill_id : null;
+            if (artifactType) {
+                if (artifactType === "one_pager_visual" || artifactType === "one_pager") {
+                    data.visual_url = `${API.replace("/api", "")}/canvas?artifact_id=${data.id}`;
+                } else {
+                    data.visual_url = `${API.replace("/api", "")}/artifact/${artifactType}/${data.house_id}`;
+                }
+            } else {
+                data.visual_url = null;
+            }
+            container.innerHTML = _renderArtifactResult(data);
+        } catch(e) {
+            toast('Failed to update status: ' + e.message, 'error');
+        }
     }
 
     function viewArtifactForHouse(houseId) {
