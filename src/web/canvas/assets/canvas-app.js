@@ -487,18 +487,18 @@ function renderHero(zone, x, y, w, h) {
     }, { crossOrigin: 'anonymous' });
   }
 
-  const headline = new fabric.Text(zone.headline || 'Your Headline Here', {
-    left: x + w/2, top: y + h/2, fontSize: 42, fontWeight: '800',
+  const headline = new fabric.Textbox(zone.headline || 'Your Headline Here', {
+    left: x + 20, top: y + h/2 - 60, width: w - 40, fontSize: 32, fontWeight: '800',
     fontFamily: brandSettings.font_secondary || 'Playfair Display',
-    fill: '#ffffff', originX: 'center', originY: 'center', textAlign: 'center'
+    fill: '#ffffff', textAlign: 'center'
   });
   group.push(headline);
 
   if (zone.subhead) {
-    const subhead = new fabric.Text(zone.subhead, {
-      left: x + w/2, top: y + h/2 + 50, fontSize: 20, fontWeight: '400',
+    const subhead = new fabric.Textbox(zone.subhead, {
+      left: x + 30, top: y + h/2 + 20, width: w - 60, fontSize: 18, fontWeight: '400',
       fontFamily: brandSettings.font_primary || 'Inter', fill: 'rgba(255,255,255,0.9)',
-      originX: 'center', originY: 'center'
+      textAlign: 'center'
     });
     group.push(subhead);
   }
@@ -522,10 +522,10 @@ function renderPositioningBlock(zone, x, y, w, h) {
     group.push(leadIn);
   }
 
-  const content = new fabric.Text(zone.content || 'Positioning statement here.', {
+  const content = new fabric.Textbox(zone.content || 'Positioning statement here.', {
     left: x + 20, top: y + (zone.lead_in ? 45 : 20), width: w - 40,
-    fontSize: 18, fontWeight: '400', fontFamily: 'Inter',
-    fill: '#1f2328', lineHeight: 1.6
+    fontSize: 16, fontWeight: '400', fontFamily: 'Inter',
+    fill: '#1f2328', lineHeight: 1.4
   });
   group.push(content);
 
@@ -553,15 +553,15 @@ function renderPillarGrid(zone, x, y, w, h) {
     });
     group.push(icon);
 
-    const headline = new fabric.Text(pillar.headline || 'Pillar', {
-      left: px + cardW/2, top: py + 80, fontSize: 20, fontWeight: '700',
-      fontFamily: 'Inter', fill: '#1f2328', originX: 'center', originY: 'center'
+    const headline = new fabric.Textbox(pillar.headline || 'Pillar', {
+      left: px + 10, top: py + 75, width: cardW - 20, fontSize: 16, fontWeight: '700',
+      fontFamily: 'Inter', fill: '#1f2328', textAlign: 'center'
     });
     group.push(headline);
 
-    const body = new fabric.Text(pillar.body || '', {
-      left: px + 15, top: py + 120, width: cardW - 30, fontSize: 14,
-      fontFamily: 'Inter', fill: '#656d76', lineHeight: 1.5
+    const body = new fabric.Textbox(pillar.body || '', {
+      left: px + 15, top: py + 110, width: cardW - 30, fontSize: 13,
+      fontFamily: 'Inter', fill: '#656d76', lineHeight: 1.4, textAlign: 'left'
     });
     group.push(body);
   });
@@ -589,9 +589,9 @@ function renderMessageList(zone, x, y, w, h) {
     });
     group.push(label);
 
-    const content = new fabric.Text(msg.content || '', {
-      left: x + 20, top: my + 20, width: w - 60, fontSize: 14,
-      fontFamily: 'Inter', fill: '#1f2328', lineHeight: 1.4
+    const content = new fabric.Textbox(msg.content || '', {
+      left: x + 20, top: my + 18, width: w - 40, fontSize: 13,
+      fontFamily: 'Inter', fill: '#1f2328', lineHeight: 1.3
     });
     group.push(content);
 
@@ -622,23 +622,23 @@ function renderPersonaStrip(zone, x, y, w, h) {
     const card = new fabric.Rect({ left: px, top: py, width: cardW, height: cardH, fill: '#ffffff', stroke: '#d0d7de', strokeWidth: 1, rx: 8 });
     group.push(card);
 
-    const name = new fabric.Text(p.name || 'Persona', {
-      left: px + 15, top: py + 20, fontSize: 16, fontWeight: '700',
+    const name = new fabric.Textbox(p.name || 'Persona', {
+      left: px + 15, top: py + 15, width: cardW - 30, fontSize: 14, fontWeight: '700',
       fontFamily: 'Inter', fill: '#1f2328'
     });
     group.push(name);
 
-    const role = new fabric.Text(p.role || 'Role', {
-      left: px + 15, top: py + 42, fontSize: 12, fontFamily: 'Inter',
+    const role = new fabric.Textbox(p.role || 'Role', {
+      left: px + 15, top: py + 38, width: cardW - 30, fontSize: 11, fontFamily: 'Inter',
       fill: resolveToken('{{brand.primary_color}}') || '#58a6ff'
     });
     group.push(role);
 
     if (p.pain_points && p.pain_points.length > 0) {
       p.pain_points.slice(0, 2).forEach((pp, j) => {
-        const pain = new fabric.Text(`• ${pp}`, {
-          left: px + 15, top: py + 65 + j * 22, fontSize: 11,
-          fontFamily: 'Inter', fill: '#656d76', width: cardW - 30
+        const pain = new fabric.Textbox(`• ${pp}`, {
+          left: px + 15, top: py + 60 + j * 22, width: cardW - 30, fontSize: 10,
+          fontFamily: 'Inter', fill: '#656d76'
         });
         group.push(pain);
       });
@@ -664,16 +664,16 @@ function renderProofBlock(zone, x, y, w, h) {
   }
 
   if (zone.label) {
-    const label = new fabric.Text(zone.label, {
-      left: x + w/2, top: y + h/2 + 40, fontSize: 16, fontWeight: '500',
-      fontFamily: 'Inter', fill: 'rgba(255,255,255,0.8)', originX: 'center'
+    const label = new fabric.Textbox(zone.label, {
+      left: x + 20, top: y + h/2 + 25, width: w - 40, fontSize: 14, fontWeight: '500',
+      fontFamily: 'Inter', fill: 'rgba(255,255,255,0.8)', textAlign: 'center'
     });
     group.push(label);
   }
 
   if (zone.quote) {
-    const quote = new fabric.Text(`"${zone.quote}"`, {
-      left: x + 40, top: y + h - 50, width: w - 80, fontSize: 14,
+    const quote = new fabric.Textbox(`"${zone.quote}"`, {
+      left: x + 40, top: y + h - 60, width: w - 80, fontSize: 12,
       fontFamily: 'Playfair Display', fill: 'rgba(255,255,255,0.7)', fontStyle: 'italic', textAlign: 'center'
     });
     group.push(quote);
@@ -699,9 +699,9 @@ function renderCtaFooter(zone, x, y, w, h) {
   group.push(ctaText);
 
   if (zone.contact_name) {
-    const contact = new fabric.Text(zone.contact_name, {
-      left: x + w/2, top: y + h - 30, fontSize: 12, fontFamily: 'Inter',
-      fill: '#656d76', originX: 'center'
+    const contact = new fabric.Textbox(zone.contact_name, {
+      left: x + 20, top: y + h - 30, width: w - 40, fontSize: 12, fontFamily: 'Inter',
+      fill: '#656d76', textAlign: 'center'
     });
     group.push(contact);
   }
