@@ -1983,6 +1983,340 @@ const NODE_COLORS = {
         }
     }
 
+    // ── v0.7: Message Status ───────────────────────────────────────────────────────
+
+    const MSG_STATUS_META = {
+        draft:      { label: 'Draft',       color: 'var(--text-3)',   bg: 'var(--bg-3)' },
+        in_review:  { label: 'In Review',   color: '#f59e0b',         bg: 'rgba(245,158,11,.12)' },
+        approved:   { label: 'Approved',    color: 'var(--success)',  bg: 'var(--success-dim)' },
+        locked:     { label: 'Locked',      color: '#6366f1',         bg: 'rgba(99,102,241,.12)' },
+        outdated:   { label: 'Outdated',    color: 'var(--danger)',   bg: 'rgba(239,68,68,.12)' },
+    };
+
+    function msgStatusBadge(status) {
+        const m = MSG_STATUS_META[status] || MSG_STATUS_META.draft;
+        return `<span style="font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:20px;background:${m.bg};color:${m.color};">${m.label}</span>`;
+    }
+
+    async function setMsgStatus(msgId, status, btn) {
+        const prev = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.textContent = '…'; }
+        try {
+            await apiFetch(`${API}/messages/${msgId}/status`, {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ status, approved_by: 'admin' }),
+            });
+            toast(`Message ${status}`, 'success');
+            viewHouse(currentHouseId);
+        } catch(e) {
+            toast('Status update failed: ' + e.message, 'error');
+            if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+        }
+    }
+
+    // Bulk approve — checkboxes on each message row
+    let _bulkSelected = new Set();
+
+    function toggleBulkCheck(msgId, cb) {
+        if (cb.checked) _bulkSelected.add(msgId);
+        else _bulkSelected.delete(msgId);
+        const btn = document.getElementById('bulk-approve-btn');
+        if (btn) {
+            btn.disabled = _bulkSelected.size === 0;
+            btn.textContent = _bulkSelected.size > 0 ? `Approve ${_bulkSelected.size} selected` : 'Approve Selected';
+        }
+    }
+
+    async function bulkApproveSelected() {
+        if (!_bulkSelected.size) return;
+        const btn = document.getElementById('bulk-approve-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
+        try {
+            const r = await apiFetch(`${API}/houses/${currentHouseId}/messages/bulk-status`, {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ message_ids: [..._bulkSelected], status: 'approved', approved_by: 'admin' }),
+            });
+            toast(`${r.updated_count} messages approved`, 'success');
+            _bulkSelected.clear();
+            viewHouse(currentHouseId);
+        } catch(e) {
+            toast('Bulk approve failed: ' + e.message, 'error');
+            if (btn) { btn.disabled = false; btn.textContent = 'Approve Selected'; }
+        }
+    }
+
+    // ── v0.7: Augmented message rendering (status badges + heatmap) ───────────────
+
+    let _usageStats = {};  // msgId → { times_used, avg_rating, boost_factor }
+
+    async function loadUsageStats(houseId) {
+        try {
+            const rows = await apiFetch(`${API}/houses/${houseId}/usage-stats`);
+            _usageStats = {};
+            for (const r of rows) _usageStats[r.id] = r;
+        } catch(_) { _usageStats = {}; }
+    }
+
+    function _heatColor(times) {
+        if (times === 0) return 'var(--text-3)';
+        if (times < 3)  return '#f59e0b';
+        if (times < 8)  return '#10b981';
+        return '#6366f1';
+    }
+
+    // Override _renderGrouped to add status badges + heatmap
+    const _origRenderGrouped = _renderGrouped;
+    function _renderGrouped(grouped) {
+        const sections = SECTION_ORDER.filter(s => grouped[s]?.length)
+            .concat(Object.keys(grouped).filter(s => !SECTION_ORDER.includes(s) && grouped[s]?.length));
+        if (!sections.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No messages yet. Add one above or use Bulk Import.</div>';
+
+        // Toolbar with status filter + bulk approve
+        const toolbar = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+            <div style="display:flex;gap:4px;background:var(--bg-2);border-radius:var(--radius);padding:2px;">
+                ${['all','draft','approved','locked','in_review','outdated'].map(s =>
+                    `<button onclick="filterMsgs('${s}',this)"
+                        style="padding:3px 10px;border:none;background:${s==='all'?'var(--bg-3)':'none'};font-size:11px;font-weight:600;color:${s==='all'?'var(--text)':'var(--text-3)'};cursor:pointer;border-radius:4px;text-transform:capitalize;"
+                        data-filter="${s}">${s === 'all' ? 'All' : s.replace('_',' ')}</button>`
+                ).join('')}
+            </div>
+            <button id="bulk-approve-btn" disabled onclick="bulkApproveSelected()"
+                style="padding:4px 12px;background:var(--success-dim);color:var(--success);border:none;border-radius:var(--radius);font-size:11px;font-weight:600;cursor:pointer;opacity:0.6;"
+                onmouseenter="if(!this.disabled)this.style.opacity='1'" onmouseleave="this.style.opacity='0.6'">
+                Approve Selected
+            </button>
+            <span style="font-size:11px;color:var(--text-3);margin-left:auto;">🔥 = used often &nbsp; ☁ = never used</span>
+        </div>`;
+
+        const msgCards = sections.map(st => {
+            const meta = SECTION_META[st] || { label: st.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), color:'#64748b', bg:'rgba(100,116,139,.1)' };
+            const msgs = grouped[st] || [];
+            return `<div class="card msg-section" data-section="${st}" style="margin-bottom:12px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                    <span style="width:7px;height:7px;border-radius:50%;background:${meta.color};display:inline-block;"></span>
+                    ${meta.label} <span style="font-weight:400;color:var(--text-3);">(${msgs.length})</span>
+                </div>
+                ${msgs.map(m => {
+                    const status = m.status || 'draft';
+                    const stat = _usageStats[m.id];
+                    const used = stat ? stat.times_used : 0;
+                    const heatIcon = used === 0 ? '☁' : used < 3 ? '·' : used < 8 ? '🔥' : '🔥🔥';
+                    const heatTip = stat ? `Used ${used}× · avg rating ${stat.avg_rating}` : 'Not used yet';
+                    const isLocked = status === 'locked';
+                    return `<div class="msg-row" data-id="${m.id}" data-status="${status}" draggable="${!isLocked}"
+                         ${!isLocked ? `ondragstart="msgDragStart(event)" ondragover="msgDragOver(event)" ondrop="msgDrop(event,'${currentHouseId}')" ondragleave="this.style.borderColor=''"` : ''}
+                         style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;transition:all .15s;">
+                        <input type="checkbox" title="Select for bulk action"
+                            style="margin-top:3px;flex-shrink:0;accent-color:var(--primary);"
+                            onchange="toggleBulkCheck('${m.id}',this)">
+                        ${!isLocked ? '<span style="cursor:grab;color:var(--text-3);font-size:13px;padding-top:2px;flex-shrink:0;user-select:none;">⠿</span>' : ''}
+                        <span style="flex:1;font-size:13.5px;color:var(--text);line-height:1.55;">${esc(m.content)}</span>
+                        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                            <span title="${heatTip}" style="font-size:12px;color:${_heatColor(used)};cursor:help;">${heatIcon}</span>
+                            ${msgStatusBadge(status)}
+                            ${status === 'draft' || status === 'in_review'
+                                ? `<button onclick="setMsgStatus('${m.id}','approved',this)" title="Approve"
+                                    style="padding:2px 8px;background:var(--success-dim);color:var(--success);border:none;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;">✓</button>`
+                                : ''}
+                            ${status === 'approved'
+                                ? `<button onclick="setMsgStatus('${m.id}','locked',this)" title="Lock"
+                                    style="padding:2px 8px;background:rgba(99,102,241,.12);color:#6366f1;border:none;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;">🔒</button>`
+                                : ''}
+                            ${status === 'locked'
+                                ? `<button onclick="setMsgStatus('${m.id}','approved',this)" title="Unlock"
+                                    style="padding:2px 8px;background:var(--bg-3);color:var(--text-2);border:none;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;">🔓</button>`
+                                : ''}
+                            ${!isLocked
+                                ? `<button onclick="deleteMessage('${m.id}')"
+                                    style="background:none;border:none;cursor:pointer;color:var(--text-3);padding:2px 4px;border-radius:4px;font-size:13px;line-height:1;"
+                                    onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text-3)'">✕</button>`
+                                : ''}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+        }).join('');
+
+        return toolbar + msgCards;
+    }
+
+    function filterMsgs(status, btn) {
+        document.querySelectorAll('[data-filter]').forEach(b => {
+            b.style.background = 'none'; b.style.color = 'var(--text-3)';
+        });
+        btn.style.background = 'var(--bg-3)'; btn.style.color = 'var(--text)';
+        document.querySelectorAll('.msg-row').forEach(row => {
+            row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
+        });
+        // Also show/hide section headers based on visible rows
+        document.querySelectorAll('.msg-section').forEach(section => {
+            const visible = [...section.querySelectorAll('.msg-row')].some(r => r.style.display !== 'none');
+            section.style.display = visible ? '' : 'none';
+        });
+    }
+
+    // Patch viewHouse to load usage stats before rendering
+    const _origViewHouse = viewHouse;
+    async function viewHouse(id) {
+        currentHouseId = id;
+        _bulkSelected.clear();
+        showSection('house-detail', false);
+        const detail = document.getElementById('house-detail-content');
+        detail.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span></div>';
+        try {
+            const [house, pillars] = await Promise.all([
+                fetch(`${API}/houses/${id}`).then(r => r.json()),
+                fetch(`${API}/houses/${id}/pillars`).then(r => r.json()).catch(() => []),
+            ]);
+            await loadUsageStats(id);  // load heatmap data before render
+            house._pillars = pillars;
+            _renderHouseDetail(house);
+        } catch(e) {
+            detail.innerHTML = `<div style="color:var(--danger);padding:20px;">Error: ${e.message}</div>`;
+        }
+    }
+
+    // ── v0.7: Staleness badges on house cards ─────────────────────────────────────
+
+    function stalenessBadge(house) {
+        if (!house.last_reviewed) {
+            return `<span title="Never reviewed" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b;">⚠ Needs Review</span>`;
+        }
+        const days = Math.floor((Date.now() - new Date(house.last_reviewed).getTime()) / 86400000);
+        if (days > 90) {
+            return `<span title="Last reviewed ${days} days ago" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b;">⚠ ${days}d old</span>`;
+        }
+        return `<span title="Reviewed ${days} days ago" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--success-dim);color:var(--success);">✓ Reviewed</span>`;
+    }
+
+    async function markHouseReviewed(houseId, event) {
+        if (event) event.stopPropagation();
+        try {
+            await apiFetch(`${API}/houses/${houseId}/mark-reviewed`, { method: 'POST' });
+            toast('Framework marked as reviewed', 'success');
+            loadHouses();
+        } catch(e) {
+            toast('Failed: ' + e.message, 'error');
+        }
+    }
+
+    // Patch loadHouses to show staleness badges
+    const _origLoadHouses = loadHouses;
+    async function loadHouses() {
+        const list = document.getElementById('houses-list');
+        list.innerHTML = '<div style="grid-column:1/-1;color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
+        try {
+            const houses = await fetch(`${API}/houses`).then(r => r.json());
+            if (!houses.length) {
+                list.innerHTML = `<div style="grid-column:1/-1;" class="card"><div style="color:var(--text-3);font-size:14px;text-align:center;padding:32px 0;">No frameworks yet. <button class="btn btn-ghost btn-sm" onclick="showSection('upload')">Upload a document →</button></div></div>`;
+                return;
+            }
+            list.innerHTML = houses.map(h => `
+                <div class="card" id="house-card-${h.id}" style="cursor:pointer;transition:border-color .12s;"
+                     onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor=''"
+                     onclick="viewHouse('${h.id}')">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+                        <div class="card-title">${esc(h.name)}${docTypeBadge(h.document_type)}${h.source==='google_drive'?'<span style="font-size:9px;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:rgba(66,133,244,.15);color:#4285f4;vertical-align:middle;margin-left:6px;">Drive</span>':''}</div>
+                        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+                            ${stalenessBadge(h)}
+                            <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:4px;background:${h.status==='active'?'var(--success-dim)':'var(--bg-3)'};color:${h.status==='active'?'var(--success)':'var(--text-3)'};">${h.status}</span>
+                        </div>
+                    </div>
+                    <div style="font-size:12.5px;color:var(--text-2);line-height:1.5;margin-bottom:12px;min-height:36px;">${esc(h.summary)}</div>
+                    <div class="house-card-footer" style="display:flex;gap:12px;font-size:11px;color:var(--text-3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;align-items:center;">
+                        <span>${h.message_count} Messages</span>
+                        <span>${h.persona_count} Personas</span>
+                        <span style="margin-left:auto;color:${h.completeness_score>=75?'var(--success)':h.completeness_score>=50?'var(--warn)':'var(--text-3)'};">${h.completeness_score}%</span>
+                        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:#f59e0b;" onclick="markHouseReviewed('${h.id}',event)">Mark Reviewed</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--danger);" onclick="event.stopPropagation();deleteHouse('${h.id}')">Delete</button>
+                    </div>
+                </div>`).join('');
+        } catch(e) { list.innerHTML = `<div style="color:var(--danger);grid-column:1/-1;">Error: ${e.message}</div>`; }
+        _equalizeGridHeights();
+    }
+
+    // ── v0.7: Channel Management ───────────────────────────────────────────────────
+
+    async function loadChannels() {
+        const el = document.getElementById('channels-list');
+        el.innerHTML = '<div style="color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
+        try {
+            const channels = await apiFetch(`${API}/channels`);
+            if (!channels.length) { el.innerHTML = '<div style="color:var(--text-3);font-size:13px;">No channels found.</div>'; return; }
+            el.innerHTML = `
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr style="border-bottom:1px solid var(--border);">
+                        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">ID</th>
+                        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Name</th>
+                        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Description</th>
+                        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Messages</th>
+                        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Type</th>
+                        <th style="padding:6px 10px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                ${channels.map(ch => `
+                    <tr style="border-bottom:1px solid var(--border);" id="ch-row-${ch.id}">
+                        <td style="padding:7px 10px;font-family:monospace;font-size:12px;color:var(--text-2);">${esc(ch.id)}</td>
+                        <td style="padding:7px 10px;font-weight:500;">${esc(ch.name)}</td>
+                        <td style="padding:7px 10px;color:var(--text-2);">${esc(ch.description || '—')}</td>
+                        <td style="padding:7px 10px;color:var(--text-3);">${ch.message_count ?? '—'}</td>
+                        <td style="padding:7px 10px;">
+                            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${ch.is_custom?'rgba(99,102,241,.12)':'var(--bg-3)'};color:${ch.is_custom?'#6366f1':'var(--text-3)'};">
+                                ${ch.is_custom ? 'Custom' : 'Built-in'}
+                            </span>
+                        </td>
+                        <td style="padding:7px 10px;text-align:right;">
+                            ${ch.is_custom
+                                ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--danger);" onclick="deleteChannel('${ch.id}')">Delete</button>`
+                                : `<span style="font-size:11px;color:var(--text-3);">Protected</span>`}
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+        } catch(e) {
+            el.innerHTML = `<div style="color:var(--danger);font-size:13px;">Error: ${e.message}</div>`;
+        }
+    }
+
+    async function addChannel() {
+        const name = document.getElementById('ch-name')?.value?.trim();
+        const desc = document.getElementById('ch-desc')?.value?.trim();
+        const errEl = document.getElementById('channels-add-error');
+        if (!name) { if(errEl){errEl.textContent='Name is required.';errEl.style.display='';} return; }
+        if(errEl) errEl.style.display = 'none';
+        try {
+            await apiFetch(`${API}/channels`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ name, description: desc || '' }),
+            });
+            toast(`Channel "${name}" created`, 'success');
+            document.getElementById('ch-name').value = '';
+            document.getElementById('ch-desc').value = '';
+            if (document.getElementById('ch-id')) document.getElementById('ch-id').value = '';
+            loadChannels();
+        } catch(e) {
+            if(errEl){errEl.textContent = 'Failed: ' + e.message; errEl.style.display='';}
+        }
+    }
+
+    async function deleteChannel(id) {
+        const row = document.getElementById('ch-row-' + id);
+        if (!confirm(`Delete channel "${id}"? This cannot be undone.`)) return;
+        try {
+            await apiFetch(`${API}/channels/${id}`, { method: 'DELETE' });
+            if (row) row.remove();
+            toast('Channel deleted', 'success');
+        } catch(e) {
+            toast('Delete failed: ' + e.message, 'error');
+        }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────────
 
     initRouting();

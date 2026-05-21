@@ -1,8 +1,10 @@
 """MsgStack MCP Server — grounding tools for marketing messaging frameworks."""
 
 import os
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
+
 
 from dotenv import load_dotenv
 
@@ -254,6 +256,11 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
             "persona_count": len(store.get_personas(h.id)),
             "message_count": len(store.get_key_messages(h.id)),
             "last_synced": h.last_synced.isoformat() if h.last_synced else None,
+            "last_reviewed": h.last_reviewed.isoformat() if h.last_reviewed else None,
+            "is_stale": h.is_stale(days=90),
+            "days_since_review": (
+                (datetime.utcnow() - h.last_reviewed).days if h.last_reviewed else None
+            ),
         }
         for h in houses
     ]

@@ -3262,10 +3262,159 @@ def serve_canvas(request: Request):
     return FileResponse("src/web/canvas/index.html")
 
 
+
+# ── v0.7: Channel CRUD ────────────────────────────────────────────────────────
+
+class ChannelCreate(BaseModel):
+    name: str
+    description: str = ""
+
+
+class ChannelUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+@app.get("/api/channels")
+def list_channels():
+    """List all channels with per-channel message counts."""
+    channels = store.get_channels()
+    for ch in channels:
+        ch["message_count"] = store.get_channel_message_count(ch["id"])
+    return channels
+
+
+@app.get("/api/channels/{channel_id}")
+def get_channel(channel_id: str):
+    ch = store.get_channel(channel_id)
+    if not ch:
+        raise HTTPException(404, "Channel not found")
+    ch["message_count"] = store.get_channel_message_count(channel_id)
+    return ch
+
+
+@app.post("/api/channels", status_code=201)
+def create_channel(data: ChannelCreate):
+    try:
+        return store.create_channel(data.name, data.description)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.patch("/api/channels/{channel_id}")
+def update_channel(channel_id: str, data: ChannelUpdate):
+    try:
+        result = store.update_channel(channel_id, data.name, data.description)
+    except ValueError as e:
+        raise HTTPException(403, str(e))
+    if not result:
+        raise HTTPException(404, "Channel not found")
+    return result
+
+
+@app.delete("/api/channels/{channel_id}", status_code=204)
+def delete_channel(channel_id: str):
+    try:
+        deleted = store.delete_channel(channel_id)
+    except ValueError as e:
+        raise HTTPException(403, str(e))
+    if not deleted:
+        raise HTTPException(404, "Channel not found")
+    return None
+
+
+# ── v0.7: Bulk Message Status ─────────────────────────────────────────────────
+
+class BulkStatusUpdate(BaseModel):
+    message_ids: list[str]
+    status: str
+    approved_by: Optional[str] = None
+
+
+@app.patch("/api/houses/{house_id}/messages/bulk-status")
+def bulk_update_message_status(house_id: str, data: BulkStatusUpdate):
+    """Bulk approve/lock/flag multiple messages at once."""
+    try:
+        count = store.bulk_update_message_status(
+            data.message_ids, data.status, data.approved_by or "admin"
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "updated_count": count}
+
+
+# ── v0.7: Review Log ──────────────────────────────────────────────────────────
+
+@app.get("/api/houses/{house_id}/review-log")
+def get_message_review_log(house_id: str, limit: int = Query(50, ge=1, le=200)):
+    """Return review log for a house (message approvals, locks, house reviews)."""
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    if not store.get_house(house_uuid):
+        raise HTTPException(404, "House not found")
+    return store.get_review_log(house_id, limit=limit)
+
+
+# ── v0.7: Mark House Reviewed ────────────────────────────────────────────────
+
+@app.post("/api/houses/{house_id}/mark-reviewed")
+def mark_house_reviewed_v2(house_id: str, reviewed_by: Optional[str] = Query(None)):
+    """Mark a house as reviewed (updates last_reviewed, appends review log)."""
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    result = store.mark_house_reviewed(str(house_uuid), reviewed_by or "admin")
+    if not result:
+        raise HTTPException(404, "House not found")
+    return {"ok": True, **result}
+
+
+# ── v0.7: Artifact Ratings & Feedback Loop ───────────────────────────────────
+
+class ArtifactRatingCreate(BaseModel):
+    rating: int              # 1-5
+    tag: str = "good"        # "good" | "bad"
+    rated_by: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@app.post("/api/artifacts/{artifact_id}/rate", status_code=201)
+def rate_artifact(artifact_id: str, data: ArtifactRatingCreate):
+    """Rate a generated artifact (1-5 stars). Updates chunk boost factors."""
+    try:
+        result = store.record_artifact_rating(
+            artifact_id=artifact_id,
+            rating=data.rating,
+            tag=data.tag,
+            rated_by=data.rated_by or "",
+            notes=data.notes or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return result
+
+
+@app.get("/api/houses/{house_id}/usage-stats")
+def get_house_usage_stats(house_id: str):
+    """Return key message usage heatmap — times used and avg rating, sorted by usage."""
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+    if not store.get_house(house_uuid):
+        raise HTTPException(404, "House not found")
+    return store.get_message_usage_stats(house_id)
+
+
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 def catch_all(request: Request, full_path: str):
     """Serve the SPA for any unmatched path so page refreshes don't 404."""
     return templates.TemplateResponse(request, "dashboard.html")
+
+
 
 
 # --- Penpot Webhook ---

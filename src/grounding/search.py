@@ -308,27 +308,63 @@ class GroundingEngine:
         return GroundingResponse(results=grounding_results, grounding_context=ctx)
 
     def _rerank(self, query: str, matches: list[dict], top_k: int) -> list[dict]:
-        """Rerank by blending vector score with keyword-overlap score and boost factors."""
+        """Rerank by blending vector score with keyword-overlap score, rating boosts, and status prioritization."""
         _STOPWORDS = {"a", "an", "the", "and", "or", "in", "of", "to", "for", "is", "are",
                       "be", "with", "that", "this", "on", "at", "by", "from", "as", "it"}
         query_tokens = {w for w in query.lower().split() if len(w) > 2 and w not in _STOPWORDS}
 
         boost_map = self._get_boost_factors()
 
+        # Fetch status map of KeyMessages in matches to prioritize approved/locked
+        msg_ids = [m["metadata"]["key_message_id"] for m in matches if m.get("metadata", {}).get("key_message_id")]
+        status_map = {}
+        if msg_ids:
+            try:
+                from src.store import KeyMessageModel
+                with self.store.session() as s:
+                    rows = s.query(KeyMessageModel).filter(KeyMessageModel.id.in_(msg_ids)).all()
+                    status_map = {r.id: r.status for r in rows}
+            except Exception as e:
+                log.warning("Failed to fetch message statuses for reranking: %s", e)
+
+        # Filter matches: completely exclude key messages that are marked outdated
+        filtered_matches = []
+        for m in matches:
+            km_id = m.get("metadata", {}).get("key_message_id")
+            if km_id and status_map.get(km_id) == "outdated":
+                continue
+            filtered_matches.append(m)
+
         def _score(match: dict) -> float:
             vec_score = match.get("score", 0.0)
-            if not query_tokens:
-                return vec_score
             content = (match.get("metadata", {}).get("content", "")).lower()
-            content_tokens = set(content.split())
-            overlap = len(query_tokens & content_tokens) / len(query_tokens)
+            
+            overlap = 0.0
+            if query_tokens:
+                content_tokens = set(content.split())
+                overlap = len(query_tokens & content_tokens) / len(query_tokens)
             base_score = 0.7 * vec_score + 0.3 * overlap
 
             chunk_id = match.get("id", "")
-            boost = boost_map.get(chunk_id, 1.0)
-            return base_score * boost
+            feedback_boost = boost_map.get(chunk_id, 1.0)
 
-        return sorted(matches, key=_score, reverse=True)[:top_k]
+            # Governance status prioritization
+            km_id = match.get("metadata", {}).get("key_message_id")
+            status = status_map.get(km_id) if km_id else "approved"
+            if status == "locked":
+                status_boost = 1.25
+            elif status == "approved":
+                status_boost = 1.15
+            elif status == "in_review":
+                status_boost = 0.95
+            elif status == "draft":
+                status_boost = 0.8
+            else:
+                status_boost = 1.0
+
+            return base_score * feedback_boost * status_boost
+
+        return sorted(filtered_matches, key=_score, reverse=True)[:top_k]
 
     def _get_boost_factors(self) -> dict[str, float]:
         """Fetch chunk_id -> boost_factor map from DB via store."""
@@ -341,7 +377,7 @@ class GroundingEngine:
             return {}
 
     def _graph_search(self, house_id: UUID, filters: SearchFilters) -> GroundingResponse:
-        """Deterministic graph retrieval — bypasses vector approximation."""
+        """Deterministic graph retrieval — bypasses vector approximation, filters outdated, prioritizes approved/locked."""
         from src.grounding.graph import get_graph_engine
         engine = get_graph_engine()
         persona = (filters.personas or [None])[0] if filters.personas else None
@@ -350,8 +386,16 @@ class GroundingEngine:
 
         results = []
         for chunk in chunks:
+            # Exclude outdated messages
+            if chunk.get("status") == "outdated":
+                continue
             if filters.section_types and chunk.get("section_type") not in filters.section_types:
                 continue
+
+            status = chunk.get("status", "draft")
+            status_order = {"locked": 0, "approved": 1, "in_review": 2, "draft": 3}
+            s_val = status_order.get(status, 4)
+
             results.append(GroundingResult(
                 chunk_id=chunk.get("id", ""),
                 content=chunk.get("content", ""),
@@ -361,10 +405,11 @@ class GroundingEngine:
                 channel=channel or "all",
                 channel_variants={},
                 source={"house_id": str(house_id), "house_name": ""},
-                confidence=1.0,
-                rerank_reason="graph:deterministic",
+                confidence=1.0 - (s_val * 0.05),
+                rerank_reason=f"graph:deterministic ({status})",
             ))
 
+        results.sort(key=lambda r: r.confidence, reverse=True)
         house = self.store.get_house(house_id)
         return GroundingResponse(
             results=results[:8],
@@ -377,12 +422,16 @@ class GroundingEngine:
         )
 
     def _fallback_search(self, query: str, filters: SearchFilters) -> GroundingResponse:
+        """Fallback search using keyword match, filters outdated, and prioritizes approved/locked."""
         all_houses = self.store.list_houses()
         results: list[GroundingResult] = []
 
         for house in all_houses:
             messages = self.store.get_key_messages(house.id)
             for msg in messages:
+                # Exclude outdated messages
+                if getattr(msg, "status", "draft") == "outdated":
+                    continue
                 if filters.section_types and str(msg.section_type) not in filters.section_types:
                     continue
                 if filters.personas:
@@ -391,11 +440,23 @@ class GroundingEngine:
                         continue
 
                 query_lower = query.lower()
+                status = getattr(msg, "status", "draft")
+                if status == "locked":
+                    status_boost = 1.25
+                elif status == "approved":
+                    status_boost = 1.15
+                elif status == "in_review":
+                    status_boost = 0.95
+                elif status == "draft":
+                    status_boost = 0.8
+                else:
+                    status_boost = 1.0
+
                 score = (
                     0.9
                     if any(kw in msg.content.lower() for kw in query_lower.split()[:3])
                     else 0.5
-                )
+                ) * status_boost
                 results.append(
                     GroundingResult(
                         chunk_id=str(msg.id),
@@ -411,7 +472,7 @@ class GroundingEngine:
                             "last_synced": house.last_synced.isoformat() if house.last_synced else None,
                         },
                         confidence=score,
-                        rerank_reason="fallback: matched by keyword proximity",
+                        rerank_reason=f"fallback: matched by keyword proximity ({status})",
                     )
                 )
 

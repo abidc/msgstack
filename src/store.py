@@ -324,6 +324,20 @@ class SourceFileModel(Base):
     connection: Mapped["SourceConnectionModel"] = relationship(back_populates="source_files")
 
 
+class BrandSettingsModel(Base):
+    __tablename__ = "brand_settings"
+
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    primary_color: Mapped[str] = mapped_column(String(20), default="#1e293b")
+    secondary_color: Mapped[str] = mapped_column(String(20), default="#3b82f6")
+    accent_color: Mapped[str] = mapped_column(String(20), default="#f59e0b")
+    background_color: Mapped[str] = mapped_column(String(20), default="#ffffff")
+    text_color: Mapped[str] = mapped_column(String(20), default="#1e293b")
+    font_heading: Mapped[str] = mapped_column(String(100), default="Inter")
+    font_body: Mapped[str] = mapped_column(String(100), default="Inter")
+    logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
 class BrandAssetModel(Base):
     __tablename__ = "brand_assets"
 
@@ -2299,6 +2313,228 @@ class Store:
             if row:
                 s.delete(row)
                 s.commit()
+
+    # ── Phase 1: Channel CRUD ─────────────────────────────────────────────────
+
+    def get_channels(self) -> list[dict]:
+        """Return all channels ordered: built-ins first, then custom alphabetically."""
+        with self.session() as s:
+            rows = s.query(ChannelModel).order_by(ChannelModel.is_custom, ChannelModel.name).all()
+            return [{"id": r.id, "name": r.name, "description": r.description, "is_custom": r.is_custom} for r in rows]
+
+    def get_channel(self, channel_id: str) -> dict | None:
+        with self.session() as s:
+            r = s.get(ChannelModel, channel_id)
+            if not r:
+                return None
+            return {"id": r.id, "name": r.name, "description": r.description, "is_custom": r.is_custom}
+
+    def create_channel(self, name: str, description: str = "") -> dict:
+        """Create a user-defined custom channel. ID is slugified from name."""
+        import re
+        channel_id = re.sub(r"[^a-z0-9_]", "_", name.lower().strip())
+        with self.session() as s:
+            existing = s.get(ChannelModel, channel_id)
+            if existing:
+                raise ValueError(f"Channel '{channel_id}' already exists")
+            ch = ChannelModel(id=channel_id, name=name, description=description, is_custom=True, created_at=_now())
+            s.add(ch)
+            s.commit()
+            return {"id": ch.id, "name": ch.name, "description": ch.description, "is_custom": ch.is_custom}
+
+    def update_channel(self, channel_id: str, name: str | None = None, description: str | None = None) -> dict | None:
+        with self.session() as s:
+            ch = s.get(ChannelModel, channel_id)
+            if not ch:
+                return None
+            if not ch.is_custom:
+                raise ValueError("Cannot edit built-in channels")
+            if name is not None:
+                ch.name = name
+            if description is not None:
+                ch.description = description
+            s.commit()
+            return {"id": ch.id, "name": ch.name, "description": ch.description, "is_custom": ch.is_custom}
+
+    def delete_channel(self, channel_id: str) -> bool:
+        with self.session() as s:
+            ch = s.get(ChannelModel, channel_id)
+            if not ch:
+                return False
+            if not ch.is_custom:
+                raise ValueError("Cannot delete built-in channels")
+            s.delete(ch)
+            s.commit()
+            return True
+
+    def get_channel_message_count(self, channel_id: str) -> int:
+        """Count how many key messages are associated with a channel."""
+        from sqlalchemy import select, func
+        with self.session() as s:
+            result = s.execute(
+                select(func.count()).select_from(key_message_channel_association).where(
+                    key_message_channel_association.c.channel_id == channel_id
+                )
+            ).scalar()
+            return result or 0
+
+    # ── Phase 3: Message Approval Workflow ────────────────────────────────────
+
+    def update_message_status(self, message_id: str, status: str, approved_by: str = "", notes: str = "") -> dict | None:
+        """Update key message status and log the action to review_logs."""
+        valid = {"draft", "in_review", "approved", "outdated", "locked"}
+        if status not in valid:
+            raise ValueError(f"Invalid status. Must be one of: {valid}")
+        with self.session() as s:
+            msg = s.get(KeyMessageModel, message_id)
+            if not msg:
+                return None
+            msg.status = status
+            if status == "approved":
+                msg.approved_by = approved_by or "admin"
+                msg.approved_at = _now()
+            log = ReviewLogModel(
+                id=str(uuid4()),
+                house_id=msg.message_house_id,
+                message_id=message_id,
+                action=status,
+                performed_by=approved_by or "admin",
+                timestamp=_now(),
+                notes=notes,
+            )
+            s.add(log)
+            s.commit()
+            return {"id": message_id, "status": msg.status, "approved_by": msg.approved_by}
+
+    def bulk_update_message_status(self, message_ids: list[str], status: str, approved_by: str = "") -> int:
+        """Bulk update status for multiple messages. Returns count updated."""
+        updated = 0
+        for mid in message_ids:
+            result = self.update_message_status(mid, status, approved_by)
+            if result:
+                updated += 1
+        return updated
+
+    def get_review_log(self, house_id: str, limit: int = 50) -> list[dict]:
+        with self.session() as s:
+            rows = (
+                s.query(ReviewLogModel)
+                .filter(ReviewLogModel.house_id == str(house_id))
+                .order_by(ReviewLogModel.timestamp.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "message_id": r.message_id,
+                    "action": r.action,
+                    "performed_by": r.performed_by,
+                    "timestamp": r.timestamp.isoformat(),
+                    "notes": r.notes,
+                }
+                for r in rows
+            ]
+
+    # ── Phase 4: Staleness / Last Reviewed ───────────────────────────────────
+
+    def mark_house_reviewed(self, house_id: str, reviewed_by: str = "admin") -> dict | None:
+        """Set last_reviewed = now() and append a review log entry."""
+        with self.session() as s:
+            house = s.get(HouseModel, str(house_id))
+            if not house:
+                return None
+            house.last_reviewed = _now()
+            log = ReviewLogModel(
+                id=str(uuid4()),
+                house_id=str(house_id),
+                message_id=None,
+                action="reviewed",
+                performed_by=reviewed_by,
+                timestamp=_now(),
+                notes="Framework marked as reviewed",
+            )
+            s.add(log)
+            s.commit()
+            return {"house_id": str(house_id), "last_reviewed": house.last_reviewed.isoformat()}
+
+    def get_stale_houses(self, days: int = 90) -> list[dict]:
+        """Return houses not reviewed in the last `days` days."""
+        from datetime import timedelta
+        cutoff = _now() - timedelta(days=days)
+        with self.session() as s:
+            rows = s.query(HouseModel).filter(
+                (HouseModel.last_reviewed == None) | (HouseModel.last_reviewed < cutoff)  # noqa: E711
+            ).all()
+            return [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "last_reviewed": r.last_reviewed.isoformat() if r.last_reviewed else None,
+                }
+                for r in rows
+            ]
+
+    # ── Phase 5: Feedback Loop ────────────────────────────────────────────────
+
+    def record_artifact_rating(self, artifact_id: str, rating: int, tag: str = "good", rated_by: str = "", notes: str = "") -> dict:
+        """Save artifact rating and update chunk boost factors for used messages."""
+        if not (1 <= rating <= 5):
+            raise ValueError("Rating must be 1-5")
+        with self.session() as s:
+            rating_row = ArtifactRatingModel(
+                id=str(uuid4()),
+                artifact_id=artifact_id,
+                rating=rating,
+                tag=tag,
+                rated_by=rated_by,
+                timestamp=_now(),
+                notes=notes,
+            )
+            s.add(rating_row)
+            artifact = s.get(ArtifactHistoryModel, artifact_id)
+            if artifact:
+                sections = artifact.sections_json or {}
+                chunk_ids: set[str] = set()
+                for section_list in sections.values():
+                    if isinstance(section_list, list):
+                        for item in section_list:
+                            cid = item.get("source_chunk_id") if isinstance(item, dict) else None
+                            if cid:
+                                chunk_ids.add(cid)
+                for chunk_id in chunk_ids:
+                    stat = s.get(ChunkUsageStatModel, chunk_id)
+                    if not stat:
+                        stat = ChunkUsageStatModel(chunk_id=chunk_id, times_used=0, avg_rating=0.0, boost_factor=1.0)
+                        s.add(stat)
+                    total = stat.times_used * stat.avg_rating + rating
+                    stat.times_used += 1
+                    stat.avg_rating = total / stat.times_used
+                    # Boost range: 0.8–1.2 centred on 3.0 baseline
+                    stat.boost_factor = max(0.8, min(1.2, 1.0 + (stat.avg_rating - 3.0) * 0.1))
+            s.commit()
+            return {"id": rating_row.id, "artifact_id": artifact_id, "rating": rating, "tag": tag}
+
+    def get_message_usage_stats(self, house_id: str) -> list[dict]:
+        """Return key messages with usage stats for the heatmap, sorted by times_used desc."""
+        with self.session() as s:
+            messages = s.query(KeyMessageModel).filter(
+                KeyMessageModel.message_house_id == str(house_id)
+            ).all()
+            result = []
+            for m in messages:
+                stat = s.get(ChunkUsageStatModel, m.source_chunk_id) if m.source_chunk_id else None
+                result.append({
+                    "id": m.id,
+                    "content": m.content,
+                    "section_type": m.section_type,
+                    "status": m.status,
+                    "times_used": stat.times_used if stat else 0,
+                    "avg_rating": round(stat.avg_rating, 1) if stat else 0.0,
+                    "boost_factor": round(stat.boost_factor, 2) if stat else 1.0,
+                })
+            result.sort(key=lambda x: x["times_used"], reverse=True)
+            return result
 
 
 def _conn_to_dict(row: "SourceConnectionModel") -> dict:
