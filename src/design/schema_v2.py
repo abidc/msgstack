@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class PagePreset(str, Enum):
+    # Standard format presets matching typical design canvas ratios
     LETTER = "letter"
     A4 = "a4"
     WIDE_16_9 = "16:9"
@@ -41,6 +42,11 @@ class TextStyle(str, Enum):
 
 
 class Zone(BaseModel):
+    model_config = {
+        "extra": "allow",
+        "arbitrary_types_allowed": True
+    }
+
     id: str
     type: ZoneType
     row: int
@@ -57,25 +63,46 @@ class Zone(BaseModel):
 
 
 class PageSpec(BaseModel):
+    model_config = {
+        "extra": "allow",
+        "arbitrary_types_allowed": True
+    }
+
     width: int
     height: int
     orientation: Orientation = Orientation.PORTRAIT
     margin: int = 40
     preset: PagePreset | None = None
+    grid_cols: int = 12
+    gutter: int = 20
+    bg_color: str = "#ffffff"
 
     @classmethod
-    def from_preset(cls, preset: PagePreset) -> "PageSpec":
+    def from_preset(cls, preset: PagePreset, **kwargs) -> "PageSpec":
         presets = {
             PagePreset.LETTER: (612, 792, Orientation.PORTRAIT),
             PagePreset.A4: (595, 842, Orientation.PORTRAIT),
             PagePreset.WIDE_16_9: (1920, 1080, Orientation.LANDSCAPE),
         }
         w, h, ori = presets[preset]
-        return cls(width=w, height=h, orientation=ori, preset=preset)
+        params = {
+            "width": w,
+            "height": h,
+            "orientation": ori,
+            "preset": preset,
+        }
+        params.update(kwargs)
+        return cls(**params)
 
 
 class DesignSpec(BaseModel):
+    model_config = {
+        "extra": "allow",
+        "arbitrary_types_allowed": True
+    }
+
     version: str = "2.0"
     page_spec: PageSpec
     zones: list[Zone] = Field(default_factory=list)
     brand_tokens: dict = Field(default_factory=dict)
+

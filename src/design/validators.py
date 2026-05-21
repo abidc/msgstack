@@ -13,6 +13,7 @@ def validate_and_fill_design_spec(
     raw_json: str,
     template_zones: list[Zone],
     house_data: dict,
+    template_page_spec: Optional[dict] = None,
 ) -> DesignSpec:
     """
     Validate LLM output against DesignSpec (Schema v2).
@@ -34,6 +35,15 @@ def validate_and_fill_design_spec(
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in design spec: {e}")
 
+    # Normalize template_zones to Zone models
+    normalized_template_zones = []
+    for tz in template_zones:
+        if isinstance(tz, dict):
+            normalized_template_zones.append(Zone(**tz))
+        else:
+            normalized_template_zones.append(tz)
+    template_zones = normalized_template_zones
+
     # Ensure zones list exists
     zones_out = parsed.get("zones", [])
     if not isinstance(zones_out, list):
@@ -43,6 +53,13 @@ def validate_and_fill_design_spec(
     existing_zones = {}
     for z in zones_out:
         if isinstance(z, dict) and "id" in z:
+            # Normalize legacy content struct
+            if "content" in z and isinstance(z["content"], dict):
+                cnt = z["content"]
+                if "text" in cnt and "text_content" not in z:
+                    z["text_content"] = cnt["text"]
+                if "items" in cnt and "list_items" not in z:
+                    z["list_items"] = cnt["items"]
             existing_zones[z["id"]] = z
 
     # If any required zone from template is missing, inject it
@@ -65,9 +82,20 @@ def validate_and_fill_design_spec(
 
     parsed["zones"] = zones_out
 
-    # Ensure page_spec exists
-    if "page_spec" not in parsed:
-        parsed["page_spec"] = PageSpec.from_preset(PagePreset.LETTER).model_dump()
+    # Ensure page_spec exists and defaults from template_page_spec
+    if "page_spec" not in parsed or not parsed["page_spec"]:
+        if template_page_spec:
+            parsed["page_spec"] = template_page_spec.model_dump() if hasattr(template_page_spec, "model_dump") else dict(template_page_spec)
+        else:
+            parsed["page_spec"] = PageSpec.from_preset(PagePreset.LETTER).model_dump()
+    else:
+        # Merge missing keys from template_page_spec
+        t_spec = {}
+        if template_page_spec:
+            t_spec = template_page_spec.model_dump() if hasattr(template_page_spec, "model_dump") else dict(template_page_spec)
+        for k, v in t_spec.items():
+            if k not in parsed["page_spec"] or parsed["page_spec"][k] is None:
+                parsed["page_spec"][k] = v
 
     # Validate and return
     return DesignSpec(**parsed)

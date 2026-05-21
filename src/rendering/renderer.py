@@ -118,6 +118,11 @@ class FabricRenderer(ArtifactRenderer):
         )
 
     def _build_fabric_json(self, sections: dict, context: dict) -> dict:
+        if "design_spec" in sections and sections["design_spec"]:
+            spec = sections["design_spec"]
+            import json
+            return json.loads(spec) if isinstance(spec, str) else spec
+
         objects = []
         y_offset = 50
         house_name = context.get("house_name", "Untitled")
@@ -149,11 +154,13 @@ class FabricRenderer(ArtifactRenderer):
                 "fill": "#333333",
             })
             y_offset += 30
+            
+            value_str = str(value)
             objects.append({
                 "type": "text",
                 "left": 70,
                 "top": y_offset,
-                "text": value[:500],
+                "text": value_str[:500],
                 "fontSize": 14,
                 "fill": "#555555",
                 "width": 700,

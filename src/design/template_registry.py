@@ -74,7 +74,7 @@ class TemplateRegistry:
 
 
 def build_datasheet_template() -> Template:
-    page = PageSpec.from_preset(PagePreset.LETTER)
+    page = PageSpec.from_preset(PagePreset.LETTER, grid_cols=3, gutter=20)
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
@@ -114,7 +114,7 @@ def build_datasheet_template() -> Template:
 
 
 def build_battlecard_template() -> Template:
-    page = PageSpec.from_preset(PagePreset.LETTER)
+    page = PageSpec.from_preset(PagePreset.LETTER, grid_cols=3, gutter=20)
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
@@ -154,7 +154,7 @@ def build_battlecard_template() -> Template:
 
 
 def build_social_card_template() -> Template:
-    page = PageSpec.from_preset(PagePreset.WIDE_16_9)
+    page = PageSpec.from_preset(PagePreset.WIDE_16_9, grid_cols=4, gutter=20)
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=4,
@@ -189,7 +189,7 @@ def build_social_card_template() -> Template:
 
 
 def build_executive_summary_template() -> Template:
-    page = PageSpec.from_preset(PagePreset.LETTER)
+    page = PageSpec.from_preset(PagePreset.LETTER, grid_cols=3, gutter=20)
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
@@ -232,6 +232,7 @@ def build_executive_summary_template() -> Template:
         zones=zones,
         brand_zones=["header", "cta_footer"],
     )
+
 
 
 def seed_default_templates(registry: TemplateRegistry | None = None) -> None:

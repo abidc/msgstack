@@ -2053,6 +2053,54 @@ def render_artifact(artifact_id: str, renderer: str = Query("fabric")):
 class DesignSpecUpdate(BaseModel):
     design_spec: dict
 
+@app.get("/api/artifacts/{artifact_id}/design_spec")
+def get_artifact_design_spec(artifact_id: str):
+    """Fetch the Fabric.js design spec for an artifact, falling back to a generated template spec."""
+    from src.store import ArtifactHistoryModel
+    try:
+        aid = UUID(artifact_id)
+    except Exception:
+        raise HTTPException(400, "Invalid artifact ID")
+    
+    with store.session() as s:
+        record = s.query(ArtifactHistoryModel).filter(ArtifactHistoryModel.id == str(aid)).first()
+        if not record:
+            raise HTTPException(404, "Artifact not found")
+        
+        sections = record.sections_json or {}
+        if "design_spec" in sections and sections["design_spec"]:
+            spec = sections["design_spec"]
+            return json.loads(spec) if isinstance(spec, str) else spec
+        
+        # No design_spec saved yet, generate from template
+        from src.pipeline.generator import ArtifactGenerator
+        generator = ArtifactGenerator(store, skills)
+        
+        # Skills mapping
+        artifact_type = record.skill_id
+        template = generator._get_template(artifact_type)
+        if template:
+            house = store.get_house(UUID(record.house_id)) if record.house_id else None
+            if house:
+                messages = store.get_key_messages(house.id)
+                personas = store.get_personas(house.id)
+                visual_context = generator._build_visual_context(
+                    record.house_id, template, artifact_type, house, messages, personas
+                )
+                spec = generator._fallback_design_spec(template, generator._build_context(house, messages, personas, {}), visual_context)
+                return spec
+        
+        # Create a minimal fallback design spec if no template matches
+        return {
+            "version": "2.0",
+            "artifact_type": record.skill_id,
+            "template_id": record.skill_id,
+            "zones": [],
+            "canvas_width": 850,
+            "canvas_height": 1100,
+            "background": {"type": "solid", "color": "#FFFFFF"},
+        }
+
 @app.patch("/api/artifacts/{artifact_id}/design_spec")
 def update_artifact_design_spec(artifact_id: str, data: DesignSpecUpdate):
     """Save the updated Fabric.js design spec back to the artifact."""

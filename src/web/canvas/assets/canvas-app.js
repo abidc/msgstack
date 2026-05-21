@@ -66,6 +66,14 @@ async function loadBrandSettings() {
     if (resp.ok) {
       brandSettings = await resp.json();
       if (brandSettings.custom_fonts) loadCustomFonts(brandSettings.custom_fonts);
+      // Update typography config with brand fonts
+      if (brandSettings.font_heading) TYPOGRAPHY.heading.fontFamily = brandSettings.font_heading;
+      if (brandSettings.font_body) {
+        TYPOGRAPHY.subhead.fontFamily = brandSettings.font_body;
+        TYPOGRAPHY.body.fontFamily = brandSettings.font_body;
+        TYPOGRAPHY.caption.fontFamily = brandSettings.font_body;
+        TYPOGRAPHY.tagline.fontFamily = brandSettings.font_body;
+      }
     }
   } catch (e) {
     console.warn('Brand settings not available, using defaults:', e);
@@ -99,6 +107,9 @@ async function loadDesignSpec() {
     const resp = await fetch(`/api/artifacts/${artifactId}/design_spec`);
     if (resp.ok) {
       designSpec = await resp.json();
+      if (!designSpec.page_settings && designSpec.page_spec) {
+        designSpec.page_settings = designSpec.page_spec;
+      }
     } else {
       designSpec = getDefaultDesignSpec();
     }
@@ -143,8 +154,41 @@ function updateArtifactInfo() {
 }
 
 // Grid Layout Engine
+function getRowOffsets() {
+  const ps = designSpec.page_settings || designSpec.page_spec || {};
+  const gutter = ps.gutter || 20;
+  const margin = ps.margin || 40;
+  
+  let maxRow = 0;
+  if (designSpec.zones) {
+    designSpec.zones.forEach(z => {
+      if (z.row > maxRow) maxRow = z.row;
+    });
+  }
+  
+  const rowHeights = new Array(maxRow + 1).fill(100);
+  if (designSpec.zones) {
+    designSpec.zones.forEach(z => {
+      const r = z.row || 0;
+      const h = z.height || 100;
+      if (h > rowHeights[r]) {
+        rowHeights[r] = h;
+      }
+    });
+  }
+  
+  const offsets = new Array(maxRow + 1).fill(0);
+  let currentY = margin;
+  for (let i = 0; i <= maxRow; i++) {
+    offsets[i] = currentY;
+    currentY += rowHeights[i] + gutter;
+  }
+  
+  return offsets;
+}
+
 function calculateZonePosition(zone) {
-  const ps = designSpec.page_settings || {};
+  const ps = designSpec.page_settings || designSpec.page_spec || {};
   const pageW = ps.width || 850;
   const cols = ps.grid_cols || 12;
   const gutter = ps.gutter || 20;
@@ -152,7 +196,8 @@ function calculateZonePosition(zone) {
   const colW = (pageW - margin * 2 - gutter * (cols - 1)) / cols;
 
   const x = margin + zone.col * (colW + gutter);
-  const y = margin + (zone.row || 0) * (zone.height || 100) + (zone.row || 0) * gutter;
+  const rowOffsets = getRowOffsets();
+  const y = rowOffsets[zone.row || 0] || margin;
   const w = zone.colspan * colW + (zone.colspan - 1) * gutter;
   const h = zone.height || 100;
 
@@ -161,9 +206,10 @@ function calculateZonePosition(zone) {
 
 function renderAllZones() {
   canvas.clear();
-  canvas.setWidth(designSpec.page_settings?.width || 850);
-  canvas.setHeight(designSpec.page_settings?.height || 1100);
-  canvas.backgroundColor = resolveToken(designSpec.page_settings?.bg_color) || '#ffffff';
+  const ps = designSpec.page_settings || designSpec.page_spec || {};
+  canvas.setWidth(ps.width || 850);
+  canvas.setHeight(ps.height || 1100);
+  canvas.backgroundColor = resolveToken(ps.bg_color) || '#ffffff';
 
   if (!designSpec.zones) return;
   designSpec.zones.forEach(zone => renderZone(zone));
@@ -171,24 +217,217 @@ function renderAllZones() {
   updateZoneList();
 }
 
+function normalizeZoneData(zone) {
+  const norm = { ...zone };
+
+  // 1. Header
+  if (zone.type === 'header') {
+    let productName = zone.product_name || 'Product Name';
+    let badgeText = zone.badge_text || '';
+    let logoUrl = zone.logo_url || '';
+    let bgColor = zone.background || zone.bg_color || '{{brand.primary_color}}' || '#161b22';
+
+    if (zone.text_content) {
+      const parts = zone.text_content.split('|');
+      productName = parts[0]?.trim() || productName;
+      if (parts[1]) {
+        badgeText = parts[1].trim();
+      }
+    }
+    norm.product_name = productName;
+    norm.badge_text = badgeText;
+    norm.logo_url = logoUrl;
+    norm.bg_color = bgColor;
+  }
+
+  // 2. Hero
+  if (zone.type === 'hero') {
+    let headline = zone.headline || 'Your Headline Here';
+    let subhead = zone.subhead || '';
+    let bgColor = zone.background || zone.bg_color || '{{brand.primary_color}}' || '#58a6ff';
+
+    if (zone.text_content) {
+      const parts = zone.text_content.split('\n');
+      headline = parts[0]?.trim() || headline;
+      if (parts[1]) {
+        subhead = parts[1].trim();
+      } else if (zone.text_content.includes('|')) {
+        const p2 = zone.text_content.split('|');
+        headline = p2[0].trim();
+        subhead = p2[1].trim();
+      }
+    }
+    norm.headline = headline;
+    norm.subhead = subhead;
+    norm.bg_color = bgColor;
+  }
+
+  // 3. Positioning Block
+  if (zone.type === 'positioning_block' || zone.type === 'positioning') {
+    let content = zone.content || zone.text_content || 'Positioning statement here.';
+    let leadIn = zone.lead_in || '';
+
+    if (zone.text_content && zone.text_content.includes(':')) {
+      const parts = zone.text_content.split(':');
+      leadIn = parts[0].trim();
+      content = parts.slice(1).join(':').trim();
+    }
+    norm.content = content;
+    norm.lead_in = leadIn;
+  }
+
+  // 4. Pillar Grid / Differentiation
+  if (zone.type === 'pillar_grid' || zone.type === 'differentiation') {
+    let pillars = zone.pillars || [];
+    if (pillars.length === 0 && zone.list_items && zone.list_items.length > 0) {
+      pillars = zone.list_items.map((item, idx) => {
+        let icon = '●';
+        let headline = `Pillar ${idx + 1}`;
+        let body = item;
+
+        const emojiMatch = item.match(/^([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF])/g);
+        if (emojiMatch) {
+          icon = emojiMatch[0];
+          item = item.substring(icon.length).trim();
+        }
+
+        const sepIndex = item.indexOf(':');
+        const dashIndex = item.indexOf(' - ');
+        if (sepIndex > -1) {
+          headline = item.substring(0, sepIndex).trim();
+          body = item.substring(sepIndex + 1).trim();
+        } else if (dashIndex > -1) {
+          headline = item.substring(0, dashIndex).trim();
+          body = item.substring(dashIndex + 3).trim();
+        } else if (item.length < 30) {
+          headline = item;
+          body = '';
+        } else {
+          headline = item.substring(0, 20) + '...';
+          body = item;
+        }
+
+        return { icon, headline, body };
+      });
+    }
+    norm.pillars = pillars;
+  }
+
+  // 5. Message List
+  if (zone.type === 'message_list') {
+    let messages = zone.messages || [];
+    if (messages.length === 0 && zone.list_items && zone.list_items.length > 0) {
+      messages = zone.list_items.map(item => {
+        let section_type = 'benefit';
+        let content = item;
+
+        const typeMatch = item.match(/^\[(.*?)\]/);
+        if (typeMatch) {
+          section_type = typeMatch[1].toLowerCase();
+          content = item.substring(typeMatch[0].length).trim();
+        } else if (item.includes(':')) {
+          const firstPart = item.split(':')[0].trim().toLowerCase();
+          const validTypes = ['headline', 'subhead', 'benefit', 'proof_point', 'objection'];
+          if (validTypes.includes(firstPart)) {
+            section_type = firstPart;
+            content = item.split(':').slice(1).join(':').trim();
+          }
+        }
+        return { section_type, content, priority: 2 };
+      });
+    }
+    norm.messages = messages;
+  }
+
+  // 6. Persona Strip
+  if (zone.type === 'persona_strip') {
+    let personas = zone.personas || [];
+    if (personas.length === 0 && zone.list_items && zone.list_items.length > 0) {
+      personas = zone.list_items.map((item, idx) => {
+        let name = 'Persona';
+        let role = 'Target Audience';
+        let pain_points = [];
+
+        if (item.includes('|')) {
+          const parts = item.split('|');
+          name = parts[0]?.trim() || name;
+          role = parts[1]?.trim() || role;
+          if (parts[2]) {
+            let painStr = parts[2].trim();
+            if (painStr.toLowerCase().startsWith('pain:')) {
+              painStr = painStr.substring(5).trim();
+            }
+            pain_points = painStr.split(',').map(x => x.trim()).filter(Boolean);
+          }
+        } else {
+          name = item;
+        }
+
+        return { name, role, pain_points };
+      });
+    }
+    norm.personas = personas;
+  }
+
+  // 7. Proof Block
+  if (zone.type === 'proof_block') {
+    let stat = zone.stat || '';
+    let label = zone.label || '';
+    let quote = zone.quote || '';
+    let bgColor = zone.background || zone.bg_color || '{{brand.primary_color}}' || '#0f1117';
+
+    if (!stat && zone.text_content) {
+      const parts = zone.text_content.includes('|') ? zone.text_content.split('|') : zone.text_content.split('\n');
+      stat = parts[0]?.trim() || '';
+      label = parts[1]?.trim() || '';
+      quote = parts[2]?.trim() || '';
+    }
+    norm.stat = stat;
+    norm.label = label;
+    norm.quote = quote;
+    norm.bg_color = bgColor;
+  }
+
+  // 8. CTA Footer
+  if (zone.type === 'cta_footer') {
+    let cta_text = zone.cta_text || 'Get Started';
+    let cta_url = zone.cta_url || '#';
+    let contact_name = zone.contact_name || '';
+    let bgColor = zone.background || zone.bg_color || '{{brand.primary_color}}' || '#f6f8fa';
+
+    if (zone.text_content) {
+      const parts = zone.text_content.split('|');
+      cta_text = parts[0]?.trim() || cta_text;
+      contact_name = parts[1]?.trim() || contact_name;
+    }
+    norm.cta_text = cta_text;
+    norm.cta_url = cta_url;
+    norm.contact_name = contact_name;
+    norm.bg_color = bgColor;
+  }
+
+  return norm;
+}
+
 function renderZone(zone) {
-  const { x, y, w, h } = calculateZonePosition(zone);
+  const normZone = normalizeZoneData(zone);
+  const { x, y, w, h } = calculateZonePosition(normZone);
   let obj;
 
-  switch (zone.type) {
-    case 'header': obj = renderHeader(zone, x, y, w, h); break;
-    case 'hero': obj = renderHero(zone, x, y, w, h); break;
-    case 'positioning_block': obj = renderPositioningBlock(zone, x, y, w, h); break;
-    case 'pillar_grid': obj = renderPillarGrid(zone, x, y, w, h); break;
-    case 'message_list': obj = renderMessageList(zone, x, y, w, h); break;
-    case 'persona_strip': obj = renderPersonaStrip(zone, x, y, w, h); break;
-    case 'proof_block': obj = renderProofBlock(zone, x, y, w, h); break;
-    case 'cta_footer': obj = renderCtaFooter(zone, x, y, w, h); break;
-    default: obj = renderDefaultZone(zone, x, y, w, h);
+  switch (normZone.type) {
+    case 'header': obj = renderHeader(normZone, x, y, w, h); break;
+    case 'hero': obj = renderHero(normZone, x, y, w, h); break;
+    case 'positioning_block': obj = renderPositioningBlock(normZone, x, y, w, h); break;
+    case 'pillar_grid': obj = renderPillarGrid(normZone, x, y, w, h); break;
+    case 'message_list': obj = renderMessageList(normZone, x, y, w, h); break;
+    case 'persona_strip': obj = renderPersonaStrip(normZone, x, y, w, h); break;
+    case 'proof_block': obj = renderProofBlock(normZone, x, y, w, h); break;
+    case 'cta_footer': obj = renderCtaFooter(normZone, x, y, w, h); break;
+    default: obj = renderDefaultZone(normZone, x, y, w, h);
   }
 
   if (obj) {
-    obj.data = { zoneId: zone.id, zoneType: zone.type };
+    obj.data = { zoneId: normZone.id, zoneType: normZone.type };
     canvas.add(obj);
   }
 }
@@ -505,9 +744,9 @@ function resolveToken(value) {
       secondary_color: brandSettings.secondary_color || '#f0883e',
       text_color: brandSettings.text_color || '#1f2328',
       bg_color: brandSettings.bg_color || '#ffffff',
-      font_primary: brandSettings.font_primary || 'Inter',
-      font_secondary: brandSettings.font_secondary || 'Playfair Display',
-      logo_url: brandSettings.logo_url || ''
+      font_primary: brandSettings.font_body || brandSettings.font_primary || 'Inter',
+      font_secondary: brandSettings.font_heading || brandSettings.font_secondary || 'Playfair Display',
+      logo_url: brandSettings.logo_path || brandSettings.logo_url || ''
     };
     return tokenMap[token] || match;
   });
@@ -534,10 +773,7 @@ function handleDoubleClick(e) {
   if (!zone) return;
 
   activeZone = zone;
-
-  if (['header', 'hero', 'positioning_block', 'cta_footer'].includes(zone.type)) {
-    openEditPanel(zone);
-  }
+  openEditPanel(zone);
 }
 
 function handleObjectModified(e) {
@@ -547,11 +783,28 @@ function handleObjectModified(e) {
   if (!zone) return;
 
   const obj = e.target;
-  const ps = calculateZonePosition(zone);
-  const newRow = Math.round((obj.top - (designSpec.page_settings?.margin || 40)) / (zone.height + (designSpec.page_settings?.gutter || 20)));
-  if (newRow !== zone.row) {
-    zone.row = Math.max(0, newRow);
+  const rowOffsets = getRowOffsets();
+  let bestRow = 0;
+  let minDiff = Infinity;
+  for (let r = 0; r < rowOffsets.length; r++) {
+    const diff = Math.abs(rowOffsets[r] - obj.top);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestRow = r;
+    }
+  }
+
+  const ps = designSpec.page_settings || designSpec.page_spec || {};
+  const gutter = ps.gutter || 20;
+  const lastRowY = rowOffsets[rowOffsets.length - 1] + (zone.height || 100) + gutter;
+  if (obj.top > lastRowY - gutter) {
+    bestRow = rowOffsets.length;
+  }
+
+  if (bestRow !== zone.row) {
+    zone.row = bestRow;
     renderAllZones();
+    saveDesignSpec();
   }
 }
 
@@ -588,33 +841,36 @@ function openEditPanel(zone) {
   const form = document.getElementById('edit-form');
   if (!panel || !form) return;
 
-  let html = `<div class="form-group"><label>Zone Type</label><input disabled value="${zone.type}"></div>`;
+  const normalized = normalizeZoneData(zone);
+  let html = `<div class="form-group"><label>Zone Type</label><input disabled value="${normalized.type}"></div>`;
 
-  switch (zone.type) {
+  switch (normalized.type) {
     case 'header':
       html += `
-        <div class="form-group"><label>Product Name</label><input id="edit-product-name" value="${zone.product_name || ''}"></div>
-        <div class="form-group"><label>Badge Text</label><input id="edit-badge" value="${zone.badge_text || ''}"></div>
-        <div class="form-group"><label>Background Color</label><div class="color-input"><input type="color" id="edit-header-bg" value="${resolveToken(zone.bg_color) || '#161b22'}"><input id="edit-header-bg-text" value="${zone.bg_color || ''}"></div></div>
+        <div class="form-group"><label>Product Name</label><input id="edit-product-name" value="${normalized.product_name || ''}"></div>
+        <div class="form-group"><label>Badge Text</label><input id="edit-badge" value="${normalized.badge_text || ''}"></div>
+        <div class="form-group"><label>Background Color</label><div class="color-input"><input type="color" id="edit-header-bg" value="${resolveToken(normalized.bg_color) || '#161b22'}"><input id="edit-header-bg-text" value="${normalized.bg_color || ''}"></div></div>
       `;
       break;
     case 'hero':
       html += `
-        <div class="form-group"><label>Headline</label><textarea id="edit-headline">${zone.headline || ''}</textarea></div>
-        <div class="form-group"><label>Subhead</label><input id="edit-subhead" value="${zone.subhead || ''}"></div>
-        <div class="form-group"><label>Background Color</label><div class="color-input"><input type="color" id="edit-hero-bg" value="${resolveToken(zone.bg_color) || '#58a6ff'}"><input id="edit-hero-bg-text" value="${zone.bg_color || ''}"></div></div>
-        <div class="form-group"><label>Background Image URL</label><input id="edit-hero-bg-image" value="${zone.bg_image || ''}"></div>
+        <div class="form-group"><label>Headline</label><textarea id="edit-headline">${normalized.headline || ''}</textarea></div>
+        <div class="form-group"><label>Subhead</label><input id="edit-subhead" value="${normalized.subhead || ''}"></div>
+        <div class="form-group"><label>Background Color</label><div class="color-input"><input type="color" id="edit-hero-bg" value="${resolveToken(normalized.bg_color) || '#58a6ff'}"><input id="edit-hero-bg-text" value="${normalized.bg_color || ''}"></div></div>
+        <div class="form-group"><label>Background Image URL</label><input id="edit-hero-bg-image" value="${normalized.bg_image || ''}"></div>
       `;
       break;
     case 'positioning_block':
+    case 'positioning':
       html += `
-        <div class="form-group"><label>Lead-in Label</label><input id="edit-lead-in" value="${zone.lead_in || ''}"></div>
-        <div class="form-group"><label>Content</label><textarea id="edit-content">${zone.content || ''}</textarea></div>
+        <div class="form-group"><label>Lead-in Label</label><input id="edit-lead-in" value="${normalized.lead_in || ''}"></div>
+        <div class="form-group"><label>Content</label><textarea id="edit-content">${normalized.content || ''}</textarea></div>
       `;
       break;
     case 'pillar_grid':
+    case 'differentiation':
       html += `<div id="edit-pillars">`;
-      (zone.pillars || []).forEach((p, i) => {
+      (normalized.pillars || []).forEach((p, i) => {
         html += `
           <div style="border:1px solid #30363d;padding:8px;margin:4px 0;border-radius:4px">
             <div class="form-group"><label>Pillar ${i+1} Icon</label><input id="edit-pillar-icon-${i}" value="${p.icon || ''}"></div>
@@ -627,7 +883,7 @@ function openEditPanel(zone) {
       break;
     case 'message_list':
       html += `<div id="edit-messages">`;
-      (zone.messages || []).forEach((m, i) => {
+      (normalized.messages || []).forEach((m, i) => {
         html += `
           <div style="border:1px solid #30363d;padding:8px;margin:4px 0;border-radius:4px">
             <div class="form-group"><label>Section Type</label>
@@ -645,20 +901,33 @@ function openEditPanel(zone) {
       });
       html += `</div>`;
       break;
+    case 'persona_strip':
+      html += `<div id="edit-personas">`;
+      (normalized.personas || []).forEach((p, i) => {
+        html += `
+          <div style="border:1px solid #30363d;padding:8px;margin:4px 0;border-radius:4px">
+            <div class="form-group"><label>Persona ${i+1} Name</label><input id="edit-persona-name-${i}" value="${p.name || ''}"></div>
+            <div class="form-group"><label>Role</label><input id="edit-persona-role-${i}" value="${p.role || ''}"></div>
+            <div class="form-group"><label>Pain Points (comma-separated)</label><textarea id="edit-persona-pain-${i}">${(p.pain_points || []).join(', ')}</textarea></div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+      break;
     case 'cta_footer':
       html += `
-        <div class="form-group"><label>CTA Text</label><input id="edit-cta-text" value="${zone.cta_text || ''}"></div>
-        <div class="form-group"><label>CTA URL</label><input id="edit-cta-url" value="${zone.cta_url || ''}"></div>
-        <div class="form-group"><label>Contact Info</label><input id="edit-contact" value="${zone.contact_name || ''}"></div>
-        <div class="form-group"><label>Background Color</label><div class="color-input"><input type="color" id="edit-cta-bg" value="${resolveToken(zone.bg_color) || '#f6f8fa'}"><input id="edit-cta-bg-text" value="${zone.bg_color || ''}"></div></div>
+        <div class="form-group"><label>CTA Text</label><input id="edit-cta-text" value="${normalized.cta_text || ''}"></div>
+        <div class="form-group"><label>CTA URL</label><input id="edit-cta-url" value="${normalized.cta_url || ''}"></div>
+        <div class="form-group"><label>Contact Info</label><input id="edit-contact" value="${normalized.contact_name || ''}"></div>
+        <div class="form-group"><label>Background Color</label><div class="color-input"><input type="color" id="edit-cta-bg" value="${resolveToken(normalized.bg_color) || '#f6f8fa'}"><input id="edit-cta-bg-text" value="${normalized.bg_color || ''}"></div></div>
       `;
       break;
     case 'proof_block':
       html += `
-        <div class="form-group"><label>Stat (large number)</label><input id="edit-stat" value="${zone.stat || ''}"></div>
-        <div class="form-group"><label>Label</label><input id="edit-label" value="${zone.label || ''}"></div>
-        <div class="form-group"><label>Quote</label><textarea id="edit-quote">${zone.quote || ''}</textarea></div>
-        <div class="form-group"><label>Background Color</label><div class="color-input"><input type="color" id="edit-proof-bg" value="${resolveToken(zone.bg_color) || '#0f1117'}"><input id="edit-proof-bg-text" value="${zone.bg_color || ''}"></div></div>
+        <div class="form-group"><label>Stat (large number)</label><input id="edit-stat" value="${normalized.stat || ''}"></div>
+        <div class="form-group"><label>Label</label><input id="edit-label" value="${normalized.label || ''}"></div>
+        <div class="form-group"><label>Quote</label><textarea id="edit-quote">${normalized.quote || ''}</textarea></div>
+        <div class="form-group"><label>Background Color</label><div class="color-input"><input type="color" id="edit-proof-bg" value="${resolveToken(normalized.bg_color) || '#0f1117'}"><input id="edit-proof-bg-text" value="${normalized.bg_color || ''}"></div></div>
       `;
       break;
   }
@@ -670,47 +939,96 @@ function openEditPanel(zone) {
 function saveZoneEdit() {
   if (!activeZone) return;
 
-  switch (activeZone.type) {
-    case 'header':
-      activeZone.product_name = document.getElementById('edit-product-name')?.value || activeZone.product_name;
-      activeZone.badge_text = document.getElementById('edit-badge')?.value || activeZone.badge_text;
+  const type = activeZone.type;
+
+  switch (type) {
+    case 'header': {
+      const prodName = document.getElementById('edit-product-name')?.value || '';
+      const badgeText = document.getElementById('edit-badge')?.value || '';
+      activeZone.product_name = prodName;
+      activeZone.badge_text = badgeText;
       activeZone.bg_color = document.getElementById('edit-header-bg-text')?.value || activeZone.bg_color;
+      activeZone.background = activeZone.bg_color;
+      activeZone.text_content = badgeText ? `${prodName} | ${badgeText}` : prodName;
       break;
-    case 'hero':
-      activeZone.headline = document.getElementById('edit-headline')?.value || activeZone.headline;
-      activeZone.subhead = document.getElementById('edit-subhead')?.value || activeZone.subhead;
+    }
+    case 'hero': {
+      const headline = document.getElementById('edit-headline')?.value || '';
+      const subhead = document.getElementById('edit-subhead')?.value || '';
+      activeZone.headline = headline;
+      activeZone.subhead = subhead;
       activeZone.bg_color = document.getElementById('edit-hero-bg-text')?.value || activeZone.bg_color;
+      activeZone.background = activeZone.bg_color;
       activeZone.bg_image = document.getElementById('edit-hero-bg-image')?.value || activeZone.bg_image;
+      activeZone.text_content = subhead ? `${headline}\n${subhead}` : headline;
       break;
+    }
     case 'positioning_block':
-      activeZone.lead_in = document.getElementById('edit-lead-in')?.value || activeZone.lead_in;
-      activeZone.content = document.getElementById('edit-content')?.value || activeZone.content;
+    case 'positioning': {
+      const leadIn = document.getElementById('edit-lead-in')?.value || '';
+      const content = document.getElementById('edit-content')?.value || '';
+      activeZone.lead_in = leadIn;
+      activeZone.content = content;
+      activeZone.text_content = leadIn ? `${leadIn}: ${content}` : content;
       break;
+    }
     case 'pillar_grid':
-      activeZone.pillars = (activeZone.pillars || []).map((p, i) => ({
+    case 'differentiation': {
+      const pillars = (activeZone.pillars || []).map((p, i) => ({
         icon: document.getElementById(`edit-pillar-icon-${i}`)?.value || p.icon,
         headline: document.getElementById(`edit-pillar-headline-${i}`)?.value || p.headline,
         body: document.getElementById(`edit-pillar-body-${i}`)?.value || p.body
       }));
+      activeZone.pillars = pillars;
+      activeZone.list_items = pillars.map(p => `${p.icon} ${p.headline}: ${p.body}`);
       break;
-    case 'message_list':
-      activeZone.messages = (activeZone.messages || []).map((m, i) => ({
+    }
+    case 'message_list': {
+      const messages = (activeZone.messages || []).map((m, i) => ({
         section_type: document.getElementById(`edit-msg-type-${i}`)?.value || m.section_type,
         content: document.getElementById(`edit-msg-content-${i}`)?.value || m.content
       }));
+      activeZone.messages = messages;
+      activeZone.list_items = messages.map(m => `[${m.section_type}] ${m.content}`);
       break;
-    case 'cta_footer':
-      activeZone.cta_text = document.getElementById('edit-cta-text')?.value || activeZone.cta_text;
+    }
+    case 'persona_strip': {
+      const numPersonas = activeZone.personas ? activeZone.personas.length : (activeZone.list_items ? activeZone.list_items.length : 0);
+      const personas = [];
+      for (let i = 0; i < numPersonas; i++) {
+        const name = document.getElementById(`edit-persona-name-${i}`)?.value || '';
+        const role = document.getElementById(`edit-persona-role-${i}`)?.value || '';
+        const painStr = document.getElementById(`edit-persona-pain-${i}`)?.value || '';
+        const pain_points = painStr.split(',').map(x => x.trim()).filter(Boolean);
+        personas.push({ name, role, pain_points });
+      }
+      activeZone.personas = personas;
+      activeZone.list_items = personas.map(p => `${p.name} | ${p.role} | Pain: ${p.pain_points.join(', ')}`);
+      break;
+    }
+    case 'cta_footer': {
+      const ctaText = document.getElementById('edit-cta-text')?.value || '';
+      const contact = document.getElementById('edit-contact')?.value || '';
+      activeZone.cta_text = ctaText;
       activeZone.cta_url = document.getElementById('edit-cta-url')?.value || activeZone.cta_url;
-      activeZone.contact_name = document.getElementById('edit-contact')?.value || activeZone.contact_name;
+      activeZone.contact_name = contact;
       activeZone.bg_color = document.getElementById('edit-cta-bg-text')?.value || activeZone.bg_color;
+      activeZone.background = activeZone.bg_color;
+      activeZone.text_content = contact ? `${ctaText} | ${contact}` : ctaText;
       break;
-    case 'proof_block':
-      activeZone.stat = document.getElementById('edit-stat')?.value || activeZone.stat;
-      activeZone.label = document.getElementById('edit-label')?.value || activeZone.label;
-      activeZone.quote = document.getElementById('edit-quote')?.value || activeZone.quote;
+    }
+    case 'proof_block': {
+      const stat = document.getElementById('edit-stat')?.value || '';
+      const label = document.getElementById('edit-label')?.value || '';
+      const quote = document.getElementById('edit-quote')?.value || '';
+      activeZone.stat = stat;
+      activeZone.label = label;
+      activeZone.quote = quote;
       activeZone.bg_color = document.getElementById('edit-proof-bg-text')?.value || activeZone.bg_color;
+      activeZone.background = activeZone.bg_color;
+      activeZone.text_content = quote ? `${stat} | ${label} | ${quote}` : `${stat} | ${label}`;
       break;
+    }
   }
 
   renderAllZones();
@@ -793,6 +1111,9 @@ function downloadFile(url, filename) {
 // Save design spec
 async function saveDesignSpec() {
   if (!artifactId) return;
+  if (!designSpec.page_spec && designSpec.page_settings) {
+    designSpec.page_spec = designSpec.page_settings;
+  }
   try {
     await fetch(`/api/artifacts/${artifactId}/design_spec`, {
       method: 'PATCH',

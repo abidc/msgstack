@@ -22,6 +22,8 @@ class ArtifactRequest(BaseModel):
 
 
 class GeneratedArtifact(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
     skill_id: str
     house_id: str
     house_name: str
@@ -136,7 +138,7 @@ class ArtifactGenerator:
         if is_visual and template:
             try:
                 design_spec = validate_and_fill_design_spec(
-                    raw, template.get("zones", []), context
+                    raw, template.get("zones", []), context, template.get("page_spec")
                 )
                 sections["design_spec"] = design_spec.model_dump()
             except Exception as e:
@@ -315,36 +317,33 @@ class ArtifactGenerator:
         template_zones = template.get("zones", [])
 
         for tz in template_zones:
-            zone = {
-                "id": tz.get("id"),
-                "type": tz.get("type"),
-                "capacity": tz.get("capacity", 1),
-                "max_chars": tz.get("max_chars", 500),
-                "x": tz.get("x", 0),
-                "y": tz.get("y", 0),
-                "width": tz.get("width", 100),
-                "height": tz.get("height", 100),
-                "z_index": tz.get("z_index", 0),
-                "visible": tz.get("visible", True),
-                "content": {"text": "", "items": []},
-            }
+            # Copy all fields from template zone
+            zone = dict(tz)
 
-            # Try to get pre-filled content
+            # Try to get pre-filled content from visual context
             if visual_context and "zone_mapping" in visual_context:
                 vm = visual_context["zone_mapping"].get(tz.get("id"))
                 if vm and "content" in vm:
-                    zone["content"] = vm["content"]
+                    cnt = vm["content"]
+                    if "text" in cnt and cnt["text"] and not zone.get("text_content"):
+                        zone["text_content"] = cnt["text"]
+                    if "items" in cnt and cnt["items"] and not zone.get("list_items"):
+                        zone["list_items"] = cnt["items"]
 
             zones.append(zone)
 
         return {
             "version": "2.0",
-            "artifact_type": template.get("id", "unknown"),
+            "artifact_type": template.get("artifact_type", "unknown"),
             "template_id": template.get("id", ""),
             "zones": zones,
-            "canvas_width": template.get("canvas_width", 800),
-            "canvas_height": template.get("canvas_height", 1200),
-            "background": template.get("background", {"type": "solid", "color": "#FFFFFF"}),
+            "page_settings": template.get("page_spec", {
+                "width": 850,
+                "height": 1100,
+                "grid_cols": 12,
+                "gutter": 20,
+                "margin": 40
+            }),
         }
 
     def _build_context(
