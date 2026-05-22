@@ -73,22 +73,22 @@ This roadmap reflects current state and planned direction. Items are grouped by 
 **Goal:** Complete the remaining graph and governance items before moving to the visual artifact engine.
 
 ### Channel as a First-Class Entity
-- [ ] **ChannelModel DB table:** Promote `Channel` from a code enum to a SQLAlchemy table with full CRUD endpoints
-- [ ] **Seed defaults:** `all`, `email`, `linkedin`, `twitter`, `paid_ads`, `landing_page`, `sales_deck`
-- [ ] **User-defined channels:** Create custom channels via UI without code changes
-- [ ] **Graph node upgrade:** Channel nodes backed by DB rows with full metadata
+- [x] **ChannelModel DB table:** Promote `Channel` from a code enum to a SQLAlchemy table with full CRUD endpoints
+- [x] **Seed defaults:** `all`, `email`, `linkedin`, `twitter`, `paid_ads`, `landing_page`, `sales_deck`
+- [x] **User-defined channels:** Create custom channels via UI without code changes
+- [x] **Graph node upgrade:** Channel nodes backed by DB rows with full metadata
 
 ### Graph Governance
-- [ ] **Approval Workflow:** Mark Key Messages as `Draft` or `Approved`; grounding prioritizes `Approved`
-- [ ] **Locking:** Prevent editing of "Core Messaging" once approved
-- [ ] **Artifact Status:** Lifecycle tracking: `Draft` → `Internal Review` → `Approved`
-- [ ] **Staleness Alerts:** "Last Reviewed" timestamp per framework; flag frameworks older than 90 days
-- [ ] **Review Trail:** Log of who reviewed/approved messaging updates and when
+- [x] **Approval Workflow:** Mark Key Messages as `Draft` or `Approved`; grounding prioritizes `Approved`
+- [x] **Locking:** Prevent editing of "Core Messaging" once approved
+- [x] **Artifact Status:** Lifecycle tracking: `Draft` → `Internal Review` → `Approved`
+- [x] **Staleness Alerts:** "Last Reviewed" timestamp per framework; flag frameworks older than 90 days
+- [x] **Review Trail:** Log of who reviewed/approved messaging updates and when
 
 ### Feedback Loop
-- [ ] **Content Ratings:** Rate generated artifacts (1-5 stars) or Good/Bad tags
-- [ ] **Self-Correction:** Boost relevance for messaging chunks used in high-rated artifacts
-- [ ] **Usage Heatmap:** See which parts of the message house are used most vs ignored
+- [x] **Content Ratings:** Rate generated artifacts (1-5 stars) or Good/Bad tags
+- [x] **Self-Correction:** Boost relevance for messaging chunks used in high-rated artifacts
+- [x] **Usage Heatmap:** See which parts of the message house are used most vs ignored
 
 ---
 
