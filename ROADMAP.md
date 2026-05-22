@@ -282,6 +282,15 @@ The current canvas app renders basic zones. This stream rebuilds the renderer to
 
 ---
 
+### Stream 7 — Premium Canvas Templates & Engine Deep Dive (v0.8 Core Phase 2)
+
+- [ ] **Canvas Engine Refactor:** Fix core rendering issues in the Fabric.js editor — resolve grid overlapping, ensure dynamic text resizing scales cleanly without breaking the grid, apply consistent padding and margin standards.
+- [ ] **Data Mapping Fixes:** Resolve `{placeholder}` leaks (e.g. `{proof_point}`, `{house_name}`) failing to properly interpolate grounded data before reaching the canvas render engine.
+- [ ] **High-Impact Templates (5-10):** Design and implement highly polished, premium aesthetic JSON template schemas (e.g., Executive 1-Pager, Product Tear-Sheet, Capability Brief, ROI One-Pager, Persona Profile, Feature Release, Case Study).
+- [ ] **Premium Typography & Styling:** Implement modern, premium typography sets, drop shadows, border radiuses, and glassmorphism token support within the Canvas engine.
+
+---
+
 ### Shared Infrastructure (v0.8)
 - [ ] **`ArtifactRenderer` abstraction:** Common interface (`render_html`, `render_fabric`, `render_reveal`, `render_penpot`) — new rendering targets added without touching `generate_artifact`
 - [ ] **Renderer routing via skill metadata:** `renderer` field on each skill JSON routes `generate_artifact` to the correct path
