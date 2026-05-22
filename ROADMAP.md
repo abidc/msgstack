@@ -159,8 +159,8 @@ The primary artifact type. Portrait orientation, letter size. B2B sales motion. 
 
 **Color use:** Brand primary for header/footer/accent. Brand secondary or light neutral for differentiator grid background. White or off-white for body sections. Section labels in brand accent color.
 
-- [ ] **Design spec JSON for datasheet template** — codify the above as a `data/templates/datasheet.json` template definition
-- [ ] **LLM mapping logic** — define which messaging house fields map to which zones: `tagline → hero headline`, `positioning → hero body`, `differentiation bullets → pillar_grid`, `top 6 key messages by priority → message_list`, `personas → persona_strip`, `proof points → proof_block`
+- [x] **Design spec JSON for datasheet template** — codify the above as a `data/templates/datasheet.json` template definition
+- [x] **LLM mapping logic** — define which messaging house fields map to which zones: `tagline → hero headline`, `positioning → hero body`, `differentiation bullets → pillar_grid`, `top 6 key messages by priority → message_list`, `personas → persona_strip`, `proof points → proof_block`
 
 #### 2b. Battlecard Template
 
@@ -172,8 +172,8 @@ Landscape orientation. Competitive sales aid. Two-column structure: "Us" vs "The
 3. **2-Column grid** — left column: key differentiators and strengths; right column: common objections with verbatim responses from messaging house
 4. **Bottom strip**: Top 3 proof points or win stats; key personas targeted
 
-- [ ] **Design spec JSON for battlecard template**
-- [ ] **LLM mapping logic for battlecard** — requires `competitor` context input; uses `differentiation`, `objections`, `proof_points` sections
+- [x] **Design spec JSON for battlecard template**
+- [x] **LLM mapping logic for battlecard** — requires `competitor` context input; uses `differentiation`, `objections`, `proof_points` sections
 
 #### 2c. Social Card Template
 
@@ -209,25 +209,25 @@ The current `one_pager_visual` prompt asks the LLM to "return a JSON object" wit
 
 #### 3a. Skill Prompt Rewrites
 
-- [ ] **`one_pager_visual` prompt rewrite:** Inject the template zone structure into the prompt so the LLM maps messaging house content to specific zones by name. Include field-level instructions ("tagline → hero.text_content; keep under 10 words"), output format examples with realistic content, and a grounding reminder ("use only content from the messaging house — no invented statistics").
-- [ ] **New `datasheet` skill:** Separate from `one_pager_visual`. Uses the datasheet template. Prompt instructs the LLM to populate each zone from the correct messaging source field. Section-type priority rules baked in (Headline messages → pillar headlines; Benefit messages → pillar bodies; Proof Point messages → proof_block stats).
-- [ ] **`battlecard_visual` prompt:** Populates battlecard template zones. Requires competitor name. Pulls objections + responses from graph for verbatim accuracy.
+- [x] **`one_pager_visual` prompt rewrite:** Inject the template zone structure into the prompt so the LLM maps messaging house content to specific zones by name. Include field-level instructions ("tagline → hero.text_content; keep under 10 words"), output format examples with realistic content, and a grounding reminder ("use only content from the messaging house — no invented statistics").
+- [x] **New `datasheet` skill:** Separate from `one_pager_visual`. Uses the datasheet template. Prompt instructs the LLM to populate each zone from the correct messaging source field. Section-type priority rules baked in (Headline messages → pillar headlines; Benefit messages → pillar bodies; Proof Point messages → proof_block stats).
+- [x] **`battlecard_visual` prompt:** Populates battlecard template zones. Requires competitor name. Pulls objections + responses from graph for verbatim accuracy.
 
 #### 3b. Content-to-Zone Mapping Engine
 
 The LLM shouldn't have to figure out which message goes in which zone on its own — the context block should do this work.
 
-- [ ] **`_build_visual_context()` function:** Extend `generator.py` with a visual-specific context builder that pre-assigns messaging house content to template zones before the LLM call. The LLM's job becomes copy-editing and tone-polishing, not data organization.
-- [ ] **Priority-based selection:** When a zone has a capacity constraint (e.g., pillar_grid shows 3 items, proof_block shows 3 stats), `_build_visual_context()` pre-selects the highest-priority candidates before passing them to the LLM.
-- [ ] **Persona truncation rules:** Persona strip shows max 3 personas. Selection order: primary persona first, then by completeness score (most complete pain points + triggers shown first).
+- [x] **`_build_visual_context()` function:** Extend `generator.py` with a visual-specific context builder that pre-assigns messaging house content to template zones before the LLM call. The LLM's job becomes copy-editing and tone-polishing, not data organization.
+- [x] **Priority-based selection:** When a zone has a capacity constraint (e.g., pillar_grid shows 3 items, proof_block shows 3 stats), `_build_visual_context()` pre-selects the highest-priority candidates before passing them to the LLM.
+- [x] **Persona truncation rules:** Persona strip shows max 3 personas. Selection order: primary persona first, then by completeness score (most complete pain points + triggers shown first).
 
 #### 3c. Design Spec Validation
 
 The LLM output must be validated before it reaches the renderer. Malformed specs cause silent rendering failures that are hard to debug.
 
-- [ ] **Pydantic schema for design spec:** `DesignSpec`, `Zone`, `ZoneContent` models — validate LLM output before saving; auto-fill missing optional fields with template defaults
-- [ ] **Fallback fill:** If LLM omits a required zone, the validator injects the template default content (pulled from the messaging house directly)
-- [ ] **Token budget guardrail:** Design spec generation prompt has a tighter token budget than prose generation — zone content should be concise; validator truncates oversized text blocks to zone capacity limits
+- [x] **Pydantic schema for design spec:** `DesignSpec`, `Zone`, `ZoneContent` models — validate LLM output before saving; auto-fill missing optional fields with template defaults
+- [x] **Fallback fill:** If LLM omits a required zone, the validator injects the template default content (pulled from the messaging house directly)
+- [x] **Token budget guardrail:** Design spec generation prompt has a tighter token budget than prose generation — zone content should be concise; validator truncates oversized text blocks to zone capacity limits
 
 ---
 
@@ -237,26 +237,26 @@ The current canvas app renders basic zones. This stream rebuilds the renderer to
 
 #### 4a. Zone Renderer Implementation
 
-- [ ] **Zone type renderers:** Implement a Fabric.js renderer function for each zone type defined in Stream 1a — `header`, `hero`, `positioning_block`, `pillar_grid`, `message_list`, `persona_strip`, `proof_block`, `cta_footer`
-- [ ] **Grid layout engine:** Parse the zone's `row`/`col`/`colspan` properties to place zones on the page grid. Zones that overflow their column collapse gracefully rather than overlapping.
-- [ ] **Typography rendering:** Apply `text_style` values to Fabric.js text objects — heading/body/caption each map to a configured font size, weight, and line height
-- [ ] **Brand token resolution:** Before rendering, resolve all `{{brand.*}}` placeholders from workspace brand settings fetched via `/api/workspaces/{id}/brand`
-- [ ] **Image zones:** Render logo and image placeholder zones as styled rectangles with centered label text ("Your Logo Here"); support `fabric.Image.fromURL()` for live URL replacement
+- [x] **Zone type renderers:** Implement a Fabric.js renderer function for each zone type defined in Stream 1a — `header`, `hero`, `positioning_block`, `pillar_grid`, `message_list`, `persona_strip`, `proof_block`, `cta_footer`
+- [x] **Grid layout engine:** Parse the zone's `row`/`col`/`colspan` properties to place zones on the page grid. Zones that overflow their column collapse gracefully rather than overlapping.
+- [x] **Typography rendering:** Apply `text_style` values to Fabric.js text objects — heading/body/caption each map to a configured font size, weight, and line height
+- [x] **Brand token resolution:** Before rendering, resolve all `{{brand.*}}` placeholders from workspace brand settings fetched via `/api/workspaces/{id}/brand`
+- [x] **Image zones:** Render logo and image placeholder zones as styled rectangles with centered label text ("Your Logo Here"); support `fabric.Image.fromURL()` for live URL replacement
 
 #### 4b. Interactive Editing
 
-- [ ] **Text click-to-edit:** Double-click any text zone to enter edit mode using Fabric.js's native `IText` — changes persist to the artifact's `design_spec` via `PATCH /api/artifacts/{id}/design_spec`
-- [ ] **Logo drag-and-drop:** Click logo zone → file picker → `fabric.Image.fromURL(base64)` replaces placeholder; save button persists to artifact
-- [ ] **Color override:** Zone background color picker; updates `background` in the zone spec
-- [ ] **Section reorder:** Drag zones vertically to reorder (updates `row` values in spec, triggers re-render)
-- [ ] **Reset to AI version:** One-click restore to the LLM-generated spec before edits
+- [x] **Text click-to-edit:** Double-click any text zone to enter edit mode using Fabric.js's native `IText` — changes persist to the artifact's `design_spec` via `PATCH /api/artifacts/{id}/design_spec`
+- [x] **Logo drag-and-drop:** Click logo zone → file picker → `fabric.Image.fromURL(base64)` replaces placeholder; save button persists to artifact
+- [x] **Color override:** Zone background color picker; updates `background` in the zone spec
+- [x] **Section reorder:** Drag zones vertically to reorder (updates `row` values in spec, triggers re-render)
+- [x] **Reset to AI version:** One-click restore to the LLM-generated spec before edits
 
 #### 4c. Export Pipeline
 
-- [ ] **PNG export:** `canvas.toDataURL('image/png', 2.0)` at 2× resolution for retina quality; download triggered client-side
-- [ ] **PDF export (jsPDF):** Serialize each canvas object to jsPDF; preserve vector text where possible; fallback to image embed for complex zones
-- [ ] **SVG export:** `canvas.toSVG()` for design hand-off to Figma or Illustrator
-- [ ] **Print-ready mode:** 300 DPI equivalent scaling before PNG export; web fonts loaded and resolved before capture
+- [x] **PNG export:** `canvas.toDataURL('image/png', 2.0)` at 2× resolution for retina quality; download triggered client-side
+- [x] **PDF export (jsPDF):** Serialize each canvas object to jsPDF; preserve vector text where possible; fallback to image embed for complex zones
+- [x] **SVG export:** `canvas.toSVG()` for design hand-off to Figma or Illustrator
+- [x] **Print-ready mode:** 300 DPI equivalent scaling before PNG export; web fonts loaded and resolved before capture
 
 ---
 

@@ -65,15 +65,29 @@ async function loadBrandSettings() {
     const resp = await fetch(`/api/workspaces/${workspaceId}/brand`);
     if (resp.ok) {
       brandSettings = await resp.json();
-      if (brandSettings.custom_fonts) loadCustomFonts(brandSettings.custom_fonts);
-      // Update typography config with brand fonts
-      if (brandSettings.font_heading) TYPOGRAPHY.heading.fontFamily = brandSettings.font_heading;
+      
+      // Collect fonts to load dynamically
+      const fontsToLoad = [];
+      if (brandSettings.font_heading) {
+        TYPOGRAPHY.heading.fontFamily = brandSettings.font_heading;
+        fontsToLoad.push(brandSettings.font_heading);
+      }
       if (brandSettings.font_body) {
         TYPOGRAPHY.subhead.fontFamily = brandSettings.font_body;
         TYPOGRAPHY.body.fontFamily = brandSettings.font_body;
         TYPOGRAPHY.caption.fontFamily = brandSettings.font_body;
         TYPOGRAPHY.tagline.fontFamily = brandSettings.font_body;
+        fontsToLoad.push(brandSettings.font_body);
       }
+      
+      if (fontsToLoad.length > 0) {
+        loadCustomFonts(fontsToLoad);
+      }
+
+      // Map DB settings fields to client-side expected variables
+      brandSettings.font_primary = brandSettings.font_body || 'Inter';
+      brandSettings.font_secondary = brandSettings.font_heading || 'Playfair Display';
+      brandSettings.logo_url = brandSettings.logo_path || '';
     }
   } catch (e) {
     console.warn('Brand settings not available, using defaults:', e);
@@ -204,7 +218,10 @@ function calculateZonePosition(zone) {
   return { x, y, w, h };
 }
 
+window._layoutChanged = false;
+
 function renderAllZones() {
+  window._layoutChanged = false;
   canvas.clear();
   const ps = designSpec.page_settings || designSpec.page_spec || {};
   canvas.setWidth(ps.width || 850);
@@ -213,6 +230,13 @@ function renderAllZones() {
 
   if (!designSpec.zones) return;
   designSpec.zones.forEach(zone => renderZone(zone));
+  
+  if (window._layoutChanged) {
+    window._layoutChanged = false;
+    canvas.clear();
+    designSpec.zones.forEach(zone => renderZone(zone));
+  }
+  
   canvas.renderAll();
   updateZoneList();
 }
@@ -454,8 +478,8 @@ function renderHeader(zone, x, y, w, h) {
   }
 
   // Product name
-  const productName = new fabric.Text(zone.product_name || 'Product Name', {
-    left: x + 80, top: y + h/2, fontSize: 20, fontWeight: '700',
+  const productName = new fabric.Textbox(zone.product_name || 'Product Name', {
+    left: x + 80, top: y + h/2, width: w - 160, fontSize: 20, fontWeight: '700',
     fontFamily: brandSettings.font_primary || 'Inter', fill: resolveToken('{{brand.text_color}}') || '#e1e4e8',
     originY: 'center'
   });
@@ -464,7 +488,7 @@ function renderHeader(zone, x, y, w, h) {
   // Badge
   if (zone.badge_text) {
     const badge = new fabric.Rect({ left: x + w - 80, top: y + h/2 - 14, width: 60, height: 28, fill: '#238636', rx: 14 });
-    const badgeText = new fabric.Text(zone.badge_text, { left: x + w - 50, top: y + h/2, fontSize: 12, fill: '#fff', fontWeight: '600', originX: 'center', originY: 'center' });
+    const badgeText = new fabric.Textbox(zone.badge_text, { left: x + w - 80, top: y + h/2, width: 60, textAlign: 'center', fontSize: 12, fill: '#fff', fontWeight: '600', originY: 'center' });
     group.push(badge, badgeText);
   }
 
@@ -529,6 +553,13 @@ function renderPositioningBlock(zone, x, y, w, h) {
   });
   group.push(content);
 
+  const reqH = (content.top - y) + content.height + 20;
+  if (reqH > h) {
+    h = reqH;
+    bg.set('height', h);
+    if ((zone.height || 100) !== h) { zone.height = h; window._layoutChanged = true; }
+  }
+
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
   g.data = { zoneId: zone.id, zoneType: 'positioning_block' };
   return g;
@@ -564,6 +595,12 @@ function renderPillarGrid(zone, x, y, w, h) {
       fontFamily: 'Inter', fill: '#656d76', lineHeight: 1.4, textAlign: 'left'
     });
     group.push(body);
+    
+    const reqH = (body.top - y) + body.height + 20;
+    if (reqH > h && reqH > (zone.height || 100)) {
+      zone.height = reqH;
+      window._layoutChanged = true;
+    }
   });
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
@@ -583,8 +620,8 @@ function renderMessageList(zone, x, y, w, h) {
     const my = y + 20 + i * 85;
     const color = sectionColors[msg.section_type] || '#58a6ff';
 
-    const label = new fabric.Text((msg.section_type || 'message').toUpperCase(), {
-      left: x + 20, top: my, fontSize: 10, fontWeight: '700',
+    const label = new fabric.Textbox((msg.section_type || 'message').toUpperCase(), {
+      left: x + 20, top: my, width: w - 40, fontSize: 10, fontWeight: '700',
       fontFamily: 'Inter', fill: color, letterSpacing: 1.5
     });
     group.push(label);
@@ -598,6 +635,12 @@ function renderMessageList(zone, x, y, w, h) {
     if (i < messages.length - 1) {
       const line = new fabric.Line([x + 20, my + 75, x + w - 20, my + 75], { stroke: '#d0d7de', strokeWidth: 1 });
       group.push(line);
+    }
+    
+    const reqH = (content.top - y) + content.height + 30;
+    if (reqH > h && reqH > (zone.height || 100)) {
+      zone.height = reqH;
+      window._layoutChanged = true;
     }
   });
 
@@ -641,6 +684,11 @@ function renderPersonaStrip(zone, x, y, w, h) {
           fontFamily: 'Inter', fill: '#656d76'
         });
         group.push(pain);
+        const reqH = (pain.top - y) + pain.height + 20;
+        if (reqH > h && reqH > (zone.height || 100)) {
+          zone.height = reqH;
+          window._layoutChanged = true;
+        }
       });
     }
   });
@@ -656,16 +704,16 @@ function renderProofBlock(zone, x, y, w, h) {
   group.push(bg);
 
   if (zone.stat) {
-    const stat = new fabric.Text(zone.stat, {
-      left: x + w/2, top: y + h/2 - 20, fontSize: 56, fontWeight: '900',
-      fontFamily: 'Inter', fill: '#ffffff', originX: 'center', originY: 'center'
+    const stat = new fabric.Textbox(zone.stat, {
+      left: x + 20, top: y + h/2 - 40, width: w - 40, fontSize: 56, fontWeight: '900',
+      fontFamily: 'Inter', fill: '#ffffff', originY: 'center', textAlign: 'center'
     });
     group.push(stat);
   }
 
   if (zone.label) {
     const label = new fabric.Textbox(zone.label, {
-      left: x + 20, top: y + h/2 + 25, width: w - 40, fontSize: 14, fontWeight: '500',
+      left: x + 20, top: y + h/2 + 10, width: w - 40, fontSize: 14, fontWeight: '500',
       fontFamily: 'Inter', fill: 'rgba(255,255,255,0.8)', textAlign: 'center'
     });
     group.push(label);
@@ -673,10 +721,16 @@ function renderProofBlock(zone, x, y, w, h) {
 
   if (zone.quote) {
     const quote = new fabric.Textbox(`"${zone.quote}"`, {
-      left: x + 40, top: y + h - 60, width: w - 80, fontSize: 12,
+      left: x + 40, top: y + h/2 + 40, width: w - 80, fontSize: 12,
       fontFamily: 'Playfair Display', fill: 'rgba(255,255,255,0.7)', fontStyle: 'italic', textAlign: 'center'
     });
     group.push(quote);
+    
+    const reqH = (quote.top - y) + quote.height + 40;
+    if (reqH > h && reqH > (zone.height || 100)) {
+      zone.height = reqH;
+      window._layoutChanged = true;
+    }
   }
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
@@ -692,9 +746,9 @@ function renderCtaFooter(zone, x, y, w, h) {
   const cta = new fabric.Rect({ left: x + w/2 - 100, top: y + 30, width: 200, height: 48, fill: resolveToken('{{brand.primary_color}}') || '#238636', rx: 24 });
   group.push(cta);
 
-  const ctaText = new fabric.Text(zone.cta_text || 'Get Started', {
-    left: x + w/2, top: y + 54, fontSize: 16, fontWeight: '600',
-    fontFamily: 'Inter', fill: '#ffffff', originX: 'center', originY: 'center'
+  const ctaText = new fabric.Textbox(zone.cta_text || 'Get Started', {
+    left: x + w/2 - 80, top: y + 54, width: 160, fontSize: 16, fontWeight: '600',
+    fontFamily: 'Inter', fill: '#ffffff', originY: 'center', textAlign: 'center'
   });
   group.push(ctaText);
 

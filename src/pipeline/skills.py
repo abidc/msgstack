@@ -378,15 +378,15 @@ HOUSE DATA:
 OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
   "zones": [
-    {{ "id": "hero", "type": "hero", "content": {{ "text": "Pre-filled tagline here" }} }},
-    {{ "id": "positioning_block", "type": "positioning", "content": {{ "text": "Pre-filled positioning..." }} }},
-    {{ "id": "pillar_grid", "type": "pillar_grid", "content": {{ "items": ["Point 1", "Point 2", "Point 3"] }} }}
+    {{ "id": "hero", "type": "hero", "text_content": "Pre-filled tagline here" }},
+    {{ "id": "positioning_block", "type": "positioning_block", "text_content": "Pre-filled positioning..." }},
+    {{ "id": "pillar_grid", "type": "pillar_grid", "list_items": ["Point 1", "Point 2", "Point 3"] }}
   ]
 }}
 
 RULES:
 - hero.text_content MUST be the tagline (under 10 words)
-- positioning.text MUST be the positioning statement
+- positioning_block.text_content MUST be the positioning statement
 - pillar_grid shows exactly 3 differentiation points
 - message_list shows top 6 key messages by priority
 - persona_strip shows max 3 personas (primary first)
@@ -420,14 +420,14 @@ HOUSE DATA:
 OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
   "zones": [
-    {{ "id": "header", "type": "hero", "content": {{ "text": "Product Name | Tagline" }} }},
-    {{ "id": "features", "type": "feature_grid", "content": {{ "items": ["Feature 1", "Feature 2"] }} }},
-    {{ "id": "specs", "type": "spec_list", "content": {{ "items": ["Spec 1", "Spec 2"] }} }}
+    {{ "id": "header", "type": "header", "text_content": "Product Name | Tagline" }},
+    {{ "id": "features", "type": "pillar_grid", "list_items": ["Feature 1", "Feature 2"] }},
+    {{ "id": "specs", "type": "message_list", "list_items": ["Spec 1", "Spec 2"] }}
   ]
 }}
 
 RULES:
-- header.text MUST include tagline
+- header.text_content MUST include tagline
 - feature_grid shows top benefits (max 6)
 - spec_list shows technical specs from key messages
 - proof_block shows 3 proof points with stats""",
@@ -461,18 +461,18 @@ PERSONA OBJECTIONS: {objections}
 OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
   "zones": [
-    {{ "id": "competitor_header", "type": "hero", "content": {{ "text": "vs {competitor}" }} }},
-    {{ "id": "our_strengths", "type": "comparison_grid", "content": {{ "items": ["Strength 1", "Strength 2"] }} }},
-    {{ "id": "objections", "type": "objection_list", "content": {{ "items": ["Objection → Response 1", "Objection → Response 2"] }} }},
-    {{ "id": "proof_block", "type": "proof_block", "content": {{ "items": ["Proof 1", "Proof 2", "Proof 3"] }} }}
+    {{ "id": "competitor_header", "type": "header", "text_content": "vs {competitor}" }},
+    {{ "id": "our_strengths", "type": "pillar_grid", "list_items": ["Strength 1", "Strength 2"] }},
+    {{ "id": "objections", "type": "message_list", "list_items": ["Objection → Response 1", "Objection → Response 2"] }},
+    {{ "id": "proof_block", "type": "proof_block", "text_content": "Proof 1 | Stat | Description" }}
   ]
 }}
 
 RULES:
-- competior_header.text MUST include competitor name
-- comparison_grid shows our strengths vs theirs (3-4 items)
-- objection_list shows verbatim objections with responses (max 5)
-- proof_block shows top 3 proof points with stats
+- competitor_header.text_content MUST include competitor name
+- our_strengths shows our strengths vs theirs (3-4 items)
+- objections shows verbatim objections with responses (max 5)
+- proof_block shows top proof point
 - All objection responses MUST be from the graph (verbatim)""",
         "prefab_template": "battlecard_visual",
         "renderer": "fabric"
