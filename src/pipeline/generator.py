@@ -64,7 +64,7 @@ class ArtifactGenerator:
 
         # Check if this is a visual artifact type
         artifact_type = skill.get("prefab_template") or skill_id
-        is_visual = artifact_type in ("one_pager_visual", "datasheet", "battlecard_visual")
+        is_visual = skill.get("renderer") == "fabric"
 
         context = self._build_context(house, messages, personas, custom_context or {})
 
@@ -146,6 +146,18 @@ class ArtifactGenerator:
                 sections["design_spec"] = self._fallback_design_spec(
                     template, context, visual_context
                 )
+        elif skill.get("renderer") == "reveal":
+            try:
+                import re
+                json_match = re.search(r"```json\s*(.*?)\s*```", raw, re.DOTALL)
+                json_str = json_match.group(1) if json_match else raw
+                start_idx = json_str.find("{")
+                end_idx = json_str.rfind("}")
+                if start_idx != -1 and end_idx != -1:
+                    sections["design_spec"] = json.loads(json_str[start_idx:end_idx+1])
+            except Exception as e:
+                log.error(f"Failed to parse reveal JSON: {e}")
+                sections["design_spec"] = {"slides": []}
 
         # Renderer routing: check skill's renderer field and route to appropriate renderer
         renderer_type = skill.get("renderer", "html")

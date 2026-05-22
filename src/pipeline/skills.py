@@ -477,6 +477,125 @@ RULES:
         "prefab_template": "battlecard_visual",
         "renderer": "fabric"
     },
+    "social_card_visual": {
+        "id": "social_card_visual",
+        "name": "Social Card (Visual)",
+        "description": "A visually designed social media card (1:1 or 9:16).",
+        "channels": ["linkedin", "twitter"],
+        "sections": [
+            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
+        ],
+        "prompt_template": """Generate a structured design specification for a Social Card for {house_name}.
+
+TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
+{visual_context}
+
+GROUNDING REMINDER:
+- Select the absolute highest-priority message from the house.
+- Apply a bold, social-friendly tone.
+
+OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
+{{
+  "zones": [
+    {{ "id": "header", "type": "header", "text_content": "{house_name}" }},
+    {{ "id": "hero", "type": "hero", "text_content": "Bold claim or headline" }},
+    {{ "id": "subhead", "type": "message_list", "list_items": ["Supporting context 1", "Supporting context 2"] }},
+    {{ "id": "cta_footer", "type": "cta_footer", "text_content": "Link or CTA" }}
+  ]
+}}
+
+RULES:
+- hero.text_content MUST be under 12 words
+- subhead contains max 2 list items for supporting context""",
+        "prefab_template": "social_card",
+        "renderer": "fabric"
+    },
+    "executive_summary_visual": {
+        "id": "executive_summary_visual",
+        "name": "Executive Summary (Visual)",
+        "description": "A designed C-level briefing document.",
+        "channels": ["all"],
+        "sections": [
+            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
+        ],
+        "prompt_template": """Generate a structured design specification for a Visual Executive Summary for {house_name}.
+
+TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
+{visual_context}
+
+GROUNDING REMINDER:
+- Use SCR (Situation-Complication-Resolution) framework.
+- Lead with business outcomes.
+- Output MUST align with template fields.
+
+OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
+{{
+  "zones": [
+    {{ "id": "header", "type": "header", "text_content": "{house_name} | Executive Summary" }},
+    {{ "id": "positioning", "type": "positioning_block", "text_content": "Full positioning paragraph" }},
+    {{ "id": "pillars", "type": "pillar_grid", "list_items": ["Pillar 1", "Pillar 2", "Pillar 3"] }},
+    {{ "id": "persona_strip", "type": "persona_strip", "list_items": ["Persona 1", "Persona 2"] }},
+    {{ "id": "proof", "type": "proof_block", "text_content": "Top ROI stat or outcome" }},
+    {{ "id": "cta_footer", "type": "cta_footer", "text_content": "Next steps / Website" }}
+  ]
+}}
+
+RULES:
+- No jargon, no product feature lists
+- pillars MUST contain exactly 3 strategic pillars
+- proof MUST be a quantified outcome or ROI point""",
+        "prefab_template": "executive_summary",
+        "renderer": "fabric"
+    },
+    "sales_deck": {
+        "id": "sales_deck",
+        "name": "Sales Deck (Reveal.js)",
+        "description": "An interactive sales presentation.",
+        "channels": ["sales_deck"],
+        "sections": [
+            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
+        ],
+        "prompt_template": """Generate a structured JSON specification for a Reveal.js Sales Deck for {house_name}.
+
+GROUNDING REMINDER:
+- Start with the Problem/Pain Points from the target persona.
+- Transition to the Solution ({house_name} positioning).
+- Cover 3 key differentiators/benefits.
+- Include a Proof Point or Customer Success stat.
+
+OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
+{{
+  "slides": [
+    {{
+      "type": "title",
+      "title": "{house_name}",
+      "content": "Tagline or Positioning",
+      "notes": "Speaker notes for title slide"
+    }},
+    {{
+      "type": "standard",
+      "title": "The Challenge",
+      "content": "<ul><li>Pain point 1</li><li>Pain point 2</li></ul>",
+      "notes": "Speaker notes"
+    }},
+    {{
+      "type": "split",
+      "title": "Why {house_name}?",
+      "left_content": "<h3>Traditional Approach</h3><ul><li>Issue 1</li></ul>",
+      "right_content": "<h3>Our Approach</h3><ul><li>Benefit 1</li></ul>",
+      "notes": "Speaker notes"
+    }}
+  ]
+}}
+
+RULES:
+- Must have 5-7 slides maximum.
+- Slide `content` fields must contain raw HTML (e.g. <ul>, <li>, <h3>, <p>).
+- Use `type: "split"` when comparing or showing two distinct columns.
+- Ensure all claims and benefits are drawn exclusively from the messaging house.""",
+        "prefab_template": "sales_deck",
+        "renderer": "reveal"
+    },
 }
 
 

@@ -281,14 +281,23 @@ def generate_artifact(
     )
 
     base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
-    visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence", "one_pager_visual"}
-
+    
     content = artifact.raw_content
-    if skill_id in visual_types:
-        if skill_id in ("one_pager_visual", "one_pager") and artifact_history_id:
+    url = None
+    
+    if artifact_history_id:
+        if artifact.renderer_type == "fabric":
             url = f"{base_url}/canvas?artifact_id={artifact_history_id}"
-        else:
-            url = f"{base_url}/artifact/{skill_id}/{house.id}"
+        elif artifact.renderer_type == "reveal":
+            url = f"{base_url}/presentation/{artifact_history_id}"
+            
+    if not url and artifact.renderer_type not in ("fabric", "reveal"):
+        visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
+        skill_config = skills.get_skill(skill_id)
+        artifact_type = skill_config.get("prefab_template", skill_id) if skill_config else skill_id
+        
+        if artifact_type in visual_types:
+            url = f"{base_url}/artifact/{artifact_type}/{house.id}"
             params = []
             if skill_id == "battlecard" and provided.get("competitor"):
                 params.append(f"competitor={provided['competitor']}")
@@ -299,6 +308,8 @@ def generate_artifact(
                 params.append(f"channels={','.join(ch) if isinstance(ch, list) else ch}")
             if params:
                 url += "?" + "&".join(params)
+                
+    if url:
         content += f"\n\n---\n\n**Visual Version:** {url}"
 
     return content

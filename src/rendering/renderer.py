@@ -201,19 +201,61 @@ class RevealRenderer(ArtifactRenderer):
 
     def _build_reveal_html(self, sections: dict, context: dict) -> str:
         house_name = context.get("house_name", "Untitled")
+        
+        # Load brand settings if available (these are usually passed via context or fetched client-side)
+        brand = context.get("brand_settings", {})
+        primary_color = brand.get("primary_color", "#1a56db")
+        secondary_color = brand.get("secondary_color", "#7e3af2")
+        text_color = brand.get("text_color", "#111827")
+        bg_color = brand.get("background_color", "#ffffff")
+        font_heading = brand.get("font_heading", "Inter")
+        font_body = brand.get("font_body", "Inter")
+        
         slides = []
-
-        # Title slide
-        slides.append(f"<section><h1>{house_name}</h1></section>")
-
-        # Content slides
-        for key, value in sections.items():
-            if not value:
-                continue
-            label = key.replace("_", " ").title()
-            slides.append(
-                f"<section><h2>{label}</h2><div>{value}</div></section>"
-            )
+        design_spec = sections.get("design_spec", {})
+        
+        if "slides" in design_spec:
+            for slide in design_spec["slides"]:
+                slide_type = slide.get("type", "standard")
+                title = slide.get("title", "")
+                content = slide.get("content", "")
+                notes = slide.get("notes", "")
+                
+                notes_html = f"<aside class='notes'>{notes}</aside>" if notes else ""
+                
+                if slide_type == "title":
+                    slides.append(
+                        f"<section data-background-color='{primary_color}'>"
+                        f"<h1 style='color: white;'>{title}</h1>"
+                        f"<h3 style='color: rgba(255,255,255,0.8);'>{content}</h3>"
+                        f"{notes_html}</section>"
+                    )
+                elif slide_type == "split":
+                    left = slide.get("left_content", "")
+                    right = slide.get("right_content", "")
+                    slides.append(
+                        f"<section>"
+                        f"<h2>{title}</h2>"
+                        f"<div style='display: flex; gap: 40px; margin-top: 40px;'>"
+                        f"<div style='flex: 1; text-align: left;'>{left}</div>"
+                        f"<div style='flex: 1; text-align: left;'>{right}</div>"
+                        f"</div>{notes_html}</section>"
+                    )
+                else:
+                    slides.append(
+                        f"<section>"
+                        f"<h2>{title}</h2>"
+                        f"<div style='text-align: left; margin-top: 40px;'>{content}</div>"
+                        f"{notes_html}</section>"
+                    )
+        else:
+            # Fallback for simple sections
+            slides.append(f"<section><h1>{house_name}</h1></section>")
+            for key, value in sections.items():
+                if key == "design_spec" or not value or not isinstance(value, str):
+                    continue
+                label = key.replace("_", " ").title()
+                slides.append(f"<section><h2>{label}</h2><div style='text-align: left;'>{value}</div></section>")
 
         html = f"""<!DOCTYPE html>
 <html>
@@ -222,7 +264,29 @@ class RevealRenderer(ArtifactRenderer):
     <title>{house_name}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reset.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/white.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/simple.css">
+    <style>
+        :root {{
+            --r-main-font: '{font_body}', sans-serif;
+            --r-heading-font: '{font_heading}', sans-serif;
+            --r-main-color: {text_color};
+            --r-heading-color: {text_color};
+            --r-background-color: {bg_color};
+            --r-link-color: {primary_color};
+            --r-link-color-hover: {secondary_color};
+        }}
+        .reveal h1, .reveal h2, .reveal h3, .reveal h4, .reveal h5, .reveal h6 {{
+            text-transform: none;
+            font-weight: 700;
+        }}
+        .reveal ul {{
+            display: block;
+            margin-left: 1em;
+        }}
+        .reveal li {{
+            margin-bottom: 0.5em;
+        }}
+    </style>
 </head>
 <body>
     <div class="reveal">
@@ -234,7 +298,11 @@ class RevealRenderer(ArtifactRenderer):
     <script>
         Reveal.initialize({{
             hash: true,
-            slideNumber: true,
+            slideNumber: 'c/t',
+            transition: 'slide',
+            controls: true,
+            progress: true,
+            center: true
         }});
     </script>
 </body>

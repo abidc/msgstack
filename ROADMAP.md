@@ -185,8 +185,8 @@ Square (1:1) or Story (9:16). Single focused message for LinkedIn, Twitter/X, or
 3. 1-line supporting context — small, centered below headline
 4. Logo bottom right + optional URL
 
-- [ ] **Design spec JSON for social card template**
-- [ ] **LLM mapping logic** — select highest-priority message for the target channel; apply channel-specific tone
+- [x] **Design spec JSON for social card template**
+- [x] **LLM mapping logic** — select highest-priority message for the target channel; apply channel-specific tone
 
 #### 2d. Executive Summary Template
 
@@ -199,7 +199,7 @@ Portrait, Letter, minimal and clean. For C-suite briefings and board materials. 
 4. Audience and use case table (2-column: Persona | Primary Value Delivered)
 5. Clean footer
 
-- [ ] **Design spec JSON for executive summary template**
+- [x] **Design spec JSON for executive summary template**
 
 ---
 
@@ -262,13 +262,13 @@ The current canvas app renders basic zones. This stream rebuilds the renderer to
 
 ### Stream 5 — reveal.js (Presentations)
 
-- [ ] **Slide skill templates:** `sales_deck`, `event_presentation`, `executive_readout` — each with structured slide schemas
-- [ ] **LLM slide generation:** `generate_artifact(skill_id="sales_deck")` returns structured slide JSON; Jinja2 renders to reveal.js HTML
-- [ ] **Custom workspace theme:** CSS variables mapping brand colors, fonts, logo to reveal.js theme applied server-side
-- [ ] **Image & logo zones:** Designated slide sections with placeholder support
-- [ ] **Speaker notes:** Generated per slide from full grounding context
-- [ ] **PDF export:** reveal.js `?print-pdf` + browser print engine (higher quality than jsPDF)
-- [ ] **`build_presentation` MCP tool:** Returns live reveal.js presentation URL
+- [x] **Slide skill templates:** `sales_deck`, `event_presentation`, `executive_readout` — each with structured slide schemas
+- [x] **LLM slide generation:** `generate_artifact(skill_id="sales_deck")` returns structured slide JSON; Jinja2 renders to reveal.js HTML
+- [x] **Custom workspace theme:** CSS variables mapping brand colors, fonts, logo to reveal.js theme applied server-side
+- [x] **Image & logo zones:** Designated slide sections with placeholder support
+- [x] **Speaker notes:** Generated per slide from full grounding context
+- [x] **PDF export:** reveal.js `?print-pdf` + browser print engine (higher quality than jsPDF)
+- [x] **`build_presentation` MCP tool:** Returns live reveal.js presentation URL
 
 ---
 

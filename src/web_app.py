@@ -1512,20 +1512,18 @@ def generate_artifact(
 
     try:
         artifact = generator.generate(skill_id, house_id, context)
-        visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence", "one_pager_visual"}
-        artifact_type = skill_id if skill_id in visual_types else None
-        if artifact_type:
-            if artifact_type in ("one_pager_visual", "one_pager"):
-                # Canvas editor — URL set after save so we have the artifact_id
-                visual_url = None
-            else:
+        skill_config = skills.get_skill(skill_id)
+        artifact_type = skill_config.get("prefab_template", skill_id) if skill_config else skill_id
+        visual_url = None
+
+        if artifact.renderer_type not in ("fabric", "reveal"):
+            visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
+            if artifact_type in visual_types:
                 visual_url = f"{settings.base_url}/artifact/{artifact_type}/{house_id}"
                 if skill_id == "battlecard" and context.get("competitor"):
                     visual_url += f"?competitor={context['competitor']}"
                 elif skill_id == "email_template" and context.get("stage"):
                     visual_url += f"?stage={context['stage']}"
-        else:
-            visual_url = None
 
         # Record token usage
         if artifact.input_tokens or artifact.output_tokens:
@@ -1554,9 +1552,11 @@ def generate_artifact(
         except Exception:
             artifact_history_id = None
 
-        # Both one_pager and one_pager_visual open the canvas editor
-        if artifact_type in ("one_pager_visual", "one_pager") and artifact_history_id:
-            visual_url = f"{settings.base_url}/canvas?artifact_id={artifact_history_id}"
+        if artifact_history_id:
+            if artifact.renderer_type == "fabric":
+                visual_url = f"{settings.base_url}/canvas?artifact_id={artifact_history_id}"
+            elif artifact.renderer_type == "reveal":
+                visual_url = f"{settings.base_url}/presentation/{artifact_history_id}"
 
         return {
             "skill_id": skill_id,
@@ -2707,6 +2707,35 @@ _ARTIFACT_TYPE_LABELS = {
     "battlecard": "Battlecard",
     "email_sequence": "Email Sequence",
 }
+
+
+@app.get("/presentation/{artifact_id}", response_class=HTMLResponse)
+def serve_presentation(artifact_id: str):
+    """Serve a generated reveal.js presentation."""
+    try:
+        from src.store import ArtifactHistoryModel
+        from src.rendering.renderer import get_renderer
+        aid = UUID(artifact_id)
+        with store.session() as s:
+            record = s.query(ArtifactHistoryModel).filter(ArtifactHistoryModel.id == str(aid)).first()
+            if not record:
+                raise HTTPException(404, "Artifact not found")
+            
+            renderer = get_renderer("reveal")
+            context = {"house_name": record.house_name or "Untitled"}
+            
+            # Try to load workspace brand if possible (requires joining to house)
+            from src.models import MessageHouse
+            house = s.query(MessageHouse).filter(MessageHouse.id == record.house_id).first()
+            if house and house.workspace_id:
+                brand = store.get_workspace_brand(house.workspace_id)
+                if brand:
+                    context["brand_settings"] = brand
+                    
+            output = renderer.render_reveal(record.sections_json, context)
+            return HTMLResponse(content=output.content)
+    except Exception as e:
+        raise HTTPException(500, f"Error rendering presentation: {e}")
 
 
 @app.get("/artifact/{artifact_type}/{house_id}", response_class=HTMLResponse)
