@@ -258,12 +258,19 @@ def generate_artifact(
     artifact = generator.generate(skill_id, str(house.id), provided)
 
     try:
+        from src.pipeline.alignment import AlignmentEngine
+        score = AlignmentEngine(store).score(house.id, artifact.raw_content).overall_score
+    except Exception:
+        score = None
+
+    try:
         saved = store.save_artifact(
             house_id=house.id,
             skill_id=skill_id,
             house_name=artifact.house_name,
             sections=artifact.sections,
             raw_content=artifact.raw_content,
+            alignment_score=score,
         )
         artifact_history_id = saved["id"]
     except Exception:
@@ -569,6 +576,39 @@ def check_framework_completeness(house_id: Optional[str] = None, house_name: Opt
         "persona_count": len(personas),
         "sections_covered": list(by_section.keys()),
     }
+
+
+@mcp.tool()
+def score_alignment(
+    house_id: str,
+    content: str,
+) -> dict:
+    """Score arbitrary content against the message house.
+
+    This tool evaluates a piece of content (like a drafted blog post, LinkedIn post, 
+    or any external text) against the approved messaging in the specified message house.
+    It returns a JSON report containing an overall alignment score (0-100), section-by-section
+    breakdown, any contradictions found, and missing key messages.
+
+    Args:
+        house_id: UUID of the message house to score against.
+        content: The raw text content to evaluate.
+    """
+    from src.pipeline.alignment import AlignmentEngine
+    from uuid import UUID
+    
+    store = get_store()
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        return {"error": "Invalid house_id"}
+
+    engine = AlignmentEngine(store)
+    try:
+        report = engine.score(house_uuid, content)
+        return report.model_dump()
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @mcp.tool()

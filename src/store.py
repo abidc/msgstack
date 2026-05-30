@@ -258,6 +258,7 @@ class ArtifactHistoryModel(Base):
     sections_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     raw_content: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="draft")
+    alignment_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
@@ -716,12 +717,18 @@ class Store:
                 """))
                 conn.commit()
 
-            # Add status to artifact_history if missing
+            # Add status and alignment_score to artifact_history if missing
             if "artifact_history" in insp.get_table_names():
                 ah_cols = {c["name"] for c in insp.get_columns("artifact_history")}
                 if "status" not in ah_cols:
                     try:
                         conn.execute(text("ALTER TABLE artifact_history ADD COLUMN status VARCHAR(20) DEFAULT 'draft'"))
+                        conn.commit()
+                    except Exception:
+                        pass
+                if "alignment_score" not in ah_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE artifact_history ADD COLUMN alignment_score INTEGER"))
                         conn.commit()
                     except Exception:
                         pass
@@ -1398,7 +1405,7 @@ class Store:
     # --- Artifact History ---
 
     def save_artifact(self, house_id: UUID, skill_id: str, house_name: str,
-                      sections: dict, raw_content: str = "") -> dict:
+                      sections: dict, raw_content: str = "", alignment_score: int | None = None) -> dict:
         art_id = str(uuid4())
         now = _now()
         with self.session() as s:
@@ -1409,10 +1416,11 @@ class Store:
                 house_name=house_name,
                 sections_json=sections,
                 raw_content=raw_content,
+                alignment_score=alignment_score,
                 created_at=now,
             ))
             s.commit()
-        return {"id": art_id, "house_id": str(house_id), "skill_id": skill_id, "created_at": now.isoformat()}
+        return {"id": art_id, "house_id": str(house_id), "skill_id": skill_id, "alignment_score": alignment_score, "created_at": now.isoformat()}
 
     def list_artifacts(self, house_id: UUID) -> list[dict]:
         with self.session() as s:
@@ -1430,6 +1438,7 @@ class Store:
                     "house_name": r.house_name,
                     "created_at": r.created_at.isoformat(),
                     "section_count": len(r.sections_json),
+                    "alignment_score": getattr(r, "alignment_score", None),
                 }
                 for r in rows
             ]
@@ -1449,6 +1458,7 @@ class Store:
                     "skill_id": r.skill_id,
                     "house_name": r.house_name,
                     "created_at": r.created_at.isoformat(),
+                    "alignment_score": getattr(r, "alignment_score", None),
                 }
                 for r in rows
             ]
@@ -1466,6 +1476,7 @@ class Store:
                 "sections": row.sections_json,
                 "raw_content": row.raw_content,
                 "status": row.status,
+                "alignment_score": getattr(row, "alignment_score", None),
                 "created_at": row.created_at.isoformat(),
             }
 

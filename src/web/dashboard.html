@@ -204,20 +204,20 @@
                         <option value="">Select…</option>
                     </select>
                 </div>
-                <div class="card" style="margin-bottom:0">
-                    <div class="card-title" style="margin-bottom:10px">Artifact Type</div>
-                    <div id="artifact-skills-list">
+                <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; max-height:calc(100vh - 200px);">
+                    <div class="card-title" style="margin-bottom:10px; flex-shrink:0;">Artifact Type</div>
+                    <div id="artifact-skills-list" style="overflow-y:auto; padding-right:6px; flex:1; margin-bottom:12px;">
                         <div style="color:var(--text-3);font-size:13px;">Select a framework first</div>
                     </div>
+                    <button class="btn btn-primary" id="generate-btn" onclick="generateArtifact()" style="width:100%; flex-shrink:0;" disabled>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        Generate
+                    </button>
                 </div>
-                <div id="artifact-context-card" class="card" style="margin-bottom:0;display:none;">
+                <div id="artifact-context-card" class="card" style="margin-bottom:0;display:none; flex-shrink:0;">
                     <div class="card-title" style="margin-bottom:10px">Context</div>
                     <div id="artifact-context-fields"></div>
                 </div>
-                <button class="btn btn-primary" id="generate-btn" onclick="generateArtifact()" style="width:100%;" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                    Generate
-                </button>
             </div>
 
             <div id="artifact-area">
@@ -227,6 +227,54 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                         <div class="empty-title">Select a framework and skill to generate</div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- ── Alignment Scoring ── -->
+<section id="scoring" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Alignment Scoring</div>
+                <div class="page-subtitle">Evaluate arbitrary content against an approved message house</div>
+            </div>
+        </div>
+        <div class="grid-2">
+            <div class="card">
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" for="scoring-house">Framework</label>
+                    <select class="form-select" id="scoring-house">
+                        <option value="">Select a framework…</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" for="scoring-content">Content to Score</label>
+                    <textarea class="form-input" id="scoring-content" rows="12" placeholder="Paste your draft blog post, email, or LinkedIn content here..."></textarea>
+                </div>
+                <button class="btn btn-primary" id="score-btn" onclick="scoreContent()" style="width:100%;">
+                    Score Alignment
+                </button>
+            </div>
+            <div class="card" id="scoring-results-card" style="display:none; overflow-y:auto; max-height: calc(100vh - 200px);">
+                <div class="card-header">
+                    <span class="card-title">Alignment Report</span>
+                    <span id="scoring-overall-badge" style="font-size:16px;font-weight:700;padding:2px 8px;border-radius:12px;"></span>
+                </div>
+                <div style="font-size:14px;color:var(--text-2);margin-bottom:16px;" id="scoring-summary"></div>
+                
+                <div style="font-weight:600;margin-bottom:8px;">Section Breakdown</div>
+                <div id="scoring-sections" style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;"></div>
+                
+                <div id="scoring-contradictions-container" style="display:none;margin-bottom:24px;">
+                    <div style="font-weight:600;color:var(--danger);margin-bottom:8px;">Contradictions</div>
+                    <ul id="scoring-contradictions" style="font-size:13px;color:var(--text-2);padding-left:20px;margin:0;"></ul>
+                </div>
+                
+                <div id="scoring-missing-container" style="display:none;">
+                    <div style="font-weight:600;color:var(--warning);margin-bottom:8px;">Missing Key Messages</div>
+                    <ul id="scoring-missing" style="font-size:13px;color:var(--text-2);padding-left:20px;margin:0;"></ul>
                 </div>
             </div>
         </div>
@@ -607,6 +655,7 @@
         if (id === 'dashboard') loadDashboard();
         else if (id === 'frameworks') loadHouses();
         else if (id === 'artifacts') loadArtifactHouses();
+        else if (id === 'scoring') loadScoringHouses();
         else if (id === 'skills') loadSkills();
         else if (id === 'channels') loadChannels();
         else if (id === 'connections') loadConnections();
@@ -619,7 +668,7 @@
     function initRouting() {
         const hash = window.location.hash.replace(/^#/, '');
         const path = hash || window.location.pathname.replace(/^\//, '') || 'dashboard';
-        const valid = ['dashboard','frameworks','upload','artifacts','skills','channels','connections','graph','settings'];
+        const valid = ['dashboard','frameworks','upload','artifacts','scoring','skills','channels','connections','graph','settings'];
         showSection(valid.includes(path) ? path : 'dashboard', false);
     }
 
@@ -712,7 +761,11 @@
                         </div>
                         <div style="min-width:0;flex:1;">
                             <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(a.skill_id.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}</div>
-                            <div style="font-size:11px;color:var(--text-3);">${esc(a.house_name)} · ${new Date(a.created_at).toLocaleDateString()}</div>
+                            <div style="font-size:11px;color:var(--text-3);">
+                                ${esc(a.house_name)} · ${new Date(a.created_at).toLocaleDateString()}
+                                ${a.alignment_score !== undefined && a.alignment_score !== null ? 
+                                  `<span style="margin-left:6px;padding:1px 5px;border-radius:4px;background:${a.alignment_score >= 80 ? 'var(--success-dim)' : a.alignment_score >= 60 ? 'rgba(245,158,11,.15)' : 'rgba(239,68,68,.15)'};color:${a.alignment_score >= 80 ? 'var(--success)' : a.alignment_score >= 60 ? 'var(--warning)' : 'var(--danger)'};">Align: ${a.alignment_score}</span>` : ''}
+                            </div>
                         </div>
                     </div>`).join('');
             } else {
@@ -1274,6 +1327,78 @@
         if (o) o.style.display = 'none';
     }
 
+    // ── Alignment Scoring ───────────────────────────────────────────────────────
+    
+    async function loadScoringHouses() {
+        const houses = await fetch(`${API}/houses`).then(r=>r.json());
+        const sel = document.getElementById('scoring-house');
+        sel.innerHTML = '<option value="">Select a framework…</option>' +
+            houses.map(h => `<option value="${h.id}">${esc(h.name)}</option>`).join('');
+    }
+    
+    async function scoreContent() {
+        const houseId = document.getElementById('scoring-house').value;
+        const content = document.getElementById('scoring-content').value;
+        if (!houseId || !content) return toast('Select a framework and enter content', 'error');
+        
+        const btn = document.getElementById('score-btn');
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner"></span> Scoring...';
+        btn.disabled = true;
+        
+        try {
+            const data = await apiFetch(`${API}/houses/${houseId}/score`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ content })
+            });
+            
+            document.getElementById('scoring-results-card').style.display = 'block';
+            
+            const badge = document.getElementById('scoring-overall-badge');
+            badge.textContent = `Score: ${data.overall_score}/100`;
+            if (data.overall_score >= 80) { badge.style.background = 'var(--success-dim)'; badge.style.color = 'var(--success)'; }
+            else if (data.overall_score >= 60) { badge.style.background = 'rgba(245,158,11,.15)'; badge.style.color = 'var(--warning)'; }
+            else { badge.style.background = 'rgba(239,68,68,.15)'; badge.style.color = 'var(--danger)'; }
+            
+            document.getElementById('scoring-summary').textContent = data.summary;
+            
+            document.getElementById('scoring-sections').innerHTML = (data.sections||[]).map(s => `
+                <div style="border:1px solid var(--border);padding:12px;border-radius:var(--radius-sm);background:var(--bg-2);">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                        <strong style="font-size:13px;color:var(--text);">${esc(s.name)}</strong>
+                        <span style="font-size:12px;font-weight:700;color:${s.score >= 80 ? 'var(--success)' : s.score >= 60 ? 'var(--warning)' : 'var(--danger)'}">${s.score}</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--text-2);line-height:1.5;">${esc(s.feedback)}</div>
+                </div>
+            `).join('');
+            
+            const contCon = document.getElementById('scoring-contradictions-container');
+            const contUl = document.getElementById('scoring-contradictions');
+            if (data.contradictions && data.contradictions.length > 0) {
+                contCon.style.display = 'block';
+                contUl.innerHTML = data.contradictions.map(c => `<li>${esc(c)}</li>`).join('');
+            } else {
+                contCon.style.display = 'none';
+            }
+            
+            const missCon = document.getElementById('scoring-missing-container');
+            const missUl = document.getElementById('scoring-missing');
+            if (data.missing_key_messages && data.missing_key_messages.length > 0) {
+                missCon.style.display = 'block';
+                missUl.innerHTML = data.missing_key_messages.map(m => `<li>${esc(m)}</li>`).join('');
+            } else {
+                missCon.style.display = 'none';
+            }
+            
+        } catch (e) {
+            toast('Failed to score: ' + e.message, 'error');
+        } finally {
+            btn.innerHTML = oldHtml;
+            btn.disabled = false;
+        }
+    }
+
     // ── Artifact generator ────────────────────────────────────────────────────────
 
     async function loadArtifactHouses() {
@@ -1368,16 +1493,29 @@
     }
 
     function _renderArtifactResult(data) {
-        const secs = Object.entries(data.sections||{}).map(([k,v])=>`
+        const secs = Object.entries(data.sections||{}).map(([k,v])=> {
+            let displayVal = v;
+            if (Array.isArray(v)) displayVal = v.join('\n');
+            else if (typeof v === 'object' && v !== null) displayVal = JSON.stringify(v, null, 2);
+            else displayVal = String(v);
+            
+            return `
             <div style="margin-bottom:18px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:7px;">${esc(k.replace(/_/g,' '))}</div>
-                <div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;">${esc(Array.isArray(v)?v.join('\n'):String(v))}</div>
-            </div>`).join('');
+                <div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;font-family:${typeof v === 'object' ? 'monospace' : 'inherit'};">${esc(displayVal)}</div>
+            </div>`;
+        }).join('');
         const artId = data.artifact_id;
         const dlBtns = artId ? `<a href="/api/artifacts/${artId}/pdf" target="_blank" class="btn btn-ghost btn-sm">↓ PDF</a>
             <a href="/api/artifacts/${artId}/docx" class="btn btn-ghost btn-sm">↓ DOCX</a>` : '';
         const visBtn = data.visual_url ? `<a href="${data.visual_url}" target="_blank" class="btn btn-ghost btn-sm">Visual →</a>` : '';
         
+        let scoreBadge = '';
+        if (data.alignment_score !== undefined && data.alignment_score !== null) {
+            let sColor = data.alignment_score >= 80 ? 'var(--success)' : data.alignment_score >= 60 ? 'var(--warning)' : 'var(--danger)';
+            scoreBadge = `<span style="font-size:12px;font-weight:700;color:${sColor};border:1px solid ${sColor};padding:2px 6px;border-radius:10px;margin-right:8px;">Alignment: ${data.alignment_score}/100</span>`;
+        }
+
         // Build status actions based on current status (default to draft if not present)
         const currentStatus = data.status || 'draft';
         let statusBadgeColor = 'var(--text-3)';
@@ -1431,7 +1569,7 @@
                     <div class="card-title">${esc(data.house_name)}</div>
                     <div style="font-size:12px;color:var(--text-3);margin-top:2px;">${esc((data.skill_id||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}</div>
                 </div>
-                <div style="display:flex;gap:6px;">${dlBtns}${visBtn}</div>
+                <div style="display:flex;gap:6px;align-items:center;">${scoreBadge}${dlBtns}${visBtn}</div>
             </div>
             ${secs}
             ${data.raw_content?`<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">

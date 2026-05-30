@@ -589,6 +589,28 @@ def check_house_staleness(house_id: str):
     }
 
 
+class AlignmentScoreRequest(BaseModel):
+    content: str
+
+
+@app.post("/api/houses/{house_id}/score")
+def score_alignment_endpoint(house_id: str, req: AlignmentScoreRequest):
+    """Score arbitrary content against the message house."""
+    from src.pipeline.alignment import AlignmentEngine
+    try:
+        house_uuid = UUID(house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid house ID")
+        
+    engine = AlignmentEngine(store)
+    try:
+        report = engine.score(house_uuid, req.content)
+        return report.model_dump()
+    except Exception as e:
+        log.error(f"Alignment scoring error: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
 @app.get("/api/houses/{house_id}/review-trail")
 def get_house_review_trail(house_id: str):
     """Get the full review audit trail for a house."""
@@ -1541,12 +1563,19 @@ def generate_artifact(
 
         # Auto-save to artifact history
         try:
+            from src.pipeline.alignment import AlignmentEngine
+            score = AlignmentEngine(store).score(UUID(house_id), artifact.raw_content).overall_score
+        except Exception:
+            score = None
+
+        try:
             saved = store.save_artifact(
                 house_id=UUID(house_id),
                 skill_id=skill_id,
                 house_name=artifact.house_name,
                 sections=artifact.sections,
                 raw_content=artifact.raw_content,
+                alignment_score=score,
             )
             artifact_history_id = saved["id"]
         except Exception:
@@ -1996,12 +2025,20 @@ def save_artifact(data: dict):
         house_id = UUID(data["house_id"])
     except Exception:
         raise HTTPException(400, "Invalid house_id")
+        
+    try:
+        from src.pipeline.alignment import AlignmentEngine
+        score = AlignmentEngine(store).score(house_id, data.get("raw_content", "")).overall_score
+    except Exception:
+        score = None
+
     record = store.save_artifact(
         house_id=house_id,
         skill_id=data.get("skill_id", ""),
         house_name=data.get("house_name", ""),
         sections=data.get("sections", {}),
         raw_content=data.get("raw_content", ""),
+        alignment_score=score,
     )
     return record
 
