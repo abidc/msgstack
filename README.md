@@ -114,24 +114,27 @@ Once connected, your AI assistant will discover all available tools automaticall
 
 ## MCP Tools
 
-Connect any MCP-compatible AI and it gains access to:
+Connect any MCP-compatible AI and it gains access to the following tools. 
+
+> [!NOTE]
+> **Transitional Tool Names:** While the conceptual product layer uses **Canon Domains** and **Canon Entries**, the underlying code and tool names retain their transitional names (like `_house` and `_framework`) for backward compatibility with existing client configurations.
 
 | Tool | What it does |
 |------|-------------|
-| `list_message_houses` | List all frameworks — always call first when a brand is mentioned |
-| `search_messaging` | Semantic + keyword search across approved messaging |
-| `get_graph_connections` | Deterministic graph traversal — verbatim approved content |
-| `set_active_house` | Pin a framework for the session |
-| `get_message_house` | Retrieve full framework for research |
-| `generate_artifact` | Generate a grounded artifact (one-pager, email, battlecard, …) |
-| `build_ui_artifact` | Get a visual HTML page URL for an artifact |
-| `list_skills` | List available artifact types with required context |
-| `check_framework_completeness` | Score a framework against the spec (0–100) + recommendations |
-| `compare_houses` | Side-by-side comparison of two frameworks |
-| `get_grounding_context` | Current session: active house, used chunks, confidence |
-| `reset_conversation` | Clear session state |
-| `get_framework_spec` | Full specification for a complete messaging framework |
-| `list_channels` | All messaging channels including custom ones |
+| `list_message_houses` | List all available Canon Domains — always call first to orient yourself |
+| `search_messaging` | Semantic + keyword search across approved Canon Entries |
+| `get_graph_connections` | Deterministic graph traversal — verbatim approved canon content |
+| `set_active_house` | Pin a specific Canon Domain as active for the session |
+| `get_message_house` | Retrieve a full Canon Domain for detailed research |
+| `generate_artifact` | Generate a grounded artifact (datasheet, email, battlecard, post, …) from the active domain |
+| `build_ui_artifact` | Get a visual HTML page URL for a generated artifact |
+| `list_skills` | List available artifact types (skills) with required context parameters |
+| `check_framework_completeness` | Score a Canon Domain against completeness specifications (0–100) |
+| `compare_houses` | Side-by-side comparison of two or more Canon Domains |
+| `get_grounding_context` | Current session state: active Canon Domain, used entries, confidence |
+| `reset_conversation` | Clear current session state and start fresh |
+| `get_framework_spec` | Full specification criteria for a complete Canon Domain |
+| `list_channels` | All messaging and publishing channels including custom ones |
 
 ### Artifact types (`skill_id`)
 
@@ -158,10 +161,10 @@ Navigate to `http://localhost:8001/` for the web interface:
 
 | Section | What you can do |
 |---------|----------------|
-| **Dashboard** | Stats: frameworks, messages, personas; graph health widget |
-| **Frameworks** | Browse, create, edit, delete message houses; tabbed detail (Overview / Messages / Personas) |
-| **Artifacts** | Select framework + skill, generate, preview structured output, open visual page |
-| **Upload** | Drop PDF / DOCX / TXT → auto-extract and structure via LLM; preview before saving |
+| **Dashboard** | Stats: Canon Domains, Canon Entries, personas; graph health widget |
+| **Canon Domains** | Browse, create, edit, delete Canon Domains; tabbed detail (Overview / Entries / Personas) |
+| **Artifacts** | Select Canon Domain + skill, generate, preview structured output, open visual page |
+| **Upload** | Drop PDF / DOCX / TXT → auto-extract and structure into a Canon Domain via LLM; preview before saving |
 | **Skills** | Create, edit, delete artifact skill templates |
 | **Graph Explorer** | Interactive Cytoscape.js visualization — filter by node type, click for details |
 | **Settings** | API keys, workspaces, theme |
@@ -207,31 +210,33 @@ run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
 
 ## Data Model & Canon Schema
 
-### MessageHouse (Canon Domain)
-The core database entity representing a structured **Canon Domain** — an authoritative domain of truth for a specific department or product.
+MsgStack's core architecture divides the conceptual layer from the implementation database models. The product layer exposes **Canon Domains** and **Canon Entries**, while the database layer leverages backward-compatible model names.
+
+### Canon Domain (DB Table: `message_houses`)
+The core concept is a **Canon Domain** — an authoritative domain of truth for a specific department or product. The database model implementing this is `MessageHouse`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | str | Canon domain or framework name |
-| `document_type` | enum | `message_house` / `brand_guide` / `competitive_brief` / `corp_narrative` / `persona_library` |
-| `positioning` | str | Core positioning statement / foundational domain thesis |
-| `tagline` | str | Punchy tagline (≤7 words) / domain primary claim |
-| `differentiation` | str | Key differentiators / core competitive claims |
-| `audience` | str | Target buyer + user roles / target persona wrapper |
-| `brand_personality` | str | Tone, voice, style rules |
-| `summary` | str | 2–3 sentence domain overview |
+| `name` | str | Canon domain name |
+| `document_type` | enum | Department schema category: `message_house` / `brand_guide` / `competitive_brief` / `corp_narrative` / `persona_library` |
+| `positioning` | str | Foundational domain thesis or core positioning statement |
+| `tagline` | str | Primary claim or punchy tagline (≤7 words) |
+| `differentiation` | str | Core competitive claims or key differentiators |
+| `audience` | str | Target persona wrapper description |
+| `brand_personality` | str | Tone, voice, and style rules |
+| `summary` | str | 2–3 sentence overview of the domain |
 | `status` | enum | `active` / `archived` / `needs_review` |
 
-### KeyMessage (Canon Entry)
-Individual approved units of canon truth, linked to a specific canon domain.
+### Canon Entry (DB Table: `key_messages`)
+Individual approved units of canon truth, linked to a specific canon domain. The database model implementing this is `KeyMessage`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `section_type` | enum | `headline` / `subhead` / `benefit` / `use_case` / `proof_point` / `objection` / `social_proof` / `positioning` |
-| `priority` | int 1–5 | 1 = highest priority |
+| `section_type` | enum | Entry role: `headline` / `subhead` / `benefit` / `use_case` / `proof_point` / `objection` / `social_proof` / `positioning` |
+| `priority` | int 1–5 | Importance ranking (1 = highest priority) |
 | `content` | str | The approved canonical copy |
-| `variants` | dict | Channel rewrites: `{linkedin: "...", email: "..."}` |
-| `personas` | list[str] | Which personas this applies to |
+| `variants` | dict | Channel-specific rewrites: `{linkedin: "...", email: "..."}` |
+| `personas` | list[str] | List of target personas this entry applies to |
 | `channels` | list[enum] | `all` / `linkedin` / `email` / `landing` / `paid` / `twitter` / `blog` |
 
 ### Knowledge Graph Schema

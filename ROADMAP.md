@@ -8,7 +8,7 @@
 
 MsgStack is the **canon layer** for the organization. Departments own their domains of truth. AI tools and content workflows ground on that canon. When canon changes, downstream outputs stay aligned.
 
-MsgStack begins with product marketing because that is the highest-value first wedge. However, the underlying model is designed as an organizational canon layer. This roadmap maps the path from product marketing message houses to full cross-department canon domains owned by SMEs in Product, Marketing, Legal, HR, Support, and Security.
+MsgStack begins with product marketing because that is the highest-value first wedge. However, the underlying model is designed as an organizational canon layer. This roadmap maps the path to full cross-department canon domains owned by SMEs in Product (including core spec, API, and technical document owners), Marketing, Legal, HR, Support, and Security.
 
 This roadmap reflects the current state and planned direction. Items are grouped by milestone, not calendar quarter — sequencing depends on community feedback and priority shifts. Items marked `[OSS]` are well-suited for community contribution.
 
@@ -301,7 +301,7 @@ The current canvas app renders basic zones. This stream rebuilds the renderer to
 - [ ] **`ArtifactRenderer` abstraction:** Common interface (`render_html`, `render_fabric`, `render_reveal`, `render_penpot`) — new rendering targets added without touching `generate_artifact`
 - [ ] **Renderer routing via skill metadata:** `renderer` field on each skil---
 
-## v0.9 — Governance & Alignment Engine
+## v0.9 — Organizational Canon Governance Layer
 
 **Goal:** Turn MsgStack into the organizational canon governance layer, not just a generation tool. This milestone introduces the features that give compliance and brand owners a reason to open MsgStack every week — ensuring all content is verified against approved truth.
 
@@ -331,12 +331,12 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ---
 
-## v1.0 — Competitive & Cross-Department Canon
+## v1.0 — Cross-Department Canon & Dependency Graphs
 
 **Goal:** Expand MsgStack from a marketing-only message house repository to a cross-department canon layer. Product, Legal, HR, and Security teams can curate and connect their respective domains of truth.
 
 ### Cross-Department Canon Domains
-- [ ] **Product Canon:** Product managers curate specifications, release notes, integration requirements, and roadmap claims.
+- [ ] **Product Canon (Family of Domains):** Product managers and technical leads curate distinct specifications and guidelines for core features, API specifications, release/versioning facts, and developer policies.
 - [ ] **Legal & Compliance Canon:** Legal SMEs curate approved disclosures, privacy statements, trademark rules, and liability limits.
 - [ ] **HR & Culture Canon:** HR admins curate core values, workplace policies, onboarding guidelines, and benefits summaries.
 - [ ] **Security & IT Canon:** Security teams curate compliance status (SOC 2, ISO), data retention rules, and vendor security answers.
@@ -350,7 +350,12 @@ The core governance capability. Evaluates any piece of content against the struc
 - [ ] **`INFORMS` / `DEPENDS_ON` Edges:** Define explicit graph relationships between different canon domains (e.g., Product Specifications `INFORMS` Product Marketing Messaging, which `INFORMS` Sales Objection Handlers, which `INFORMS` Legal Disclosures).
 - [ ] **Cascade Drift Detection:** When a parent canon entry (e.g., a product specification limit) is updated by a Product Manager, all downstream messaging and generated battlecards are automatically flagged as "Outdated" and trigger alerts to their respective owners to re-evaluate and regenerate.
 
-### Competitive Intelligence
+---
+
+## v1.1 — Competitive Intelligence & Battlecard Sharpening
+
+**Goal:** Integrate competitive market data directly into MsgStack to sharpen grounding and enable automated battlecard generation.
+
 - [ ] **Competitor document import:** Upload competitor website pages, datasheets, or sales decks → structuring pipeline extracts their claims into a `competitive_brief` domain
 - [ ] **Competitive gap analysis:** Compare your canon domain to a competitor's extracted claims — identify where you are differentiated vs where they challenge you
 - [ ] **Battlecard auto-sharpen:** When generating a battlecard, automatically load the competitor's extracted claims and ensure each response directly counters their stated positioning using approved canon entries
@@ -358,7 +363,7 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ---
 
-## v1.1 — Publishing Integrations
+## v1.2 — Publishing Integrations
 
 **Goal:** Close the gap between "generated" and "published." Content should move from MsgStack to the channel it's destined for without copy-paste, which is where grounding breaks.
 
@@ -371,7 +376,7 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ---
 
-## v1.2 — Activation & Built-In AI Interface
+## v1.3 — Activation & Built-In AI Interface
 
 **Goal:** A team lead or department SME can evaluate and adopt MsgStack without involving IT or a developer. First grounded artifact generated in under 5 minutes from landing on the product.
 
@@ -396,7 +401,7 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ---
 
-## v1.3 — Document Source Integrations
+## v1.4 — Document Source Integrations
 
 **Goal:** Connect MsgStack directly to where team documents already live — eliminating the manual upload step and keeping canon domains automatically in sync as source documents evolve.
 
@@ -425,7 +430,7 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ---
 
-## v1.4 — Advanced Graph Operations & Visualization
+## v1.5 — Advanced Graph Operations & Visualization
 
 ### Graph-Powered Queries
 - [ ] **Persona Coverage Analysis:** Which canon entries address which personas? Identify coverage gaps.
@@ -444,7 +449,7 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ---
 
-## v1.5 — Platform & Ecosystem
+## v1.6 — Platform & Ecosystem
 
 ### Additional Integrations
 - [ ] **Notion connector** — Sync domains to/from Notion pages

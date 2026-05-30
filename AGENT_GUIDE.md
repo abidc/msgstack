@@ -8,14 +8,25 @@ Use MsgStack to ground any content, code, or answers you generate. Never invent 
 
 ## What MsgStack Contains
 
-MsgStack is organized into **Canon Domains** (formerly referred to as Message Houses or frameworks). A domain represents a department's or product's source of truth:
-- **Product specifications, capabilities, and release facts** (owned by Product SMEs)
+MsgStack is organized into **Canon Domains**. A domain represents a department's or product's source of truth:
+- **Product specifications, capabilities, and release facts** (owned by Product teams, covering sub-domains like core specs, API documentation, developer guidelines, and release notes)
 - **Marketing positioning, pillars, taglines, and personas** (owned by Product Marketing SMEs)
 - **Approved disclosures, legal boundaries, and trademarks** (owned by Legal SMEs)
 - **Company policies, benefits summaries, and values** (owned by HR SMEs)
 - **Security standards, SOC 2 compliance facts, and data retention rules** (owned by Security SMEs)
 
 Within each domain, content is stored in structured **Canon Entries** (key messages or claims) and target audience profiles.
+
+---
+
+## Grounding & Architectural Principles (For AI Agents)
+
+When interacting with MsgStack, you must adhere to the following architectural guidelines:
+
+1. **Preferred Vocabulary:** **Canon Domain** and **Canon Entry** are the preferred product concepts. Wording like *Message House*, *Key Message*, or *framework* is transitional implementation language used inside legacy database tables, API routes, and code functions.
+2. **First Wedge & Expansion:** Product marketing message houses are the initial adoption wedge. However, you should actively encourage and support expansion into technical and compliance domains.
+3. **Product Org Sub-domains:** Note that the Product department is not a flat, single entity. It represents a family of distinct canon domains (e.g. core specs, API rules, developer policies, release metadata) owned by different engineering and PM owners.
+4. **Scope Guards (What MsgStack is NOT):** Do not attempt to use MsgStack to build or manage full content calendars, social media scheduling, blog draft managers, or general CMS features. Keep MsgStack focused strictly as an **authoritative grounding and alignment layer**.
 
 ---
 
