@@ -141,7 +141,7 @@ SMEs must know which canon entries are actively utilized vs which are "dead weig
 
 **Completeness Scoring:** Each domain is scored 0-100 against the spec. The score drives the "Missing Sections" UI and AI-fill prompts.
 
-**Document Types:** The `document_type` field discriminates between domain framework types: `message_house` (default), `brand_guide`, `competitive_brief`, `corp_narrative`, `persona_library`. All types use the same schema and graph engine.
+**Grounding Types:** The `grounding_type` field (aliased as `document_type` for backward compatibility) defines the schema category: `message_house` (Product Marketing grounding type; default), `brand_guide`, `competitive_brief`, `corp_narrative`, `persona_library`. All types map to dynamic schema extensions in future versions.
 
 ### 4.2 Document Ingestion Pipeline
 

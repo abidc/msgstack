@@ -225,7 +225,7 @@ The core concept is a **Canon Domain** — an authoritative domain of truth for 
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | str | Canon domain name |
-| `document_type` | enum | Department schema category: `message_house` / `brand_guide` / `competitive_brief` / `corp_narrative` / `persona_library` |
+| `grounding_type` | enum | Department grounding schema: `message_house` (Product Marketing grounding type) / `brand_guide` / `competitive_brief` / `corp_narrative` / `persona_library` (aliased as `document_type` for backward compatibility) |
 | `positioning` | str | Foundational domain thesis or core positioning statement |
 | `tagline` | str | Primary claim or punchy tagline (≤7 words) |
 | `differentiation` | str | Core competitive claims or key differentiators |

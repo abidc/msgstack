@@ -63,7 +63,11 @@ def init_store(db_url: str | None = None) -> "Store":
 
 
 def _to_db(data: dict) -> dict:
-    return {k: str(v) if isinstance(v, UUID) else v for k, v in data.items()}
+    res = {}
+    for k, v in data.items():
+        key = "document_type" if k == "grounding_type" else k
+        res[key] = str(v) if isinstance(v, UUID) else v
+    return res
 
 
 class Base(DeclarativeBase):
@@ -148,7 +152,7 @@ class CanonDomainModel(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str] = mapped_column(String(50), default="manual")
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    document_type: Mapped[str] = mapped_column(String(30), nullable=False, default="canon_domain", server_default="canon_domain")
+    document_type: Mapped[str] = mapped_column(String(30), nullable=False, default="message_house", server_default="message_house")
     summary: Mapped[str] = mapped_column(Text, default="")
     audience: Mapped[str] = mapped_column(Text, default="")
     brand_personality: Mapped[str] = mapped_column(Text, default="")
@@ -2639,7 +2643,7 @@ def _domain_from_row(row: CanonDomainModel) -> CanonDomain:
         name=row.name,
         source=row.source,
         source_id=row.source_id,
-        document_type=row.document_type if row.document_type else "canon_domain",
+        document_type=row.document_type if row.document_type and row.document_type != "canon_domain" else "message_house",
         summary=row.summary,
         audience=row.audience,
         brand_personality=row.brand_personality,

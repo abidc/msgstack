@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
 from src.models import (
-    ArtifactStatus, Channel, DocumentType, DomainStatus, EntryStatus,
+    ArtifactStatus, Channel, GroundingType, DocumentType, DomainStatus, EntryStatus,
     CanonEntry, CanonDomain, Persona, SectionType,
     HouseStatus, KeyMessage, MessageHouse, MessageStatus  # Deprecated aliases
 )
@@ -237,6 +237,7 @@ def list_houses(query: Optional[str] = None, auth: AuthContext = Depends(get_aut
             "source": h.source,
             "status": h.status,
             "document_type": str(h.document_type) if h.document_type else "message_house",
+            "grounding_type": str(h.grounding_type),
             "summary": summary[:150] + ("..." if len(summary) > 150 else ""),
             "persona_count": pc,
             "message_count": mc,
@@ -376,6 +377,7 @@ def assign_chunk_pillar(chunk_id: str, data: ChunkPillarAssign):
 
 
 class HouseCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     name: str
     summary: str = ""
     audience: str = ""
@@ -385,7 +387,15 @@ class HouseCreate(BaseModel):
     differentiation: str = ""
     source: str = "manual"
     status: str = "active"
-    document_type: str = "message_house"
+    grounding_type: str = Field(default="message_house", validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
+
+    @property
+    def document_type(self) -> str:
+        return self.grounding_type
+
+    @document_type.setter
+    def document_type(self, value: str) -> None:
+        self.grounding_type = value
 
 
 @app.post("/api/canon-domains")
@@ -401,7 +411,7 @@ def create_house(data: HouseCreate):
         tagline=data.tagline,
         differentiation=data.differentiation,
         status=HouseStatus(data.status),
-        document_type=DocumentType(data.document_type),
+        grounding_type=GroundingType(data.grounding_type),
         last_synced=_now(),
     )
     store.upsert_house(house)
@@ -409,6 +419,7 @@ def create_house(data: HouseCreate):
 
 
 class HouseUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     name: Optional[str] = None
     summary: Optional[str] = None
     audience: Optional[str] = None
@@ -417,7 +428,15 @@ class HouseUpdate(BaseModel):
     tagline: Optional[str] = None
     differentiation: Optional[str] = None
     status: Optional[str] = None
-    document_type: Optional[str] = None
+    grounding_type: Optional[str] = Field(default=None, validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
+
+    @property
+    def document_type(self) -> Optional[str]:
+        return self.grounding_type
+
+    @document_type.setter
+    def document_type(self, value: Optional[str]) -> None:
+        self.grounding_type = value
 
 
 @app.patch("/api/canon-domains/{domain_id}")
@@ -428,8 +447,8 @@ def update_house(data: HouseUpdate, house_id: Optional[str] = None, domain_id: O
     if not house:
         raise HTTPException(404, "Canon domain not found")
     for k, v in data.model_dump(exclude_none=True).items():
-        if k == "document_type":
-            setattr(house, k, DocumentType(v))
+        if k in ("document_type", "grounding_type"):
+            setattr(house, "grounding_type", GroundingType(v))
         else:
             setattr(house, k, v)
     store.upsert_house(house)
@@ -1074,7 +1093,7 @@ def _commit_structured_house(
         name=structured.name,
         source="upload",
         source_id=filename,
-        document_type=DocumentType(document_type),
+        grounding_type=GroundingType(document_type),
         summary=structured.summary,
         audience=structured.audience,
         brand_personality=structured.brand_personality,

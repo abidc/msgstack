@@ -31,13 +31,15 @@ class SectionType(str, Enum):
     SOURCE_MARKDOWN = "source_markdown"
 
 
-class DocumentType(str, Enum):
-    CANON_DOMAIN = "canon_domain"
-    MESSAGE_HOUSE = "message_house"  # Deprecated
+class GroundingType(str, Enum):
+    MESSAGE_HOUSE = "message_house"  # Product Marketing grounding type
     BRAND_GUIDE = "brand_guide"
     COMPETITIVE_BRIEF = "competitive_brief"
     CORP_NARRATIVE = "corp_narrative"
     PERSONA_LIBRARY = "persona_library"
+
+
+DocumentType = GroundingType  # Deprecated alias
 
 
 class Channel(str, Enum):
@@ -78,13 +80,13 @@ class ArtifactStatus(str, Enum):
 
 
 class CanonDomain(BaseModel):
-    model_config = ConfigDict(use_enum_values=True)
+    model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
 
     id: UUID = Field(default_factory=uuid4)
     name: str
     source: str = "manual"
     source_id: str | None = None
-    document_type: DocumentType = DocumentType.CANON_DOMAIN
+    grounding_type: GroundingType = Field(default=GroundingType.MESSAGE_HOUSE, validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
     summary: str = ""
     audience: str = ""
     brand_personality: str = ""
@@ -94,6 +96,14 @@ class CanonDomain(BaseModel):
     status: DomainStatus = DomainStatus.ACTIVE
     last_synced: datetime | None = None
     last_reviewed: datetime | None = None
+
+    @property
+    def document_type(self) -> GroundingType:
+        return self.grounding_type
+
+    @document_type.setter
+    def document_type(self, value: GroundingType) -> None:
+        self.grounding_type = value
 
     def is_stale(self, days: int = 90) -> bool:
         """Check if framework is stale (>days since last_reviewed or created)."""
