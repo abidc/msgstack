@@ -212,3 +212,24 @@ def test_grounding_response_model():
     resp = GroundingResponse(results=[result], grounding_context=ctx)
     assert len(resp.results) == 1
     assert resp.grounding_context.confidence == "high"
+
+
+def test_persona_governance_fields(store):
+    from datetime import datetime, timezone
+    house = MessageHouse(name="Gov House")
+    store.upsert_house(house)
+
+    persona = Persona(
+        message_house_id=house.id,
+        name="Gov Persona",
+        status="in_review",
+        approved_by="test-user",
+        approved_at=datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    store.upsert_persona(persona)
+
+    personas = store.get_personas(house.id)
+    assert len(personas) == 1
+    assert personas[0].status == "in_review"
+    assert personas[0].approved_by == "test-user"
+    assert personas[0].approved_at is not None

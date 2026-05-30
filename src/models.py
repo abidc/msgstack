@@ -149,6 +149,9 @@ class Persona(BaseModel):
     pain_points: list[str] = Field(default_factory=list)
     buying_triggers: list[str] = Field(default_factory=list)
     objections: list[str] = Field(default_factory=list)
+    status: MessageStatus = MessageStatus.DRAFT
+    approved_by: str | None = None
+    approved_at: datetime | None = None
 
     @field_validator("pain_points", "buying_triggers", mode="before")
     @classmethod
@@ -350,3 +353,4 @@ class SearchFilters(BaseModel):
     include_variants: bool = True
     min_priority: int | None = None
     min_confidence: float | None = None
+    include_drafts: bool = False

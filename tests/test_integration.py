@@ -213,7 +213,7 @@ def mock_engine(tmp_path):
 def test_fallback_search_returns_results(mock_engine):
     from src.models import SearchFilters
     engine, house = mock_engine
-    filters = SearchFilters(message_houses=[str(house.id)])
+    filters = SearchFilters(message_houses=[str(house.id)], include_drafts=True)
     resp = engine._fallback_search("deployment time", filters)
     assert len(resp.results) > 0
 
@@ -221,27 +221,29 @@ def test_fallback_search_returns_results(mock_engine):
 def test_fallback_search_keyword_match(mock_engine):
     from src.models import SearchFilters
     engine, _ = mock_engine
-    resp = engine._fallback_search("deployment time", SearchFilters())
+    resp = engine._fallback_search("deployment time", SearchFilters(include_drafts=True))
     matched = [r for r in resp.results if "deployment" in r.content.lower()]
     assert len(matched) > 0
 
 
 def test_rerank_uses_keyword_overlap(mock_engine):
+    from src.models import SearchFilters
     engine, _ = mock_engine
     matches = [
         {"id": "a", "score": 0.5, "metadata": {"content": "deploy faster pipeline CI"}},
         {"id": "b", "score": 0.6, "metadata": {"content": "unrelated topic about food"}},
     ]
-    reranked = engine._rerank("deploy pipeline", matches, top_k=2)
+    reranked = engine._rerank("deploy pipeline", matches, top_k=2, filters=SearchFilters(include_drafts=True))
     # "a" has two query tokens matching despite lower vector score
     assert reranked[0]["id"] == "a"
 
 
 def test_rerank_top_k_respected(mock_engine):
+    from src.models import SearchFilters
     engine, _ = mock_engine
     matches = [{"id": str(i), "score": 0.5, "metadata": {"content": f"item {i}"}}
                for i in range(10)]
-    reranked = engine._rerank("test", matches, top_k=3)
+    reranked = engine._rerank("test", matches, top_k=3, filters=SearchFilters(include_drafts=True))
     assert len(reranked) == 3
 
 

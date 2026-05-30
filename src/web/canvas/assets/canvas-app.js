@@ -457,38 +457,75 @@ function renderZone(zone) {
 }
 
 // Zone Type Renderers
+// Helper for premium drop shadows
+function getPremiumShadow() {
+  return new fabric.Shadow({
+    color: 'rgba(15, 23, 42, 0.08)',
+    blur: 16,
+    offsetX: 0,
+    offsetY: 6
+  });
+}
+
+// Zone Type Renderers
 function renderHeader(zone, x, y, w, h) {
   const group = [];
-  const bgColor = resolveToken(zone.bg_color) || '#161b22';
+  const bgColor = resolveToken(zone.bg_color) || '#0f172a';
 
-  const bg = new fabric.Rect({ left: x, top: y, width: w, height: h, fill: bgColor, selectable: true, evented: true });
+  const bg = new fabric.Rect({
+    left: x, top: y, width: w, height: h,
+    fill: bgColor, rx: 12, ry: 12,
+    shadow: getPremiumShadow(),
+    selectable: true, evented: true
+  });
   group.push(bg);
 
   // Logo
   const logoUrl = resolveToken(zone.logo_url) || '';
   if (logoUrl && logoUrl !== '{{brand.logo_url}}') {
     fabric.Image.fromURL(logoUrl, img => {
-      img.set({ left: x + 20, top: y + h/2 - 20, width: 40, height: 40, selectable: true, evented: true, data: { zoneId: zone.id, type: 'logo' } });
+      img.set({
+        left: x + 24, top: y + h/2 - 18, width: 36, height: 36,
+        selectable: true, evented: true,
+        data: { zoneId: zone.id, type: 'logo' }
+      });
       canvas.add(img);
     }, { crossOrigin: 'anonymous' });
   } else {
-    const logoPlaceholder = new fabric.Rect({ left: x + 20, top: y + h/2 - 20, width: 40, height: 40, fill: '#30363d', stroke: '#58a6ff', strokeWidth: 1, rx: 4 });
-    const logoLabel = new fabric.Text('Logo', { left: x + 40, top: y + h/2, fontSize: 10, fill: '#8b949e', originX: 'center', originY: 'center' });
+    const logoPlaceholder = new fabric.Rect({
+      left: x + 24, top: y + h/2 - 18, width: 36, height: 36,
+      fill: '#1e293b', stroke: resolveToken('{{brand.secondary_color}}') || '#3b82f6',
+      strokeWidth: 1.5, rx: 8, ry: 8
+    });
+    const logoLabel = new fabric.Text('Logo', {
+      left: x + 42, top: y + h/2, fontSize: 10,
+      fontFamily: 'Outfit', fontWeight: '600', fill: '#94a3b8',
+      originX: 'center', originY: 'center'
+    });
     group.push(logoPlaceholder, logoLabel);
   }
 
   // Product name
   const productName = new fabric.Textbox(zone.product_name || 'Product Name', {
-    left: x + 80, top: y + h/2, width: w - 160, fontSize: 20, fontWeight: '700',
-    fontFamily: brandSettings.font_primary || 'Inter', fill: resolveToken('{{brand.text_color}}') || '#e1e4e8',
+    left: x + 76, top: y + h/2, width: w - 180,
+    fontSize: 20, fontWeight: '700',
+    fontFamily: 'Outfit', fill: '#ffffff',
     originY: 'center'
   });
   group.push(productName);
 
   // Badge
   if (zone.badge_text) {
-    const badge = new fabric.Rect({ left: x + w - 80, top: y + h/2 - 14, width: 60, height: 28, fill: '#238636', rx: 14 });
-    const badgeText = new fabric.Textbox(zone.badge_text, { left: x + w - 80, top: y + h/2, width: 60, textAlign: 'center', fontSize: 12, fill: '#fff', fontWeight: '600', originY: 'center' });
+    const badgeBg = resolveToken('{{brand.secondary_color}}') || '#3b82f6';
+    const badge = new fabric.Rect({
+      left: x + w - 100, top: y + h/2 - 12, width: 76, height: 24,
+      fill: badgeBg, rx: 12, ry: 12
+    });
+    const badgeText = new fabric.Textbox(zone.badge_text.toUpperCase(), {
+      left: x + w - 100, top: y + h/2, width: 76, textAlign: 'center',
+      fontSize: 10, fill: '#fff', fontWeight: '700', fontFamily: 'Inter',
+      originY: 'center', letterSpacing: 1
+    });
     group.push(badge, badgeText);
   }
 
@@ -499,32 +536,60 @@ function renderHeader(zone, x, y, w, h) {
 
 function renderHero(zone, x, y, w, h) {
   const group = [];
-  const bgColor = resolveToken(zone.bg_color) || resolveToken('{{brand.primary_color}}') || '#58a6ff';
+  const startColor = resolveToken(zone.bg_color) || resolveToken('{{brand.primary_color}}') || '#1e293b';
+  const endColor = resolveToken('{{brand.secondary_color}}') || '#0f172a';
 
-  const bg = new fabric.Rect({ left: x, top: y, width: w, height: h, fill: bgColor, selectable: true });
+  const bg = new fabric.Rect({
+    left: x, top: y, width: w, height: h,
+    rx: 12, ry: 12, shadow: getPremiumShadow(),
+    selectable: true
+  });
+
+  // Apply beautiful linear gradient
+  const grad = new fabric.Gradient({
+    type: 'linear',
+    coords: { x1: 0, y1: 0, x2: w, y2: h },
+    colorStops: [
+      { offset: 0, color: startColor },
+      { offset: 1, color: endColor }
+    ]
+  });
+  bg.set('fill', grad);
   group.push(bg);
 
   if (zone.bg_image) {
     fabric.Image.fromURL(zone.bg_image, img => {
-      img.set({ left: x, top: y, width: w, height: h, selectable: false, evented: false, opacity: 0.3 });
+      img.set({ left: x, top: y, width: w, height: h, selectable: false, evented: false, opacity: 0.15 });
       canvas.add(img);
     }, { crossOrigin: 'anonymous' });
   }
 
   const headline = new fabric.Textbox(zone.headline || 'Your Headline Here', {
-    left: x + 20, top: y + h/2 - 60, width: w - 40, fontSize: 32, fontWeight: '800',
-    fontFamily: brandSettings.font_secondary || 'Playfair Display',
-    fill: '#ffffff', textAlign: 'center'
+    left: x + 30, top: y + 40, width: w - 60,
+    fontSize: 28, fontWeight: '800',
+    fontFamily: 'Outfit', fill: '#ffffff',
+    textAlign: 'center', lineHeight: 1.25
   });
   group.push(headline);
 
+  let textY = y + 40 + headline.height + 20;
+
   if (zone.subhead) {
     const subhead = new fabric.Textbox(zone.subhead, {
-      left: x + 30, top: y + h/2 + 20, width: w - 60, fontSize: 18, fontWeight: '400',
-      fontFamily: brandSettings.font_primary || 'Inter', fill: 'rgba(255,255,255,0.9)',
-      textAlign: 'center'
+      left: x + 40, top: textY, width: w - 80,
+      fontSize: 16, fontWeight: '400',
+      fontFamily: 'Inter', fill: 'rgba(255, 255, 255, 0.85)',
+      textAlign: 'center', lineHeight: 1.5
     });
     group.push(subhead);
+    textY += subhead.height + 20;
+  }
+
+  // Adjust hero zone height dynamically if needed
+  const reqH = textY - y + 10;
+  if (Math.abs((zone.height || 300) - reqH) > 5 && reqH > 150) {
+    zone.height = reqH;
+    window._layoutChanged = true;
   }
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
@@ -534,30 +599,37 @@ function renderHero(zone, x, y, w, h) {
 
 function renderPositioningBlock(zone, x, y, w, h) {
   const group = [];
-  const bg = new fabric.Rect({ left: x, top: y, width: w, height: h, fill: '#f6f8fa', stroke: '#d0d7de', strokeWidth: 1, rx: 8 });
+  const bg = new fabric.Rect({
+    left: x, top: y, width: w, height: h,
+    fill: '#ffffff', stroke: '#e2e8f0', strokeWidth: 1.5,
+    rx: 12, ry: 12, shadow: getPremiumShadow()
+  });
   group.push(bg);
+
+  let contentTop = y + 24;
 
   if (zone.lead_in) {
     const leadIn = new fabric.Text(zone.lead_in.toUpperCase(), {
-      left: x + 20, top: y + 20, fontSize: 11, fontWeight: '600',
-      fontFamily: 'Inter', fill: resolveToken('{{brand.primary_color}}') || '#58a6ff',
-      letterSpacing: 2
+      left: x + 24, top: y + 24, fontSize: 11, fontWeight: '700',
+      fontFamily: 'Outfit', fill: resolveToken('{{brand.secondary_color}}') || '#3b82f6',
+      letterSpacing: 1.5
     });
     group.push(leadIn);
+    contentTop += 20;
   }
 
   const content = new fabric.Textbox(zone.content || 'Positioning statement here.', {
-    left: x + 20, top: y + (zone.lead_in ? 45 : 20), width: w - 40,
-    fontSize: 16, fontWeight: '400', fontFamily: 'Inter',
-    fill: '#1f2328', lineHeight: 1.4
+    left: x + 24, top: contentTop, width: w - 48,
+    fontSize: 15, fontWeight: '400', fontFamily: 'Inter',
+    fill: '#334155', lineHeight: 1.5
   });
   group.push(content);
 
-  const reqH = (content.top - y) + content.height + 20;
-  if (reqH > h) {
-    h = reqH;
-    bg.set('height', h);
-    if ((zone.height || 100) !== h) { zone.height = h; window._layoutChanged = true; }
+  const minH = 100;
+  const reqH = Math.max(minH, (content.top - y) + content.height + 24);
+  if (Math.abs((zone.height || 100) - reqH) > 2) {
+    zone.height = reqH;
+    window._layoutChanged = true;
   }
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
@@ -568,40 +640,61 @@ function renderPositioningBlock(zone, x, y, w, h) {
 function renderPillarGrid(zone, x, y, w, h) {
   const group = [];
   const pillars = zone.pillars || [];
+  if (pillars.length === 0) return renderDefaultZone(zone, x, y, w, h);
+  
   const colW = w / pillars.length;
+  let maxPillarH = 220;
 
   pillars.forEach((pillar, i) => {
     const px = x + i * colW + 10;
-    const py = y + 20;
+    const py = y + 15;
     const cardW = colW - 20;
-    const cardH = h - 40;
+    const cardH = h - 30;
 
-    const card = new fabric.Rect({ left: px, top: py, width: cardW, height: cardH, fill: '#ffffff', stroke: '#d0d7de', strokeWidth: 1, rx: 8 });
+    const card = new fabric.Rect({
+      left: px, top: py, width: cardW, height: cardH,
+      fill: '#ffffff', stroke: '#e2e8f0', strokeWidth: 1.5,
+      rx: 12, ry: 12, shadow: getPremiumShadow()
+    });
     group.push(card);
 
+    // Decorative Icon Circle
+    const iconBg = new fabric.Circle({
+      left: px + cardW/2, top: py + 40, radius: 24,
+      fill: '#eff6ff', originX: 'center', originY: 'center'
+    });
+    group.push(iconBg);
+
     const icon = new fabric.Text(pillar.icon || '●', {
-      left: px + cardW/2, top: py + 30, fontSize: 36, originX: 'center', originY: 'center'
+      left: px + cardW/2, top: py + 40, fontSize: 24,
+      originX: 'center', originY: 'center'
     });
     group.push(icon);
 
     const headline = new fabric.Textbox(pillar.headline || 'Pillar', {
-      left: px + 10, top: py + 75, width: cardW - 20, fontSize: 16, fontWeight: '700',
-      fontFamily: 'Inter', fill: '#1f2328', textAlign: 'center'
+      left: px + 16, top: py + 78, width: cardW - 32,
+      fontSize: 15, fontWeight: '700',
+      fontFamily: 'Outfit', fill: '#1e293b', textAlign: 'center'
     });
     group.push(headline);
 
     const body = new fabric.Textbox(pillar.body || '', {
-      left: px + 15, top: py + 110, width: cardW - 30, fontSize: 13,
-      fontFamily: 'Inter', fill: '#656d76', lineHeight: 1.4, textAlign: 'left'
+      left: px + 16, top: py + 114, width: cardW - 32,
+      fontSize: 13, fontFamily: 'Inter', fill: '#475569',
+      lineHeight: 1.45, textAlign: 'center'
     });
     group.push(body);
     
-    const reqH = (body.top - y) + body.height + 20;
-    if (reqH > h && reqH > (zone.height || 100)) {
-      zone.height = reqH;
-      window._layoutChanged = true;
+    const reqH = (body.top - y) + body.height + 25;
+    if (reqH > maxPillarH) {
+      maxPillarH = reqH;
     }
   });
+
+  if (Math.abs((zone.height || 100) - maxPillarH) > 2) {
+    zone.height = maxPillarH;
+    window._layoutChanged = true;
+  }
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
   g.data = { zoneId: zone.id, zoneType: 'pillar_grid' };
@@ -611,38 +704,64 @@ function renderPillarGrid(zone, x, y, w, h) {
 function renderMessageList(zone, x, y, w, h) {
   const group = [];
   const messages = zone.messages || [];
-  const sectionColors = { headline: '#58a6ff', subhead: '#f0883e', benefit: '#238636', proof_point: '#da3633', objection: '#8b949e' };
+  const labelColors = {
+    headline: { text: '#2563eb', bg: '#eff6ff' },
+    subhead: { text: '#d97706', bg: '#fef3c7' },
+    benefit: { text: '#059669', bg: '#ecfdf5' },
+    proof_point: { text: '#dc2626', bg: '#fef2f2' },
+    objection: { text: '#4b5563', bg: '#f3f4f6' }
+  };
 
-  const bg = new fabric.Rect({ left: x, top: y, width: w, height: h, fill: '#f6f8fa', rx: 8 });
+  const bg = new fabric.Rect({
+    left: x, top: y, width: w, height: h,
+    fill: '#f8fafc', stroke: '#e2e8f0', strokeWidth: 1.5,
+    rx: 12, ry: 12, shadow: getPremiumShadow()
+  });
   group.push(bg);
 
-  messages.forEach((msg, i) => {
-    const my = y + 20 + i * 85;
-    const color = sectionColors[msg.section_type] || '#58a6ff';
+  let currentItemY = y + 20;
 
-    const label = new fabric.Textbox((msg.section_type || 'message').toUpperCase(), {
-      left: x + 20, top: my, width: w - 40, fontSize: 10, fontWeight: '700',
-      fontFamily: 'Inter', fill: color, letterSpacing: 1.5
+  messages.forEach((msg, i) => {
+    const labelStyle = labelColors[msg.section_type] || { text: '#2563eb', bg: '#eff6ff' };
+
+    // Tag badge rect
+    const badgeWidth = 80;
+    const badgeHeight = 18;
+    const badge = new fabric.Rect({
+      left: x + 24, top: currentItemY, width: badgeWidth, height: badgeHeight,
+      fill: labelStyle.bg, rx: 6, ry: 6
     });
-    group.push(label);
+    group.push(badge);
+
+    const labelText = new fabric.Textbox((msg.section_type || 'message').toUpperCase(), {
+      left: x + 24, top: currentItemY + badgeHeight / 2, width: badgeWidth,
+      textAlign: 'center', fontSize: 9, fontWeight: '700',
+      fontFamily: 'Outfit', fill: labelStyle.text, originY: 'center', letterSpacing: 0.5
+    });
+    group.push(labelText);
 
     const content = new fabric.Textbox(msg.content || '', {
-      left: x + 20, top: my + 18, width: w - 40, fontSize: 13,
-      fontFamily: 'Inter', fill: '#1f2328', lineHeight: 1.3
+      left: x + 24, top: currentItemY + 24, width: w - 48, fontSize: 13.5,
+      fontFamily: 'Inter', fill: '#334155', lineHeight: 1.4
     });
     group.push(content);
 
+    currentItemY += 24 + content.height + 20;
+
     if (i < messages.length - 1) {
-      const line = new fabric.Line([x + 20, my + 75, x + w - 20, my + 75], { stroke: '#d0d7de', strokeWidth: 1 });
+      const line = new fabric.Line([x + 24, currentItemY - 10, x + w - 24, currentItemY - 10], {
+        stroke: '#e2e8f0', strokeWidth: 1.2
+      });
       group.push(line);
     }
-    
-    const reqH = (content.top - y) + content.height + 30;
-    if (reqH > h && reqH > (zone.height || 100)) {
-      zone.height = reqH;
-      window._layoutChanged = true;
-    }
   });
+
+  const minH = 120;
+  const reqH = Math.max(minH, currentItemY - y + 10);
+  if (Math.abs((zone.height || 100) - reqH) > 2) {
+    zone.height = reqH;
+    window._layoutChanged = true;
+  }
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
   g.data = { zoneId: zone.id, zoneType: 'message_list' };
@@ -652,9 +771,16 @@ function renderMessageList(zone, x, y, w, h) {
 function renderPersonaStrip(zone, x, y, w, h) {
   const group = [];
   const personas = zone.personas || [];
-  const cardW = Math.min(200, (w - 40) / personas.length - 20);
+  if (personas.length === 0) return renderDefaultZone(zone, x, y, w, h);
 
-  const bg = new fabric.Rect({ left: x, top: y, width: w, height: h, fill: '#f6f8fa', rx: 8 });
+  const cardW = Math.min(220, (w - 40) / personas.length - 20);
+  let maxStripH = 180;
+
+  const bg = new fabric.Rect({
+    left: x, top: y, width: w, height: h,
+    fill: '#f8fafc', stroke: '#e2e8f0', strokeWidth: 1.5,
+    rx: 12, ry: 12, shadow: getPremiumShadow()
+  });
   group.push(bg);
 
   personas.forEach((p, i) => {
@@ -662,36 +788,57 @@ function renderPersonaStrip(zone, x, y, w, h) {
     const py = y + 20;
     const cardH = h - 40;
 
-    const card = new fabric.Rect({ left: px, top: py, width: cardW, height: cardH, fill: '#ffffff', stroke: '#d0d7de', strokeWidth: 1, rx: 8 });
+    const card = new fabric.Rect({
+      left: px, top: py, width: cardW, height: cardH,
+      fill: '#ffffff', stroke: '#e2e8f0', strokeWidth: 1.5,
+      rx: 12, ry: 12, shadow: getPremiumShadow()
+    });
     group.push(card);
 
+    // Decorative colored top bar on card
+    const topBar = new fabric.Rect({
+      left: px, top: py, width: cardW, height: 6,
+      fill: resolveToken('{{brand.primary_color}}') || '#3b82f6',
+      rx: 6, ry: 6
+    });
+    group.push(topBar);
+
     const name = new fabric.Textbox(p.name || 'Persona', {
-      left: px + 15, top: py + 15, width: cardW - 30, fontSize: 14, fontWeight: '700',
-      fontFamily: 'Inter', fill: '#1f2328'
+      left: px + 16, top: py + 16, width: cardW - 32,
+      fontSize: 14, fontWeight: '700',
+      fontFamily: 'Outfit', fill: '#1e293b'
     });
     group.push(name);
 
     const role = new fabric.Textbox(p.role || 'Role', {
-      left: px + 15, top: py + 38, width: cardW - 30, fontSize: 11, fontFamily: 'Inter',
-      fill: resolveToken('{{brand.primary_color}}') || '#58a6ff'
+      left: px + 16, top: py + 36, width: cardW - 32,
+      fontSize: 11, fontWeight: '500', fontFamily: 'Inter',
+      fill: resolveToken('{{brand.secondary_color}}') || '#3b82f6'
     });
     group.push(role);
 
+    let painY = py + 56;
     if (p.pain_points && p.pain_points.length > 0) {
-      p.pain_points.slice(0, 2).forEach((pp, j) => {
+      p.pain_points.slice(0, 3).forEach((pp) => {
         const pain = new fabric.Textbox(`• ${pp}`, {
-          left: px + 15, top: py + 60 + j * 22, width: cardW - 30, fontSize: 10,
-          fontFamily: 'Inter', fill: '#656d76'
+          left: px + 16, top: painY, width: cardW - 32, fontSize: 10.5,
+          fontFamily: 'Inter', fill: '#475569', lineHeight: 1.3
         });
         group.push(pain);
-        const reqH = (pain.top - y) + pain.height + 20;
-        if (reqH > h && reqH > (zone.height || 100)) {
-          zone.height = reqH;
-          window._layoutChanged = true;
-        }
+        painY += pain.height + 8;
       });
     }
+
+    const reqH = painY - y + 25;
+    if (reqH > maxStripH) {
+      maxStripH = reqH;
+    }
   });
+
+  if (Math.abs((zone.height || 100) - maxStripH) > 2) {
+    zone.height = maxStripH;
+    window._layoutChanged = true;
+  }
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
   g.data = { zoneId: zone.id, zoneType: 'persona_strip' };
@@ -700,37 +847,63 @@ function renderPersonaStrip(zone, x, y, w, h) {
 
 function renderProofBlock(zone, x, y, w, h) {
   const group = [];
-  const bg = new fabric.Rect({ left: x, top: y, width: w, height: h, fill: resolveToken(zone.bg_color) || '#0f1117', rx: 8 });
+  const startColor = resolveToken(zone.bg_color) || '#0f172a';
+
+  const bg = new fabric.Rect({
+    left: x, top: y, width: w, height: h,
+    rx: 12, ry: 12, shadow: getPremiumShadow()
+  });
+
+  // Dark slate linear gradient
+  const grad = new fabric.Gradient({
+    type: 'linear',
+    coords: { x1: 0, y1: 0, x2: w, y2: h },
+    colorStops: [
+      { offset: 0, color: startColor },
+      { offset: 1, color: '#1e293b' }
+    ]
+  });
+  bg.set('fill', grad);
   group.push(bg);
 
+  let blockY = y + 24;
+
   if (zone.stat) {
+    const statColor = resolveToken('{{brand.secondary_color}}') || '#3b82f6';
     const stat = new fabric.Textbox(zone.stat, {
-      left: x + 20, top: y + h/2 - 40, width: w - 40, fontSize: 56, fontWeight: '900',
-      fontFamily: 'Inter', fill: '#ffffff', originY: 'center', textAlign: 'center'
+      left: x + 24, top: blockY, width: w - 48, fontSize: 52, fontWeight: '900',
+      fontFamily: 'Outfit', fill: statColor, textAlign: 'center'
     });
     group.push(stat);
+    blockY += stat.height + 8;
   }
 
   if (zone.label) {
-    const label = new fabric.Textbox(zone.label, {
-      left: x + 20, top: y + h/2 + 10, width: w - 40, fontSize: 14, fontWeight: '500',
-      fontFamily: 'Inter', fill: 'rgba(255,255,255,0.8)', textAlign: 'center'
+    const label = new fabric.Textbox(zone.label.toUpperCase(), {
+      left: x + 24, top: blockY, width: w - 48, fontSize: 11, fontWeight: '700',
+      fontFamily: 'Inter', fill: '#94a3b8', textAlign: 'center', letterSpacing: 1.5
     });
     group.push(label);
+    blockY += label.height + 16;
   }
 
   if (zone.quote) {
-    const quote = new fabric.Textbox(`"${zone.quote}"`, {
-      left: x + 40, top: y + h/2 + 40, width: w - 80, fontSize: 12,
-      fontFamily: 'Playfair Display', fill: 'rgba(255,255,255,0.7)', fontStyle: 'italic', textAlign: 'center'
+    const quote = new fabric.Textbox(`“${zone.quote}”`, {
+      left: x + 40, top: blockY, width: w - 80, fontSize: 13,
+      fontFamily: 'Lora', fill: 'rgba(255, 255, 255, 0.85)',
+      fontStyle: 'italic', textAlign: 'center', lineHeight: 1.55
     });
     group.push(quote);
-    
-    const reqH = (quote.top - y) + quote.height + 40;
-    if (reqH > h && reqH > (zone.height || 100)) {
-      zone.height = reqH;
-      window._layoutChanged = true;
-    }
+    blockY += quote.height + 24;
+  } else {
+    blockY += 10;
+  }
+
+  const minH = 120;
+  const reqH = Math.max(minH, blockY - y);
+  if (Math.abs((zone.height || 100) - reqH) > 2) {
+    zone.height = reqH;
+    window._layoutChanged = true;
   }
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
@@ -740,33 +913,49 @@ function renderProofBlock(zone, x, y, w, h) {
 
 function renderCtaFooter(zone, x, y, w, h) {
   const group = [];
-  const bg = new fabric.Rect({ left: x, top: y, width: w, height: h, fill: '#f6f8fa', stroke: '#d0d7de', strokeWidth: 1, rx: 8 });
+  const bg = new fabric.Rect({
+    left: x, top: y, width: w, height: h,
+    fill: '#f8fafc', stroke: '#e2e8f0', strokeWidth: 1.5,
+    rx: 12, ry: 12, shadow: getPremiumShadow()
+  });
   group.push(bg);
 
-  const cta = new fabric.Rect({ left: x + w/2 - 100, top: y + 30, width: 200, height: 48, fill: resolveToken('{{brand.primary_color}}') || '#238636', rx: 24 });
-  group.push(cta);
+  const btnBg = resolveToken('{{brand.primary_color}}') || '#0f172a';
+  const ctaBtn = new fabric.Rect({
+    left: x + w/2 - 100, top: y + 24, width: 200, height: 40,
+    fill: btnBg, rx: 20, ry: 20, shadow: getPremiumShadow()
+  });
+  group.push(ctaBtn);
 
-  const ctaText = new fabric.Textbox(zone.cta_text || 'Get Started', {
-    left: x + w/2 - 80, top: y + 54, width: 160, fontSize: 16, fontWeight: '600',
-    fontFamily: 'Inter', fill: '#ffffff', originY: 'center', textAlign: 'center'
+  const ctaText = new fabric.Textbox(zone.cta_text || 'Learn More', {
+    left: x + w/2 - 80, top: y + 44, width: 160, fontSize: 14, fontWeight: '700',
+    fontFamily: 'Outfit', fill: '#ffffff', originY: 'center', textAlign: 'center', letterSpacing: 0.5
   });
   group.push(ctaText);
 
+  let contactY = y + 80;
   if (zone.contact_name) {
     const contact = new fabric.Textbox(zone.contact_name, {
-      left: x + 20, top: y + h - 30, width: w - 40, fontSize: 12, fontFamily: 'Inter',
-      fill: '#656d76', textAlign: 'center'
+      left: x + 24, top: contactY, width: w - 48, fontSize: 11, fontFamily: 'Inter',
+      fill: '#64748b', textAlign: 'center'
     });
     group.push(contact);
+    contactY += contact.height + 15;
   }
 
-  // Logo
+  // Logo upload/rendering in footer
   const logoUrl = resolveToken(zone.logo_url) || '';
   if (logoUrl && logoUrl !== '{{brand.logo_url}}') {
     fabric.Image.fromURL(logoUrl, img => {
-      img.set({ left: x + 20, top: y + h/2 - 15, width: 30, height: 30, selectable: true });
+      img.set({ left: x + 24, top: y + h/2 - 15, width: 30, height: 30, selectable: true });
       canvas.add(img);
     });
+  }
+
+  const reqH = Math.max(110, contactY - y);
+  if (Math.abs((zone.height || 120) - reqH) > 2) {
+    zone.height = reqH;
+    window._layoutChanged = true;
   }
 
   const g = new fabric.Group(group, { left: x, top: y, selectable: true, evented: true });
@@ -776,16 +965,17 @@ function renderCtaFooter(zone, x, y, w, h) {
 
 function renderDefaultZone(zone, x, y, w, h) {
   const rect = new fabric.Rect({
-    left: x, top: y, width: w, height: h, fill: 'rgba(88,166,255,0.1)',
-    stroke: '#58a6ff', strokeWidth: 2, rx: 4, selectable: true, evented: true
+    left: x, top: y, width: w, height: h, fill: 'rgba(59, 130, 246, 0.08)',
+    stroke: '#3b82f6', strokeWidth: 2, rx: 8, ry: 8, selectable: true, evented: true
   });
   const label = new fabric.Text(zone.type || 'unknown', {
-    left: x + 10, top: y + 10, fontSize: 12, fill: '#58a6ff', fontWeight: '600'
+    left: x + 12, top: y + 12, fontSize: 12, fill: '#3b82f6', fontWeight: '700', fontFamily: 'Outfit'
   });
   const g = new fabric.Group([rect, label], { left: x, top: y, selectable: true, evented: true });
   g.data = { zoneId: zone.id, zoneType: zone.type };
   return g;
 }
+
 
 // Brand Token Resolution
 function resolveToken(value) {

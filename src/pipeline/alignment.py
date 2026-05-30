@@ -47,20 +47,54 @@ class AlignmentEngine:
         if personas:
             context.append("APPROVED PERSONAS:")
             for p in personas:
-                context.append(f"- {p.name} ({p.role}): {p.pain_points}")
+                context.append(f"- {p.name}: {p.pain_points}")
             
         if messages:
             context.append("APPROVED KEY MESSAGES:")
             for m in messages:
-                # Assuming the message object has section_type and content
                 stype = getattr(m, "section_type", "message")
                 context.append(f"- [{stype}] {m.content}")
 
+        # Compute dynamic semantic similarity matches using VectorMetadataModel via GroundingEngine
+        from src.grounding.search import GroundingEngine
+        from src.models import SearchFilters
+        
+        sentences = [s.strip() for s in content.replace("\n", ". ").split(".") if len(s.strip()) > 15]
+        vector_matches = []
+        try:
+            engine = GroundingEngine(self.store, openai_api_key=self.api_key)
+            for sentence in sentences[:10]:  # Evaluate up to 10 sentences
+                search_filters = SearchFilters(message_houses=[str(house_id)], include_drafts=False)
+                res = engine.search(query=sentence, filters=search_filters, top_k=1)
+                for r in res.results:
+                    if r.confidence > 0.4:  # Only report relevant matches
+                        vector_matches.append({
+                            "sentence": sentence,
+                            "matched_content": r.content,
+                            "confidence": r.confidence,
+                            "section_type": r.section_type
+                        })
+        except Exception as e:
+            # Non-blocking: log vector search warning but proceed with direct comparison
+            pass
+
+        vector_alignment_str = "No semantic vector matches found."
+        if vector_matches:
+            vector_alignment_ctx = []
+            for vm in vector_matches:
+                vector_alignment_ctx.append(
+                    f"- Content fragment: '{vm['sentence']}' matches approved message: '{vm['matched_content']}' "
+                    f"({vm['section_type']}) with semantic confidence {vm['confidence']:.2f}."
+                )
+            vector_alignment_str = "\n".join(vector_alignment_ctx)
+
         system_prompt = (
             "You are an expert Messaging Governance Evaluator. Your job is to analyze the provided CONTENT "
-            "against the official MESSAGE HOUSE below.\n\n"
+            "against the official MESSAGE HOUSE and its semantic vector alignment matches.\n\n"
             "MESSAGE HOUSE:\n" + "\n".join(context) + "\n\n"
+            "SEMANTIC VECTOR ALIGNMENT MATCHES (from Vector database):\n" + vector_alignment_str + "\n\n"
             "You must score the content on a scale of 0-100 based on how well it aligns with the official messaging. "
+            "Consider both vector match confidences and direct conceptual alignment. "
             "Look for contradictions (where the content says something contrary to the positioning) and omissions "
             "(where key proof points or required messaging are missing).\n\n"
             "Output MUST be strict JSON matching this schema:\n"

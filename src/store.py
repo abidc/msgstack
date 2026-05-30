@@ -230,6 +230,9 @@ class PersonaModel(Base):
     pain_points: Mapped[list] = mapped_column(JSON, default=list)
     buying_triggers: Mapped[list] = mapped_column(JSON, default=list)
     objections: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     message_house: Mapped["HouseModel"] = relationship(back_populates="personas")
 
@@ -789,19 +792,34 @@ class Store:
                  """))
                 conn.commit()
 
-        # Create brand_assets table
-        if "brand_assets" not in insp.get_table_names():
-            conn.execute(text("""
-                CREATE TABLE brand_assets (
-                    id TEXT PRIMARY KEY,
-                    workspace_id TEXT NOT NULL,
-                    asset_name TEXT NOT NULL,
-                    asset_type TEXT DEFAULT 'logo',
-                    file_path TEXT NOT NULL,
-                    created_at DATETIME NOT NULL
-                )
-            """))
-            conn.commit()
+            # Create brand_assets table
+            if "brand_assets" not in insp.get_table_names():
+                conn.execute(text("""
+                    CREATE TABLE brand_assets (
+                        id TEXT PRIMARY KEY,
+                        workspace_id TEXT NOT NULL,
+                        asset_name TEXT NOT NULL,
+                        asset_type TEXT DEFAULT 'logo',
+                        file_path TEXT NOT NULL,
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            # Add status, approved_by, approved_at columns to personas if missing
+            if "personas" in insp.get_table_names():
+                p_cols = {c["name"] for c in insp.get_columns("personas")}
+                for col, col_def in (
+                    ("status", "VARCHAR(20) DEFAULT 'draft'"),
+                    ("approved_by", "VARCHAR(255)"),
+                    ("approved_at", "DATETIME"),
+                ):
+                    if col not in p_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE personas ADD COLUMN {col} {col_def}"))
+                            conn.commit()
+                        except Exception:
+                            pass
 
     def _seed_default_channels(self) -> None:
         with self.session() as s:
@@ -2644,6 +2662,7 @@ def _msg_from_row(row: KeyMessageModel) -> KeyMessage:
 
 
 def _persona_from_row(row: PersonaModel) -> Persona:
+    from src.models import MessageStatus
     return Persona(
         id=UUID(row.id),
         message_house_id=UUID(row.message_house_id),
@@ -2652,6 +2671,9 @@ def _persona_from_row(row: PersonaModel) -> Persona:
         pain_points=row.pain_points or [],
         buying_triggers=row.buying_triggers or [],
         objections=row.objections or [],
+        status=MessageStatus(row.status) if row.status else MessageStatus.DRAFT,
+        approved_by=row.approved_by,
+        approved_at=row.approved_at,
     )
 
 

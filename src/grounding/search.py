@@ -207,8 +207,7 @@ class GroundingEngine:
                     }
                 })
 
-        if len(matches) > top_k:
-            matches = self._rerank(query, matches, top_k)
+        matches = self._rerank(query, matches, top_k, filters)
 
         grounding_results = []
         houses_represented: dict[str, int] = {}
@@ -307,7 +306,7 @@ class GroundingEngine:
 
         return GroundingResponse(results=grounding_results, grounding_context=ctx)
 
-    def _rerank(self, query: str, matches: list[dict], top_k: int) -> list[dict]:
+    def _rerank(self, query: str, matches: list[dict], top_k: int, filters: SearchFilters) -> list[dict]:
         """Rerank by blending vector score with keyword-overlap score, rating boosts, and status prioritization."""
         _STOPWORDS = {"a", "an", "the", "and", "or", "in", "of", "to", "for", "is", "are",
                       "be", "with", "that", "this", "on", "at", "by", "from", "as", "it"}
@@ -327,12 +326,17 @@ class GroundingEngine:
             except Exception as e:
                 log.warning("Failed to fetch message statuses for reranking: %s", e)
 
-        # Filter matches: completely exclude key messages that are marked outdated
+        # Filter matches: completely exclude key messages that are marked outdated, and optionally drafts/in_review
+        include_drafts = getattr(filters, "include_drafts", False)
         filtered_matches = []
         for m in matches:
             km_id = m.get("metadata", {}).get("key_message_id")
-            if km_id and status_map.get(km_id) == "outdated":
-                continue
+            if km_id:
+                status = status_map.get(km_id, "draft")
+                if status == "outdated":
+                    continue
+                if not include_drafts and status not in ("approved", "locked"):
+                    continue
             filtered_matches.append(m)
 
         def _score(match: dict) -> float:
@@ -387,12 +391,13 @@ class GroundingEngine:
         results = []
         for chunk in chunks:
             # Exclude outdated messages
-            if chunk.get("status") == "outdated":
+            status = chunk.get("status", "draft")
+            if status == "outdated":
+                continue
+            if not getattr(filters, "include_drafts", False) and status not in ("approved", "locked"):
                 continue
             if filters.section_types and chunk.get("section_type") not in filters.section_types:
                 continue
-
-            status = chunk.get("status", "draft")
             status_order = {"locked": 0, "approved": 1, "in_review": 2, "draft": 3}
             s_val = status_order.get(status, 4)
 
@@ -430,7 +435,10 @@ class GroundingEngine:
             messages = self.store.get_key_messages(house.id)
             for msg in messages:
                 # Exclude outdated messages
-                if getattr(msg, "status", "draft") == "outdated":
+                status = getattr(msg, "status", "draft")
+                if status == "outdated":
+                    continue
+                if not getattr(filters, "include_drafts", False) and status not in ("approved", "locked"):
                     continue
                 if filters.section_types and str(msg.section_type) not in filters.section_types:
                     continue

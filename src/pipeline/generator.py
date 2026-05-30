@@ -60,6 +60,13 @@ class ArtifactGenerator:
             raise ValueError(f"House {house_id} not found")
 
         messages = self.store.get_key_messages(house.id)
+        # Approval gating: skip non-Approved messages by default, unless include_drafts is true
+        include_drafts = False
+        if custom_context and (custom_context.get("include_drafts") in (True, "true", "1", 1)):
+            include_drafts = True
+        if not include_drafts:
+            messages = [m for m in messages if m.status == "approved"]
+
         personas = self.store.get_personas(house.id)
 
         # Check if this is a visual artifact type
@@ -423,6 +430,19 @@ class ArtifactGenerator:
                     ob.get("statement", str(ob)) if isinstance(ob, dict) else str(ob)
                 )
 
+        # Structured arrays for templating / design spec placeholder resolution
+        benefits = [m.content for m in messages if str(m.section_type).split(".")[-1].lower() == "benefit"]
+        all_objections = []
+        for p in personas:
+            for ob in (p.objections or []):
+                if isinstance(ob, dict):
+                    all_objections.append(ob.get("statement", str(ob)) or "")
+                else:
+                    all_objections.append(str(ob))
+        pillars_list = [{"name": pl.name, "description": pl.description} for pl in (getattr(house, "pillars", []) or [])]
+        personas_list = [{"name": p.name, "description": p.description, "objections": p.objections} for p in personas]
+        structured_km = [{"section_type": str(m.section_type).split(".")[-1].lower(), "content": m.content} for m in messages]
+
         context = {
             "house_name": house.name,
             "positioning": house.positioning or "",
@@ -435,7 +455,12 @@ class ArtifactGenerator:
             "context": context_block,
             "primary_message": messages[0].content if messages else "",
             "persona": first_persona.name if first_persona else "",
-            "objections": "; ".join(first_obj_list) if first_obj_list else "",
+            "objections_str": "; ".join(first_obj_list) if first_obj_list else "",
+            "benefits": benefits,
+            "objections": all_objections,
+            "pillars": pillars_list,
+            "personas": personas_list,
+            "structured_key_messages": structured_km,
             # defaults for optional context variables used in some skill templates
             "target_length": "800-1200",
             "tone": "professional",
@@ -443,6 +468,7 @@ class ArtifactGenerator:
         }
         context.update(custom)
         return context
+
 
     def _parse_sections(self, raw: str, skill: dict) -> dict:
         sections = {}

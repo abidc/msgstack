@@ -745,6 +745,39 @@ def delete_persona(persona_id: str):
     return {"ok": True, "deleted_id": persona_id}
 
 
+# --- Persona Status ---
+
+class PersonaStatusUpdate(BaseModel):
+    status: str
+    approved_by: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@app.patch("/api/personas/{persona_id}/status")
+def update_persona_status(persona_id: str, data: PersonaStatusUpdate):
+    """Update a persona's approval status."""
+    persona = _find_persona(persona_id)
+    if not persona:
+        raise HTTPException(404, "Persona not found")
+    try:
+        persona.status = MessageStatus(data.status)
+    except ValueError:
+        raise HTTPException(400, f"Invalid status: {data.status}")
+    if persona.status == MessageStatus.APPROVED and data.approved_by:
+        persona.approved_by = data.approved_by
+        persona.approved_at = _now()
+    store.upsert_persona(persona)
+    # Log the review action
+    store.log_review_action(
+        house_id=persona.message_house_id,
+        action=f"persona_{data.status}",
+        performed_by=data.approved_by or "system",
+        notes=data.notes or "",
+    )
+    return {"ok": True, "id": persona_id, "status": str(persona.status)}
+
+
+
 # --- Source Upload & Processing ---
 
 @app.post("/api/upload")
