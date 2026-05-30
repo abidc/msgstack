@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, AliasChoices, ConfigDict
+from pydantic import BaseModel, Field, AliasChoices, ConfigDict, model_validator
 
 load_dotenv()
 
@@ -200,6 +200,8 @@ def _house_response(house: MessageHouse) -> dict:
         "tagline": house.tagline,
         "differentiation": house.differentiation,
         "last_synced": house.last_synced.isoformat() if house.last_synced else None,
+        "document_type": str(house.document_type),
+        "grounding_type": str(house.grounding_type),
         "key_messages": entries_list,
         "canon_entries": entries_list,
         "personas": [
@@ -387,15 +389,26 @@ class HouseCreate(BaseModel):
     differentiation: str = ""
     source: str = "manual"
     status: str = "active"
-    grounding_type: str = Field(default="message_house", validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
+    grounding_type: GroundingType = Field(default=GroundingType.MESSAGE_HOUSE, validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
 
     @property
-    def document_type(self) -> str:
+    def document_type(self) -> GroundingType:
         return self.grounding_type
 
     @document_type.setter
-    def document_type(self, value: str) -> None:
+    def document_type(self, value: GroundingType) -> None:
         self.grounding_type = value
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_conflicting_types(cls, data):
+        if isinstance(data, dict):
+            dt = data.get("document_type")
+            gt = data.get("grounding_type")
+            if dt is not None and gt is not None:
+                if dt != gt:
+                    raise ValueError("Conflicting values provided for 'grounding_type' and 'document_type'")
+        return data
 
 
 @app.post("/api/canon-domains")
@@ -411,7 +424,7 @@ def create_house(data: HouseCreate):
         tagline=data.tagline,
         differentiation=data.differentiation,
         status=HouseStatus(data.status),
-        grounding_type=GroundingType(data.grounding_type),
+        grounding_type=data.grounding_type,
         last_synced=_now(),
     )
     store.upsert_house(house)
@@ -428,15 +441,26 @@ class HouseUpdate(BaseModel):
     tagline: Optional[str] = None
     differentiation: Optional[str] = None
     status: Optional[str] = None
-    grounding_type: Optional[str] = Field(default=None, validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
+    grounding_type: Optional[GroundingType] = Field(default=None, validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
 
     @property
-    def document_type(self) -> Optional[str]:
+    def document_type(self) -> Optional[GroundingType]:
         return self.grounding_type
 
     @document_type.setter
-    def document_type(self, value: Optional[str]) -> None:
+    def document_type(self, value: Optional[GroundingType]) -> None:
         self.grounding_type = value
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_conflicting_types(cls, data):
+        if isinstance(data, dict):
+            dt = data.get("document_type")
+            gt = data.get("grounding_type")
+            if dt is not None and gt is not None:
+                if dt != gt:
+                    raise ValueError("Conflicting values provided for 'grounding_type' and 'document_type'")
+        return data
 
 
 @app.patch("/api/canon-domains/{domain_id}")
@@ -3110,7 +3134,7 @@ def _render_one_pager(house, grouped: dict, personas: list) -> str:
       </div>"""
 
     msgs_card = f"""<div class="card">
-      <div class="card-label">Key Messages &nbsp;·&nbsp; {msg_count} total</div>
+      <div class="card-label">Canon Entries &nbsp;·&nbsp; {msg_count} total</div>
       <div class="messages-grid">{blocks}</div>
     </div>"""
 

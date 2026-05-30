@@ -341,3 +341,60 @@ def test_mcp_tool_alias_score_alignment(mock_mcp_store):
         assert len(record) > 0
         assert res_alias["overall_score"] == 85
         assert res_alias["domain_id"] == domain.id
+
+
+# ── Parameter Conflict & Validation Tests ─────────────────────────────────────
+
+def test_grounding_type_conflicts_and_validation(test_setup):
+    _, client, domain, _, _ = test_setup
+
+    # 1. Conflicting parameters in POST (create) -> should raise 422
+    resp_create_conflict = client.post("/api/canon-domains", json={
+        "name": "Conflicting Brand",
+        "document_type": "brand_guide",
+        "grounding_type": "message_house"
+    })
+    assert resp_create_conflict.status_code == 422
+    assert "Conflicting values" in resp_create_conflict.json()["detail"][0]["msg"]
+
+    # 2. Conflicting parameters in PATCH (update) -> should raise 422
+    resp_update_conflict = client.patch(f"/api/canon-domains/{domain.id}", json={
+        "document_type": "brand_guide",
+        "grounding_type": "message_house"
+    })
+    assert resp_update_conflict.status_code == 422
+    assert "Conflicting values" in resp_update_conflict.json()["detail"][0]["msg"]
+
+    # 3. Invalid grounding_type value -> should raise 422
+    resp_invalid_gt = client.post("/api/canon-domains", json={
+        "name": "Invalid Brand",
+        "grounding_type": "invalid_grounding_type"
+    })
+    assert resp_invalid_gt.status_code == 422
+
+    # 4. Valid separate document_type creation -> succeeds and returns brand_guide
+    resp_doc_type = client.post("/api/canon-domains", json={
+        "name": "Doc Type Brand",
+        "document_type": "brand_guide"
+    })
+    assert resp_doc_type.status_code == 200
+    new_id = resp_doc_type.json()["id"]
+
+    resp_detail = client.get(f"/api/canon-domains/{new_id}")
+    assert resp_detail.status_code == 200
+    assert resp_detail.json()["document_type"] == "brand_guide"
+    assert resp_detail.json()["grounding_type"] == "brand_guide"
+
+    # 5. Valid separate grounding_type creation -> succeeds and returns competitive_brief
+    resp_grounding_type = client.post("/api/canon-domains", json={
+        "name": "Grounding Type Brand",
+        "grounding_type": "competitive_brief"
+    })
+    assert resp_grounding_type.status_code == 200
+    new_id_2 = resp_grounding_type.json()["id"]
+
+    resp_detail_2 = client.get(f"/api/canon-domains/{new_id_2}")
+    assert resp_detail_2.status_code == 200
+    assert resp_detail_2.json()["document_type"] == "competitive_brief"
+    assert resp_detail_2.json()["grounding_type"] == "competitive_brief"
+
