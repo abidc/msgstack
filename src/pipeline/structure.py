@@ -323,6 +323,7 @@ class HouseStructurer:
     CHUNK_OVERLAP = 1000
 
     _PROMPT_MAP = {
+        "canon_domain": _STRUCTURE_PROMPT,
         "message_house": _STRUCTURE_PROMPT,
         "brand_guide": _BRAND_GUIDE_PROMPT,
         "competitive_brief": _COMPETITIVE_BRIEF_PROMPT,

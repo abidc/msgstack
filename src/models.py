@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, AliasChoices
 
 
 class SectionType(str, Enum):
@@ -32,11 +32,13 @@ class SectionType(str, Enum):
 
 
 class DocumentType(str, Enum):
-    MESSAGE_HOUSE = "message_house"
+    CANON_DOMAIN = "canon_domain"
+    MESSAGE_HOUSE = "message_house"  # Deprecated
     BRAND_GUIDE = "brand_guide"
     COMPETITIVE_BRIEF = "competitive_brief"
     CORP_NARRATIVE = "corp_narrative"
     PERSONA_LIBRARY = "persona_library"
+
 
 class Channel(str, Enum):
     """Enum kept for backward compatibility; channel IDs used in Pydantic layer."""
@@ -49,18 +51,24 @@ class Channel(str, Enum):
     BLOG = "blog"
 
 
-class HouseStatus(str, Enum):
+class DomainStatus(str, Enum):
     ACTIVE = "active"
     ARCHIVED = "archived"
     NEEDS_REVIEW = "needs_review"
 
 
-class MessageStatus(str, Enum):
+HouseStatus = DomainStatus  # Deprecated alias
+
+
+class EntryStatus(str, Enum):
     DRAFT = "draft"
     IN_REVIEW = "in_review"
     APPROVED = "approved"
     OUTDATED = "outdated"
     LOCKED = "locked"
+
+
+MessageStatus = EntryStatus  # Deprecated alias
 
 
 class ArtifactStatus(str, Enum):
@@ -69,21 +77,21 @@ class ArtifactStatus(str, Enum):
     APPROVED = "approved"
 
 
-class MessageHouse(BaseModel):
+class CanonDomain(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
     id: UUID = Field(default_factory=uuid4)
     name: str
     source: str = "manual"
     source_id: str | None = None
-    document_type: DocumentType = DocumentType.MESSAGE_HOUSE
+    document_type: DocumentType = DocumentType.CANON_DOMAIN
     summary: str = ""
     audience: str = ""
     brand_personality: str = ""
     positioning: str = ""
     tagline: str = ""
     differentiation: str = ""
-    status: HouseStatus = HouseStatus.ACTIVE
+    status: DomainStatus = DomainStatus.ACTIVE
     last_synced: datetime | None = None
     last_reviewed: datetime | None = None
 
@@ -95,16 +103,19 @@ class MessageHouse(BaseModel):
         return True  # No review date means stale by default
 
 
-class KeyMessage(BaseModel):
-    model_config = ConfigDict(use_enum_values=True)
+MessageHouse = CanonDomain  # Deprecated alias
+
+
+class CanonEntry(BaseModel):
+    model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
 
     id: UUID = Field(default_factory=uuid4)
-    message_house_id: UUID
+    canon_domain_id: UUID = Field(validation_alias=AliasChoices('canon_domain_id', 'message_house_id'), serialization_alias='canon_domain_id')
     pillar_id: int | None = None
     section_type: SectionType
     priority: int = Field(ge=1, le=5)
     content: str
-    status: MessageStatus = MessageStatus.DRAFT
+    status: EntryStatus = EntryStatus.DRAFT
     approved_by: str | None = None
     approved_at: datetime | None = None
 
@@ -120,13 +131,33 @@ class KeyMessage(BaseModel):
     channels: list[str] = Field(default_factory=list)
     source_chunk_id: str | None = None
 
+    @property
+    def message_house_id(self) -> UUID:
+        return self.canon_domain_id
+
+    @message_house_id.setter
+    def message_house_id(self, value: UUID) -> None:
+        self.canon_domain_id = value
+
+
+KeyMessage = CanonEntry  # Deprecated alias
+
 
 class Pillar(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     id: int
-    house_id: str
+    canon_domain_id: str = Field(validation_alias=AliasChoices('canon_domain_id', 'house_id'), serialization_alias='canon_domain_id')
     name: str
     description: str | None = None
     display_order: int = 0
+
+    @property
+    def house_id(self) -> str:
+        return self.canon_domain_id
+
+    @house_id.setter
+    def house_id(self, value: str) -> None:
+        self.canon_domain_id = value
 
 
 class PillarCreate(BaseModel):
@@ -142,14 +173,15 @@ class PillarUpdate(BaseModel):
 
 
 class Persona(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     id: UUID = Field(default_factory=uuid4)
-    message_house_id: UUID
+    canon_domain_id: UUID = Field(validation_alias=AliasChoices('canon_domain_id', 'message_house_id'), serialization_alias='canon_domain_id')
     name: str
     description: str = ""
     pain_points: list[str] = Field(default_factory=list)
     buying_triggers: list[str] = Field(default_factory=list)
     objections: list[str] = Field(default_factory=list)
-    status: MessageStatus = MessageStatus.DRAFT
+    status: EntryStatus = EntryStatus.DRAFT
     approved_by: str | None = None
     approved_at: datetime | None = None
 
@@ -162,6 +194,14 @@ class Persona(BaseModel):
     @classmethod
     def coerce_objections(cls, v):
         return [i.get("statement", str(i)) if isinstance(i, dict) else str(i) for i in (v or [])]
+
+    @property
+    def message_house_id(self) -> UUID:
+        return self.canon_domain_id
+
+    @message_house_id.setter
+    def message_house_id(self, value: UUID) -> None:
+        self.canon_domain_id = value
 
 
 class PainPoint(BaseModel):
@@ -184,19 +224,51 @@ class Objection(BaseModel):
 
 
 class GroundingChunk(BaseModel):
-    model_config = ConfigDict(use_enum_values=True)
+    model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
 
     id: str
-    message_house_id: UUID
-    key_message_id: UUID | None = None
+    canon_domain_id: UUID = Field(validation_alias=AliasChoices('canon_domain_id', 'message_house_id'), serialization_alias='canon_domain_id')
+    canon_entry_id: UUID | None = Field(default=None, validation_alias=AliasChoices('canon_entry_id', 'key_message_id'), serialization_alias='canon_entry_id')
     content: str
     section_type: SectionType
     priority: int
     persona: str | None = None
     channel: Channel = Channel.ALL
-    house_name: str = ""
-    house_summary: str = ""
+    canon_domain_name: str = Field(default="", validation_alias=AliasChoices('canon_domain_name', 'house_name'), serialization_alias='canon_domain_name')
+    canon_domain_summary: str = Field(default="", validation_alias=AliasChoices('canon_domain_summary', 'house_summary'), serialization_alias='canon_domain_summary')
     last_synced: datetime | None = None
+
+    @property
+    def message_house_id(self) -> UUID:
+        return self.canon_domain_id
+
+    @message_house_id.setter
+    def message_house_id(self, value: UUID) -> None:
+        self.canon_domain_id = value
+
+    @property
+    def key_message_id(self) -> UUID | None:
+        return self.canon_entry_id
+
+    @key_message_id.setter
+    def key_message_id(self, value: UUID | None) -> None:
+        self.canon_entry_id = value
+
+    @property
+    def house_name(self) -> str:
+        return self.canon_domain_name
+
+    @house_name.setter
+    def house_name(self, value: str) -> None:
+        self.canon_domain_name = value
+
+    @property
+    def house_summary(self) -> str:
+        return self.canon_domain_summary
+
+    @house_summary.setter
+    def house_summary(self, value: str) -> None:
+        self.canon_domain_summary = value
 
 
 class GroundingResult(BaseModel):
@@ -213,15 +285,40 @@ class GroundingResult(BaseModel):
 
 
 class GroundingContext(BaseModel):
-    active_house_id: UUID | None = None
-    house_name: str = ""
-    house_summary: str = ""
+    model_config = ConfigDict(populate_by_name=True)
+    active_canon_domain_id: UUID | None = Field(default=None, validation_alias=AliasChoices('active_canon_domain_id', 'active_house_id'), serialization_alias='active_canon_domain_id')
+    canon_domain_name: str = Field(default="", validation_alias=AliasChoices('canon_domain_name', 'house_name'), serialization_alias='canon_domain_name')
+    canon_domain_summary: str = Field(default="", validation_alias=AliasChoices('canon_domain_summary', 'house_summary'), serialization_alias='canon_domain_summary')
     active_personas: list[str] = Field(default_factory=list)
     used_chunks: int = 0
     confidence: str = "medium"
     coverage: dict[str, str] = Field(default_factory=dict)
     gaps: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+    @property
+    def active_house_id(self) -> UUID | None:
+        return self.active_canon_domain_id
+
+    @active_house_id.setter
+    def active_house_id(self, value: UUID | None) -> None:
+        self.active_canon_domain_id = value
+
+    @property
+    def house_name(self) -> str:
+        return self.canon_domain_name
+
+    @house_name.setter
+    def house_name(self, value: str) -> None:
+        self.canon_domain_name = value
+
+    @property
+    def house_summary(self) -> str:
+        return self.canon_domain_summary
+
+    @house_summary.setter
+    def house_summary(self, value: str) -> None:
+        self.canon_domain_summary = value
 
 
 class GroundingResponse(BaseModel):
@@ -230,8 +327,8 @@ class GroundingResponse(BaseModel):
 
 
 COMPLETE_FRAMEWORK_SPEC = {
-    "description": "Definition of a complete MsgStack messaging framework (message house).",
-    "house_fields": {
+    "description": "Definition of a complete MsgStack canon framework (canon domain).",
+    "domain_fields": {
         "name": "Brand or product name",
         "summary": "1-2 sentence product overview",
         "positioning": "Full positioning statement — for [audience] who [need], [product] is [category] that [benefit]. Unlike [alt], [product] [key differentiator].",
@@ -250,7 +347,7 @@ COMPLETE_FRAMEWORK_SPEC = {
         "social_proof": "Customer quotes, awards, media mentions, G2/analyst recognition. Min 3.",
         "positioning": "Core positioning message in key-message form. Min 1.",
     },
-    "key_message_fields": {
+    "canon_entry_fields": {
         "content": "The core message in plain language.",
         "priority": "1 (highest) to 5. Top 3 should be the sharpest messages.",
         "personas": "Which personas this message is most relevant for.",
@@ -271,15 +368,18 @@ COMPLETE_FRAMEWORK_SPEC = {
     },
     "minimum_personas": 2,
     "completeness_checklist": [
-        "All 7 section types have at least 1 key message",
-        "headline, subhead, benefit, proof_point have 3+ messages each",
+        "All 7 section types have at least 1 canon entry",
+        "headline, subhead, benefit, proof_point have 3+ entries each",
         "At least 2 personas defined with all fields",
-        "All key messages have linkedin and email variants",
+        "All canon entries have linkedin and email variants",
         "Positioning statement is a full sentence (50+ chars)",
         "Tagline is present and under 60 chars",
         "Differentiation is specific and comparative (not generic)",
     ],
 }
+
+COMPLETE_FRAMEWORK_SPEC["house_fields"] = COMPLETE_FRAMEWORK_SPEC["domain_fields"]
+COMPLETE_FRAMEWORK_SPEC["key_message_fields"] = COMPLETE_FRAMEWORK_SPEC["canon_entry_fields"]
 
 
 class ArtifactRating(BaseModel):
@@ -346,11 +446,20 @@ def resolve_brand_tokens(workspace_id: str, design_spec: "DesignSpec") -> "Desig
 
 
 class SearchFilters(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     section_types: list[str] | None = None
     personas: list[str] | None = None
     channels: list[str] | None = None
-    message_houses: list[str] | None = None
+    canon_domains: list[str] | None = Field(default=None, validation_alias=AliasChoices('canon_domains', 'message_houses'), serialization_alias='canon_domains')
     include_variants: bool = True
     min_priority: int | None = None
     min_confidence: float | None = None
     include_drafts: bool = False
+
+    @property
+    def message_houses(self) -> list[str] | None:
+        return self.canon_domains
+
+    @message_houses.setter
+    def message_houses(self, value: list[str] | None) -> None:
+        self.canon_domains = value

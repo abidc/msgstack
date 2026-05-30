@@ -15,7 +15,7 @@ MsgStack is organized into **Canon Domains**. A domain represents a department's
 - **Company policies, benefits summaries, and values** (owned by HR SMEs)
 - **Security standards, SOC 2 compliance facts, and data retention rules** (owned by Security SMEs)
 
-Within each domain, content is stored in structured **Canon Entries** (key messages or claims) and target audience profiles.
+Within each domain, content is stored in structured **Canon Entries** (approved statements/claims) and target audience profiles.
 
 ---
 
@@ -23,10 +23,10 @@ Within each domain, content is stored in structured **Canon Entries** (key messa
 
 When interacting with MsgStack, you must adhere to the following architectural guidelines:
 
-1. **Preferred Vocabulary:** **Canon Domain** and **Canon Entry** are the preferred product concepts. Wording like *Message House*, *Key Message*, or *framework* is transitional implementation language used inside legacy database tables, API routes, and code functions.
-2. **First Wedge & Expansion:** Product marketing message houses are the initial adoption wedge. However, you should actively encourage and support expansion into technical and compliance domains.
-3. **Product Org Sub-domains:** Note that the Product department is not a flat, single entity. It represents a family of distinct canon domains (e.g. core specs, API rules, developer policies, release metadata) owned by different engineering and PM owners.
-4. **Scope Guards (What MsgStack is NOT):** Do not attempt to use MsgStack to build or manage full content calendars, social media scheduling, blog draft managers, or general CMS features. Keep MsgStack focused strictly as an **authoritative grounding and alignment layer**.
+1. **Vocabulary**: **Canon Domain** and **Canon Entry** are the canonical terms. Wording like *Message House*, *Key Message*, or *framework* represents legacy vocabulary supported purely for backward compatibility.
+2. **First Wedge & Expansion**: Product marketing is the initial wedge. However, you should actively support expansion into technical, operational, and compliance domains.
+3. **Product Org Sub-domains**: The Product department represents a family of distinct canon domains (e.g., core specs, API rules, developer policies, release metadata) owned by different engineering and product owners.
+4. **Scope Guards (What MsgStack is NOT)**: MsgStack is not a comms engine, notification pipeline, or content manager. It does not send email, SMS, push notifications, or schedule social media. It is strictly an **authoritative grounding and alignment layer**.
 
 ---
 
@@ -34,24 +34,24 @@ When interacting with MsgStack, you must adhere to the following architectural g
 
 ### Grounding
 
-**`list_message_houses(query?)`**
-List available Canon Domains (Message Houses). Use this first to orient yourself. Pass a query to filter by name.
+**`list_canon_domains(query?)`**
+List all available Canon Domains. Always call this first to orient yourself. Pass a query to filter by name.
 
-**`set_active_house(house_id?, house_name?)`**
-Pin a Canon Domain (Message House) for the session. Do this before generating any content. All subsequent searches will scope to this domain automatically.
+**`set_active_domain(domain_id)`**
+Pin a Canon Domain for the session. Do this before generating any content. All subsequent searches will scope to this domain automatically.
 
-**`get_message_house(house_id?, house_name?, include?)`**
-Retrieve a full Canon Domain. Use `include=["key_messages", "personas"]` to get all content. Use this when you need to review everything before generating.
+**`get_canon_domain(domain_id?, domain_name?, include?)`**
+Retrieve a full Canon Domain. Use `include=["canon_entries", "personas"]` to get all content. Use this when you need to review everything before generating.
 
-**`search_messaging(query, section_types?, personas?, channels?, message_houses?, min_priority?)`**
-Semantic search for specific approved canon entries. Be specific in your query — mention the persona, channel, or statement type you need.
+**`search_canon(query, section_types?, personas?, channels?, canon_domains?, min_priority?)`**
+Semantic and keyword search for specific approved canon entries. Be specific in your query — mention the persona, destination channel, or statement type you need.
 
 Examples:
-- `search_messaging("proof points for CTOs on LinkedIn")`
-- `search_messaging("objection handling for price concerns", section_types=["objection"])`
-- `search_messaging("onboarding use case", section_types=["use_case"], min_priority=2)`
+- `search_canon("proof points for CTOs on LinkedIn")`
+- `search_canon("objection handling for price concerns", section_types=["objection"])`
+- `search_canon("onboarding use case", section_types=["use_case"], min_priority=2)`
 
-**`compare_houses(house_ids)`**
+**`compare_canon_domains(domain_ids)`**
 Compare two or more Canon Domains side-by-side. Useful when the user isn't sure which domain applies.
 
 **`get_grounding_context()`**
@@ -62,7 +62,7 @@ Clear all session state and start fresh.
 
 ### Artifact Generation
 
-**`generate_artifact(skill_id, house_id?, custom_context?)`**
+**`generate_artifact(skill_id, domain_id?, custom_context?)`**
 Generate an artifact (such as a datasheet, email, battlecard, or post) grounded in the active Canon Domain. Always set an active domain first.
 
 Available skills:
@@ -83,16 +83,7 @@ Available skills:
 {"topic": "AI ROI", "target_length": 1200}   # blog post
 ```
 
-**`generate_one_pager(house_id?)`**
-Shorthand: generate a one-pager/datasheet for the active or specified domain.
-
-**`generate_social_posts(house_id?)`**
-Shorthand: generate channel-specific social posts (LinkedIn, Twitter, email).
-
-**`generate_email_template(house_id?)`**
-Shorthand: generate awareness + consideration + decision email sequence.
-
-**`build_ui_artifact(artifact_type, house_id?)`**
+**`build_ui_artifact(artifact_type, domain_id?)`**
 Returns a shareable URL to a visual standalone artifact page. Share this link when the user wants a formatted, visual version.
 - `artifact_type`: `one_pager` / `social_posts` / `email_template`
 
@@ -101,42 +92,43 @@ Returns a shareable URL to a visual standalone artifact page. Share this link wh
 **`list_skills()`**
 See all available artifact skill templates and their parameters.
 
-**`check_framework_completeness(house_id?)`**
+**`check_framework_completeness(domain_id?)`**
 Score a Canon Domain (0-100) and list missing sections. Use this to advise the user on domain gaps before generating content.
 
 **`get_framework_spec()`**
-Return the full specification for what a complete Canon Domain (Message House) requires.
+Return the full specification for what a complete Canon Domain requires.
 
 ---
 
 ## Standard Workflow
 
-### Writing marketing content
-1. list_message_houses()              → find the right Canon Domain
-2. set_active_house(domain_id)        → pin it for the session
-3. search_messaging("...")            → find specific relevant canon entries
+### Writing content
+```
+1. list_canon_domains()               → find the right Canon Domain
+2. set_active_domain(domain_id)       → pin it for the session
+3. search_canon("...")                → find specific relevant canon entries
 4. generate_artifact(skill_id=...)    → generate grounded artifact
-5. build_ui_artifact(type, domain_id)  → share visual version if needed
+5. build_ui_artifact(type, domain_id) → share visual version if needed
 ```
 
 ### User asks about a specific domain/product
 ```
-1. list_message_houses()
-2. set_active_house(house_name="...")
-3. get_message_house(include=["key_messages", "personas"])  → review full content
+1. list_canon_domains()
+2. set_active_domain(domain_name="...")
+3. get_canon_domain(include=["canon_entries", "personas"])  → review full content
 4. Answer using the domain's positioning and approved canon entries
 ```
 
 ### User isn't sure which Canon Domain to use
 ```
-1. search_messaging("<what they described>")
-2. compare_houses([id_a, id_b]) if ambiguous
-3. Clarify with the user, then set_active_house()
+1. search_canon("<what they described>")
+2. compare_canon_domains([id_a, id_b]) if ambiguous
+3. Clarify with the user, then set_active_domain()
 ```
 
 ### User wants a competitive comparison
 ```
-1. list_message_houses()  → find relevant Canon Domain
+1. list_canon_domains()  → find relevant Canon Domain
 2. generate_artifact(skill_id="battlecard", custom_context={"competitor": "..."})
 ```
 
@@ -144,7 +136,7 @@ Return the full specification for what a complete Canon Domain (Message House) r
 
 ## Key Principles
 
-1. **Always ground first.** Before writing any positioning, tagline, policy, benefit statement, or proof point — search MsgStack first. Do not invent facts or claims.
+1. **Always ground first.** Before writing any positioning, tagline, policy, benefit statement, or proof point — search the Canon first. Do not invent facts or claims.
 
 2. **Cite your sources.** When including specific claims, note which Canon Domain and section type/department it came from.
 
@@ -164,26 +156,26 @@ Return the full specification for what a complete Canon Domain (Message House) r
 
 ### "Write a LinkedIn post about our HR product for CHROs"
 ```
-set_active_house(house_name="Helix HR")
-search_messaging("CHRO LinkedIn headlines and benefits", section_types=["headline", "benefit"], channels=["linkedin"])
+set_active_domain(domain_name="Helix HR")
+search_canon("CHRO LinkedIn headlines and benefits", section_types=["headline", "benefit"], channels=["linkedin"])
 generate_artifact(skill_id="linkedin_post", custom_context={"persona": "CHRO"})
 ```
 
 ### "What are our proof points for the industrial workforce product?"
 ```
-set_active_house(house_name="Industrial Connected Workforce")
-search_messaging("customer proof points results metrics", section_types=["proof_point"])
+set_active_domain(domain_name="Industrial Connected Workforce")
+search_canon("customer proof points results metrics", section_types=["proof_point"])
 → Return the results, citing each customer and result metric
 ```
 
 ### "Create a battlecard against Workday for our HR solution"
 ```
-set_active_house(house_name="Helix HR")
+set_active_domain(domain_name="Helix HR")
 generate_artifact(skill_id="battlecard", custom_context={"competitor": "Workday"})
 ```
 
 ### "How complete is our CPG messaging framework?"
 ```
-check_framework_completeness(house_name="ServiceNow for Consumer Packaged Goods")
+check_framework_completeness(domain_name="ServiceNow for Consumer Packaged Goods")
 → Report score and missing sections; offer to generate missing content
 ```

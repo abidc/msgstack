@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, AliasChoices, ConfigDict
 
 load_dotenv()
 
@@ -27,7 +27,11 @@ configure_logging()
 log = logging.getLogger(__name__)
 
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
-from src.models import ArtifactStatus, Channel, DocumentType, HouseStatus, KeyMessage, MessageHouse, MessageStatus, Persona, SectionType
+from src.models import (
+    ArtifactStatus, Channel, DocumentType, DomainStatus, EntryStatus,
+    CanonEntry, CanonDomain, Persona, SectionType,
+    HouseStatus, KeyMessage, MessageHouse, MessageStatus  # Deprecated aliases
+)
 from src.store import init_store
 from src.pipeline.extract import ExtractionError, extract_text, chunk_text, save_upload
 from src.pipeline.structure import HouseStructurer, StructuredHouse
@@ -170,6 +174,18 @@ def _house_response(house: MessageHouse) -> dict:
     messages = store.get_key_messages(house.id)
     personas = store.get_personas(house.id)
     completeness = _completeness_score_fast(house, len(messages), len(personas))
+    entries_list = [
+        {
+            "id": str(m.id),
+            "section_type": m.section_type.value if hasattr(m.section_type, "value") else m.section_type,
+            "priority": m.priority,
+            "content": m.content,
+            "variants": m.variants,
+            "personas": m.personas,
+            "channels": [c.value if hasattr(c, "value") else c for c in m.channels],
+        }
+        for m in messages
+    ]
     return {
         "id": str(house.id),
         "completeness_score": completeness,
@@ -184,18 +200,8 @@ def _house_response(house: MessageHouse) -> dict:
         "tagline": house.tagline,
         "differentiation": house.differentiation,
         "last_synced": house.last_synced.isoformat() if house.last_synced else None,
-        "key_messages": [
-            {
-                "id": str(m.id),
-                "section_type": m.section_type.value if hasattr(m.section_type, "value") else m.section_type,
-                "priority": m.priority,
-                "content": m.content,
-                "variants": m.variants,
-                "personas": m.personas,
-                "channels": [c.value if hasattr(c, "value") else c for c in m.channels],
-            }
-            for m in messages
-        ],
+        "key_messages": entries_list,
+        "canon_entries": entries_list,
         "personas": [
             {
                 "id": str(p.id),
@@ -212,10 +218,11 @@ def _house_response(house: MessageHouse) -> dict:
 
 # --- Houses ---
 
+@app.get("/api/canon-domains")
 @app.get("/api/houses")
 def list_houses(query: Optional[str] = None, auth: AuthContext = Depends(get_auth_context)):
     workspace_filter = auth.workspace_id if settings.auth_enabled else None
-    rows = store.list_houses_with_counts(workspace_id=workspace_filter)
+    rows = store.list_canon_domains_with_counts(workspace_id=workspace_filter)
     result = []
     for row in rows:
         h = row["house"]
@@ -233,6 +240,7 @@ def list_houses(query: Optional[str] = None, auth: AuthContext = Depends(get_aut
             "summary": summary[:150] + ("..." if len(summary) > 150 else ""),
             "persona_count": pc,
             "message_count": mc,
+            "entry_count": mc,
             "last_synced": h.last_synced.isoformat() if h.last_synced else None,
             "completeness_score": completeness,
         })
@@ -254,14 +262,16 @@ def _completeness_score_fast(house, message_count, persona_count) -> int:
     return min(score, 100)
 
 
+@app.get("/api/canon-domains/{domain_id}")
 @app.get("/api/houses/{house_id}")
-def get_house(house_id: str):
+def get_house(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
     try:
-        house = store.get_house(UUID(house_id))
+        house = store.get_canon_domain(UUID(actual_id))
     except Exception:
-        raise HTTPException(404, "Invalid house ID")
+        raise HTTPException(404, "Invalid ID")
     if not house:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
     return _house_response(house)
 
 
@@ -270,39 +280,45 @@ def get_house(house_id: str):
 from src.models import PillarCreate, PillarUpdate
 
 
+@app.get("/api/canon-domains/{domain_id}/pillars")
 @app.get("/api/houses/{house_id}/pillars")
-def list_pillars(house_id: str):
+def list_pillars(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(404, "Invalid house ID")
-    house = store.get_house(house_uuid)
+        raise HTTPException(404, "Invalid ID")
+    house = store.get_canon_domain(house_uuid)
     if not house:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
     pillars = store.list_pillars(house_uuid)
     return [p.model_dump() for p in pillars]
 
 
+@app.post("/api/canon-domains/{domain_id}/pillars", status_code=201)
 @app.post("/api/houses/{house_id}/pillars", status_code=201)
-def create_pillar(house_id: str, data: PillarCreate):
+def create_pillar(data: PillarCreate, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(404, "Invalid house ID")
-    house = store.get_house(house_uuid)
+        raise HTTPException(404, "Invalid ID")
+    house = store.get_canon_domain(house_uuid)
     if not house:
         raise HTTPException(404, "House not found")
     pillar_id = store.create_pillar(house_uuid, data.name, data.description, data.display_order)
     return {"id": pillar_id, "name": data.name, "description": data.description, "display_order": data.display_order}
 
 
+@app.patch("/api/canon-domains/{domain_id}/pillars/{pillar_id}")
 @app.patch("/api/houses/{house_id}/pillars/{pillar_id}")
-def update_pillar(house_id: str, pillar_id: int, data: PillarUpdate):
+def update_pillar(pillar_id: int, data: PillarUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(404, "Invalid house ID")
-    house = store.get_house(house_uuid)
+        raise HTTPException(404, "Invalid ID")
+    house = store.get_canon_domain(house_uuid)
     if not house:
         raise HTTPException(404, "House not found")
     # Build update dict
@@ -326,13 +342,15 @@ def update_pillar(house_id: str, pillar_id: int, data: PillarUpdate):
     raise HTTPException(404, "Pillar not found")
 
 
+@app.delete("/api/canon-domains/{domain_id}/pillars/{pillar_id}", status_code=204)
 @app.delete("/api/houses/{house_id}/pillars/{pillar_id}", status_code=204)
-def delete_pillar(house_id: str, pillar_id: int):
+def delete_pillar(pillar_id: int, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(404, "Invalid house ID")
-    house = store.get_house(house_uuid)
+        raise HTTPException(404, "Invalid ID")
+    house = store.get_canon_domain(house_uuid)
     if not house:
         raise HTTPException(404, "House not found")
     success = store.delete_pillar(pillar_id)
@@ -370,6 +388,7 @@ class HouseCreate(BaseModel):
     document_type: str = "message_house"
 
 
+@app.post("/api/canon-domains")
 @app.post("/api/houses")
 def create_house(data: HouseCreate):
     house = MessageHouse(
@@ -401,28 +420,32 @@ class HouseUpdate(BaseModel):
     document_type: Optional[str] = None
 
 
+@app.patch("/api/canon-domains/{domain_id}")
 @app.patch("/api/houses/{house_id}")
-def update_house(house_id: str, data: HouseUpdate):
-    house = store.get_house(UUID(house_id))
+def update_house(data: HouseUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
+    house = store.get_house(UUID(actual_id))
     if not house:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
     for k, v in data.model_dump(exclude_none=True).items():
         if k == "document_type":
             setattr(house, k, DocumentType(v))
         else:
             setattr(house, k, v)
     store.upsert_house(house)
-    return {"ok": True, "updated_id": house_id}
+    return {"ok": True, "updated_id": actual_id}
 
 
+@app.delete("/api/canon-domains/{domain_id}")
 @app.delete("/api/houses/{house_id}")
-def delete_house(house_id: str):
+def delete_house(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
     try:
-        uid = UUID(house_id)
+        uid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     if not store.get_house(uid):
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
     # Delete vectors BEFORE DB deletion so key message IDs are still available
     try:
         from src.grounding.search import GroundingEngine
@@ -433,21 +456,22 @@ def delete_house(house_id: str):
         )
         ge.delete_house_vectors(uid)
     except Exception as exc:
-        log.warning("Vector index cleanup on house delete failed: %s", exc)
+        log.warning("Vector index cleanup on domain delete failed: %s", exc)
     store.delete_house(uid)
-    # Rebuild graph so deleted house is removed immediately
+    # Rebuild graph so deleted domain is removed immediately
     try:
         from src.grounding.graph import get_graph_engine
         get_graph_engine().rebuild()
     except Exception as exc:
-        log.warning("Graph rebuild after house delete failed: %s", exc)
-    return {"ok": True, "deleted_id": house_id}
+        log.warning("Graph rebuild after domain delete failed: %s", exc)
+    return {"ok": True, "deleted_id": actual_id}
 
 
 # --- Key Messages ---
 
-class MessageCreate(BaseModel):
-    message_house_id: str
+class EntryCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    canon_domain_id: str = Field(validation_alias=AliasChoices('canon_domain_id', 'message_house_id'), serialization_alias='canon_domain_id')
     section_type: str
     priority: int = 3
     content: str
@@ -455,12 +479,23 @@ class MessageCreate(BaseModel):
     personas: list = []
     channels: list = ["all"]
 
+    @property
+    def message_house_id(self) -> str:
+        return self.canon_domain_id
 
+    @message_house_id.setter
+    def message_house_id(self, value: str) -> None:
+        self.canon_domain_id = value
+
+MessageCreate = EntryCreate
+
+
+@app.post("/api/entries")
 @app.post("/api/messages")
-def create_message(data: MessageCreate):
+def create_message(data: EntryCreate):
     try:
-        msg = KeyMessage(
-            message_house_id=UUID(data.message_house_id),
+        msg = CanonEntry(
+            canon_domain_id=UUID(data.canon_domain_id),
             section_type=SectionType(data.section_type),
             priority=data.priority,
             content=data.content,
@@ -474,7 +509,7 @@ def create_message(data: MessageCreate):
         raise HTTPException(400, str(e))
 
 
-class MessageUpdate(BaseModel):
+class EntryUpdate(BaseModel):
     section_type: Optional[str] = None
     priority: Optional[int] = None
     content: Optional[str] = None
@@ -482,14 +517,18 @@ class MessageUpdate(BaseModel):
     personas: Optional[list] = None
     channels: Optional[list] = None
 
+MessageUpdate = EntryUpdate
 
+
+@app.patch("/api/entries/{entry_id}")
 @app.patch("/api/messages/{msg_id}")
-def update_message(msg_id: str, data: MessageUpdate):
-    msg = _find_message(msg_id)
+def update_message(data: EntryUpdate, msg_id: Optional[str] = None, entry_id: Optional[str] = None):
+    actual_id = entry_id or msg_id
+    msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Message not found")
-    if msg.status == MessageStatus.LOCKED:
-        raise HTTPException(409, "Message is locked and cannot be edited. Unlock it first via the status endpoint.")
+        raise HTTPException(404, "Canon entry not found")
+    if msg.status == EntryStatus.LOCKED:
+        raise HTTPException(409, "Canon entry is locked and cannot be edited. Unlock it first via the status endpoint.")
     for k, v in data.model_dump(exclude_none=True).items():
         if k == "section_type":
             msg.section_type = SectionType(v)
@@ -498,89 +537,100 @@ def update_message(msg_id: str, data: MessageUpdate):
         else:
             setattr(msg, k, v)
     store.upsert_key_message(msg)
-    return {"ok": True, "updated_id": msg_id}
+    return {"ok": True, "updated_id": actual_id}
 
 
+@app.delete("/api/entries/{entry_id}")
 @app.delete("/api/messages/{msg_id}")
-def delete_message(msg_id: str):
-    msg = _find_message(msg_id)
+def delete_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None):
+    actual_id = entry_id or msg_id
+    msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Message not found")
-    if msg.status == MessageStatus.LOCKED:
-        raise HTTPException(409, "Message is locked and cannot be deleted. Unlock it first via the status endpoint.")
-    if not store.delete_key_message(UUID(msg_id)):
-        raise HTTPException(404, "Message not found")
-    return {"ok": True, "deleted_id": msg_id}
+        raise HTTPException(404, "Canon entry not found")
+    if msg.status == EntryStatus.LOCKED:
+        raise HTTPException(409, "Canon entry is locked and cannot be deleted. Unlock it first via the status endpoint.")
+    if not store.delete_key_message(UUID(actual_id)):
+        raise HTTPException(404, "Canon entry not found")
+    return {"ok": True, "deleted_id": actual_id}
 
 
-# --- Message Status ---
+# --- Canon Entry Status ---
 
-class MessageStatusUpdate(BaseModel):
+class EntryStatusUpdate(BaseModel):
     status: str
     approved_by: Optional[str] = None
     notes: Optional[str] = None
 
+MessageStatusUpdate = EntryStatusUpdate
 
+
+@app.patch("/api/entries/{entry_id}/status")
 @app.patch("/api/messages/{msg_id}/status")
-def update_message_status(msg_id: str, data: MessageStatusUpdate):
-    """Update a key message's approval status."""
-    msg = _find_message(msg_id)
+def update_message_status(data: EntryStatusUpdate, msg_id: Optional[str] = None, entry_id: Optional[str] = None):
+    """Update a canon entry's approval status."""
+    actual_id = entry_id or msg_id
+    msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Message not found")
+        raise HTTPException(404, "Canon entry not found")
     try:
-        msg.status = MessageStatus(data.status)
+        msg.status = EntryStatus(data.status)
     except ValueError:
         raise HTTPException(400, f"Invalid status: {data.status}")
-    if msg.status == MessageStatus.APPROVED and data.approved_by:
+    if msg.status == EntryStatus.APPROVED and data.approved_by:
         msg.approved_by = data.approved_by
         msg.approved_at = _now()
     store.upsert_key_message(msg)
     # Log the review action
     store.log_review_action(
-        house_id=msg.message_house_id,
+        house_id=msg.canon_domain_id,
         action=f"message_{data.status}",
         performed_by=data.approved_by or "system",
-        message_id=UUID(msg_id),
+        message_id=UUID(actual_id),
         notes=data.notes or "",
     )
-    return {"ok": True, "id": msg_id, "status": str(msg.status)}
+    return {"ok": True, "id": actual_id, "status": str(msg.status)}
 
 
 # --- House Review & Staleness ---
 
+@app.post("/api/canon-domains/{domain_id}/review")
 @app.post("/api/houses/{house_id}/review")
-def mark_house_reviewed(house_id: str, performed_by: Optional[str] = Query(None)):
+def mark_house_reviewed(house_id: Optional[str] = None, domain_id: Optional[str] = None, performed_by: Optional[str] = Query(None)):
     """Mark a house as reviewed (updates last_reviewed timestamp)."""
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     house = store.get_house(house_uuid)
     if not house:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
     store.update_house_last_reviewed(house_uuid)
     store.log_review_action(
         house_id=house_uuid,
         action="house_reviewed",
         performed_by=performed_by or "system",
-        notes=f"House '{house.name}' marked as reviewed.",
+        notes=f"Canon domain '{house.name}' marked as reviewed.",
     )
     return {"ok": True, "last_reviewed": _now().isoformat()}
 
 
+@app.get("/api/canon-domains/{domain_id}/staleness")
 @app.get("/api/houses/{house_id}/staleness")
-def check_house_staleness(house_id: str):
-    """Check if a house is stale (>90 days since last review)."""
+def check_house_staleness(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Check if a domain is stale (>90 days since last review)."""
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     house = store.get_house(house_uuid)
     if not house:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
     is_stale = house.is_stale(days=90)
     return {
-        "house_id": house_id,
+        "domain_id": actual_id,
+        "house_id": actual_id,
         "is_stale": is_stale,
         "last_reviewed": house.last_reviewed.isoformat() if house.last_reviewed else None,
         "days_since_review": (
@@ -593,14 +643,16 @@ class AlignmentScoreRequest(BaseModel):
     content: str
 
 
+@app.post("/api/canon-domains/{domain_id}/score")
 @app.post("/api/houses/{house_id}/score")
-def score_alignment_endpoint(house_id: str, req: AlignmentScoreRequest):
-    """Score arbitrary content against the message house."""
+def score_alignment_endpoint(req: AlignmentScoreRequest, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Score arbitrary content against the canon domain."""
+    actual_id = domain_id or house_id
     from src.pipeline.alignment import AlignmentEngine
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
         
     engine = AlignmentEngine(store)
     try:
@@ -611,31 +663,35 @@ def score_alignment_endpoint(house_id: str, req: AlignmentScoreRequest):
         raise HTTPException(500, str(e))
 
 
+@app.get("/api/canon-domains/{domain_id}/review-trail")
 @app.get("/api/houses/{house_id}/review-trail")
-def get_house_review_trail(house_id: str):
-    """Get the full review audit trail for a house."""
+def get_house_review_trail(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Get the full review audit trail for a domain."""
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     house = store.get_house(house_uuid)
     if not house:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
     trail = store.get_review_trail(house_uuid)
-    return {"house_id": house_id, "trail": trail, "count": len(trail)}
+    return {"domain_id": actual_id, "house_id": actual_id, "trail": trail, "count": len(trail)}
 
 
 class MessageReorder(BaseModel):
     ordered_ids: list[str]
 
 
+@app.patch("/api/canon-domains/{domain_id}/entries/reorder")
 @app.patch("/api/houses/{house_id}/messages/reorder")
-def reorder_messages(house_id: str, data: MessageReorder):
-    """Update priority values so messages appear in the given order."""
+def reorder_messages(data: MessageReorder, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Update priority values so entries appear in the given order."""
+    actual_id = domain_id or house_id
     count = 0
     for priority, msg_id in enumerate(data.ordered_ids, start=1):
         msg = _find_message(msg_id)
-        if msg and str(msg.message_house_id) == house_id:
+        if msg and str(msg.message_house_id) == actual_id:
             msg.priority = priority
             store.upsert_key_message(msg)
             count += 1
@@ -646,15 +702,17 @@ class BulkMessageImport(BaseModel):
     rows: list[dict]
 
 
+@app.post("/api/canon-domains/{domain_id}/entries/bulk-import")
 @app.post("/api/houses/{house_id}/messages/bulk-import")
-def bulk_import_messages(house_id: str, data: BulkMessageImport):
-    """Import multiple key messages at once."""
+def bulk_import_messages(data: BulkMessageImport, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Import multiple entries at once."""
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     if not store.get_house(house_uuid):
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
 
     if not data.rows:
         raise HTTPException(400, "No rows provided")
@@ -873,6 +931,7 @@ async def extract_upload(
         "name": house.name,
         "status": "created",
         "message_count": len(structured.key_messages),
+        "entry_count": len(structured.key_messages),
         "persona_count": len(structured.personas),
         "indexed": indexed,
         "markdown": markdown,
@@ -1379,7 +1438,9 @@ def get_stats():
 
     return {
         "house_count": len(houses),
+        "domain_count": len(houses),
         "message_count": total_messages,
+        "entry_count": total_messages,
         "persona_count": total_personas,
         "artifact_count": total_artifacts,
         "token_count": usage.get("total_input_tokens", 0) + usage.get("total_output_tokens", 0),
@@ -1423,19 +1484,21 @@ def run_seed():
     }
 
 
+@app.post("/api/canon-domains/{domain_id}/index")
 @app.post("/api/houses/{house_id}/index")
-def index_house(house_id: str):
-    """Index a single house to vector index."""
+def index_house(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Index a single domain to vector index."""
+    actual_id = domain_id or house_id
     from src.grounding.search import GroundingEngine
 
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
 
     house = store.get_house(house_uuid)
     if not house:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
 
     ws_id = store.get_house_workspace_id(house_uuid) or "default"
     engine = GroundingEngine(
@@ -1447,6 +1510,7 @@ def index_house(house_id: str):
     vectors_indexed = engine.index_house(house_uuid)
 
     return {
+        "domain_id": str(house.id),
         "house_id": str(house.id),
         "house_name": house.name,
         "vectors_indexed": vectors_indexed,
@@ -1480,17 +1544,19 @@ def index_all_houses():
     }
 
 
+@app.get("/api/canon-domains/{domain_id}/index-status")
 @app.get("/api/houses/{house_id}/index-status")
-def get_house_index_status(house_id: str):
-    """Check vector index status for a house: indexed / not_indexed / stale."""
+def get_house_index_status(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Check vector index status for a domain: indexed / not_indexed / stale."""
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
 
     house = store.get_house(house_uuid)
     if not house:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
 
     try:
         from src.store import VectorMetadataModel
@@ -1748,23 +1814,25 @@ def generate_section_single(house_id: str = Query(...), section: str = Query(...
     return {"section": section, "content": resp.choices[0].message.content.strip()}
 
 
-# --- Message Improve / Variant Generation ---
+# --- Canon Entry Improve / Variant Generation ---
 
+@app.post("/api/entries/{entry_id}/improve")
 @app.post("/api/messages/{msg_id}/improve")
-def improve_message(msg_id: str):
-    """Suggest a stronger version of a key message via LLM."""
-    msg = _find_message(msg_id)
+def improve_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None):
+    """Suggest a stronger version of a canon entry via LLM."""
+    actual_id = entry_id or msg_id
+    msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Message not found")
-    house = store.get_house(msg.message_house_id)
+        raise HTTPException(404, "Canon entry not found")
+    house = store.get_house(msg.canon_domain_id)
     positioning = house.positioning if house else ""
 
     client = _get_oai_client()
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a B2B messaging expert. Rewrite the message to be more specific, benefit-led, and compelling. Return only the improved message text — no preamble."},
-            {"role": "user", "content": f"Section type: {msg.section_type}\nPositioning context: {positioning}\n\nOriginal message:\n{msg.content}\n\nImproved version:"},
+            {"role": "system", "content": "You are an organizational canon and positioning expert. Rewrite the entry to be more specific, truth-grounded, and compelling. Return only the improved entry text — no preamble."},
+            {"role": "user", "content": f"Section type: {msg.section_type}\nPositioning context: {positioning}\n\nOriginal entry:\n{msg.content}\n\nImproved version:"},
         ],
         temperature=0.6,
         max_tokens=300,
@@ -1780,12 +1848,14 @@ def improve_message(msg_id: str):
     return {"original": msg.content, "improved": resp.choices[0].message.content.strip()}
 
 
+@app.post("/api/entries/{entry_id}/generate-variant")
 @app.post("/api/messages/{msg_id}/generate-variant")
-def generate_variant(msg_id: str, channel: str = Form(...)):
-    """Generate a channel-specific variant of a message."""
-    msg = _find_message(msg_id)
+def generate_variant(channel: str = Form(...), msg_id: Optional[str] = None, entry_id: Optional[str] = None):
+    """Generate a channel-specific variant of a canon entry."""
+    actual_id = entry_id or msg_id
+    msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Message not found")
+        raise HTTPException(404, "Canon entry not found")
 
     channel_guidance = {
         "linkedin": "LinkedIn post hook (under 150 chars, stops the scroll)",
@@ -1801,8 +1871,8 @@ def generate_variant(msg_id: str, channel: str = Form(...)):
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": f"You are a B2B copywriter. Adapt the message for {channel}: {guidance}. Return only the adapted text."},
-            {"role": "user", "content": f"Original message:\n{msg.content}"},
+            {"role": "system", "content": f"You are a B2B copywriter. Adapt the canon entry for {channel}: {guidance}. Return only the adapted text."},
+            {"role": "user", "content": f"Original entry:\n{msg.content}"},
         ],
         temperature=0.6,
         max_tokens=200,
@@ -1817,20 +1887,29 @@ def generate_variant(msg_id: str, channel: str = Form(...)):
         cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
     )
 
-    # Save the variant back to the message
+    # Save the variant back to the entry
     variants = dict(msg.variants or {})
     variants[channel] = variant_text
     msg.variants = variants
     store.upsert_key_message(msg)
 
-    return {"channel": channel, "variant": variant_text, "msg_id": msg_id}
+    return {"channel": channel, "variant": variant_text, "msg_id": actual_id, "entry_id": actual_id}
 
 
 # --- Persona Generation ---
 
 class GeneratePersonaRequest(BaseModel):
-    house_id: str
+    model_config = ConfigDict(populate_by_name=True)
+    canon_domain_id: str = Field(validation_alias=AliasChoices('canon_domain_id', 'house_id'), serialization_alias='canon_domain_id')
     job_title: str
+
+    @property
+    def house_id(self) -> str:
+        return self.canon_domain_id
+
+    @house_id.setter
+    def house_id(self, value: str) -> None:
+        self.canon_domain_id = value
 
 
 @app.post("/api/generate-persona")
@@ -1897,15 +1976,17 @@ Return JSON:
 
 # --- Tone Check ---
 
+@app.post("/api/canon-domains/{domain_id}/check-tone")
 @app.post("/api/houses/{house_id}/check-tone")
-def check_tone(house_id: str):
-    """Analyze key messages against brand_personality and flag mismatches."""
-    house = store.get_house(UUID(house_id))
+def check_tone(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Analyze canon entries against brand_personality and flag mismatches."""
+    actual_id = domain_id or house_id
+    house = store.get_house(UUID(actual_id))
     if not house:
-        raise HTTPException(404, "House not found")
-    messages = store.get_key_messages(UUID(house_id))
+        raise HTTPException(404, "Canon domain not found")
+    messages = store.get_key_messages(UUID(actual_id))
     if not messages:
-        return {"warnings": [], "score": 100, "summary": "No messages to check"}
+        return {"warnings": [], "score": 100, "summary": "No entries to check"}
     if not house.brand_personality:
         return {"warnings": [], "score": 100, "summary": "No brand personality defined — add one in Overview to enable tone checking"}
 
@@ -1919,15 +2000,15 @@ def check_tone(house_id: str):
             {"role": "system", "content": "You are a brand voice analyst. Return JSON only."},
             {"role": "user", "content": f"""Brand personality: {house.brand_personality}
 
-Key messages:
+Canon entries:
 {chr(10).join(f'- {m}' for m in samples)}
 
-Identify which messages (if any) are inconsistent with the brand personality. Return JSON:
+Identify which entries (if any) are inconsistent with the brand personality. Return JSON:
 {{
   "score": <0-100 tone alignment score>,
   "summary": "<1 sentence overall assessment>",
   "warnings": [
-    {{"message": "<message text>", "issue": "<what's inconsistent>", "suggestion": "<how to fix>"}}
+    {{"message": "<entry text>", "issue": "<what's inconsistent>", "suggestion": "<how to fix>"}}
   ]
 }}"""},
         ],
@@ -1952,20 +2033,24 @@ Identify which messages (if any) are inconsistent with the brand personality. Re
 
 # --- Snapshots ---
 
+@app.post("/api/canon-domains/{domain_id}/snapshots")
 @app.post("/api/houses/{house_id}/snapshots")
-def create_snapshot(house_id: str, data: dict = {}):
+def create_snapshot(data: dict = {}, house_id: Optional[str] = None, domain_id: Optional[str] = None):
     """Save a snapshot of the current framework state."""
+    actual_id = domain_id or house_id
     label = (data or {}).get("label", "")
     try:
-        snap = store.create_snapshot(UUID(house_id), label)
+        snap = store.create_snapshot(UUID(actual_id), label)
     except ValueError as e:
         raise HTTPException(404, str(e))
     return snap
 
 
+@app.get("/api/canon-domains/{domain_id}/snapshots")
 @app.get("/api/houses/{house_id}/snapshots")
-def list_snapshots(house_id: str):
-    return store.list_snapshots(UUID(house_id))
+def list_snapshots(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
+    return store.list_snapshots(UUID(actual_id))
 
 
 @app.get("/api/snapshots/{snapshot_id}")
@@ -2272,9 +2357,11 @@ def list_recent_artifacts(limit: int = Query(5, le=20)):
     return store.list_recent_artifacts(limit=limit)
 
 
+@app.get("/api/canon-domains/{domain_id}/artifacts")
 @app.get("/api/houses/{house_id}/artifacts")
-def list_house_artifacts(house_id: str):
-    return store.list_artifacts(UUID(house_id))
+def list_house_artifacts(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or house_id
+    return store.list_artifacts(UUID(actual_id))
 
 
 @app.get("/api/artifacts/{artifact_id}")
@@ -2323,24 +2410,29 @@ def get_artifact_ratings(artifact_id: str):
 
 # --- Usage Heatmap & Coverage ---
 
+@app.get("/api/canon-domains/{domain_id}/heatmap")
 @app.get("/api/houses/{house_id}/heatmap")
-def get_heatmap(house_id: str):
-    """Get chunk usage heatmap for a house."""
+def get_heatmap(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Get chunk usage heatmap for a canon domain."""
+    actual_id = domain_id or house_id
     try:
-        hid = UUID(house_id)
+        hid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     return store.get_chunk_usage_heatmap(hid)
 
 
+@app.get("/api/canon-domains/{domain_id}/coverage")
 @app.get("/api/houses/{house_id}/coverage")
-def get_coverage(house_id: str):
-    """Get message house coverage report."""
+def get_coverage(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Get canon domain coverage report."""
+    actual_id = domain_id or house_id
     try:
-        hid = UUID(house_id)
+        hid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     return store.get_message_house_coverage(hid)
+
 
 
 @app.patch("/api/artifacts/{artifact_id}")
@@ -2845,11 +2937,13 @@ def serve_artifact(
         synced = house.last_synced.strftime("%Y-%m-%d") if house.last_synced else "—"
         return templates.TemplateResponse(request, "artifact_visual.html", {
             "house": house,
+            "domain": house,
             "grouped": grouped,
             "personas": personas,
             "section_meta": _ARTIFACT_SECTION_META,
             "section_order": _ARTIFACT_SECTION_ORDER,
             "message_count": len(messages),
+            "entry_count": len(messages),
             "persona_count": len(personas),
             "artifact_type_label": "One Pager",
             "synced_date": synced,
@@ -3561,17 +3655,27 @@ def delete_channel(channel_id: str):
     return None
 
 
-# ── v0.7: Bulk Message Status ─────────────────────────────────────────────────
+# ── v0.7: Bulk Message/Entry Status ───────────────────────────────────────────
 
 class BulkStatusUpdate(BaseModel):
-    message_ids: list[str]
+    model_config = ConfigDict(populate_by_name=True)
+    entry_ids: list[str] = Field(validation_alias=AliasChoices('entry_ids', 'message_ids'), serialization_alias='entry_ids')
     status: str
     approved_by: Optional[str] = None
 
+    @property
+    def message_ids(self) -> list[str]:
+        return self.entry_ids
 
+    @message_ids.setter
+    def message_ids(self, value: list[str]) -> None:
+        self.entry_ids = value
+
+
+@app.patch("/api/canon-domains/{domain_id}/entries/bulk-status")
 @app.patch("/api/houses/{house_id}/messages/bulk-status")
-def bulk_update_message_status(house_id: str, data: BulkStatusUpdate):
-    """Bulk approve/lock/flag multiple messages at once."""
+def bulk_update_message_status(data: BulkStatusUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Bulk approve/lock/flag multiple entries at once."""
     try:
         count = store.bulk_update_message_status(
             data.message_ids, data.status, data.approved_by or "admin"
@@ -3583,30 +3687,34 @@ def bulk_update_message_status(house_id: str, data: BulkStatusUpdate):
 
 # ── v0.7: Review Log ──────────────────────────────────────────────────────────
 
+@app.get("/api/canon-domains/{domain_id}/review-log")
 @app.get("/api/houses/{house_id}/review-log")
-def get_message_review_log(house_id: str, limit: int = Query(50, ge=1, le=200)):
-    """Return review log for a house (message approvals, locks, house reviews)."""
+def get_message_review_log(limit: int = Query(50, ge=1, le=200), house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Return review log for a canon domain (approvals, locks, reviews)."""
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     if not store.get_house(house_uuid):
-        raise HTTPException(404, "House not found")
-    return store.get_review_log(house_id, limit=limit)
+        raise HTTPException(404, "Canon domain not found")
+    return store.get_review_log(actual_id, limit=limit)
 
 
-# ── v0.7: Mark House Reviewed ────────────────────────────────────────────────
+# ── v0.7: Mark Canon Domain Reviewed ──────────────────────────────────────────
 
+@app.post("/api/canon-domains/{domain_id}/mark-reviewed")
 @app.post("/api/houses/{house_id}/mark-reviewed")
-def mark_house_reviewed_v2(house_id: str, reviewed_by: Optional[str] = Query(None)):
-    """Mark a house as reviewed (updates last_reviewed, appends review log)."""
+def mark_house_reviewed_v2(reviewed_by: Optional[str] = Query(None), house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Mark a domain as reviewed (updates last_reviewed, appends review log)."""
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     result = store.mark_house_reviewed(str(house_uuid), reviewed_by or "admin")
     if not result:
-        raise HTTPException(404, "House not found")
+        raise HTTPException(404, "Canon domain not found")
     return {"ok": True, **result}
 
 
@@ -3635,16 +3743,18 @@ def rate_artifact(artifact_id: str, data: ArtifactRatingCreate):
     return result
 
 
+@app.get("/api/canon-domains/{domain_id}/usage-stats")
 @app.get("/api/houses/{house_id}/usage-stats")
-def get_house_usage_stats(house_id: str):
-    """Return key message usage heatmap — times used and avg rating, sorted by usage."""
+def get_house_usage_stats(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Return canon entry usage heatmap — times used and avg rating, sorted by usage."""
+    actual_id = domain_id or house_id
     try:
-        house_uuid = UUID(house_id)
+        house_uuid = UUID(actual_id)
     except Exception:
-        raise HTTPException(400, "Invalid house ID")
+        raise HTTPException(400, "Invalid ID")
     if not store.get_house(house_uuid):
-        raise HTTPException(404, "House not found")
-    return store.get_message_usage_stats(house_id)
+        raise HTTPException(404, "Canon domain not found")
+    return store.get_message_usage_stats(actual_id)
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)

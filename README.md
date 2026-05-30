@@ -24,7 +24,7 @@ When teams adopt AI for content generation and automation, a critical problem em
 - A product engineer uses Copilot to draft release notes. It hallucinated integration details.
 - A regional team uses ChatGPT to localize a datasheet. The output contradicts the latest security or compliance facts.
 
-MsgStack fixes this by defining **the canon** — the authoritative, structured truth for each domain. Rather than letting AI tools guess or copy-paste from outdated, scattered PDFs, department SMEs (canon owners) curate their own domain content in MsgStack. MsgStack makes this canon **machine-readable and directly queryable** via the [Model Context Protocol](https://modelcontextprotocol.io/). Before any AI generates content, it queries the approved canon domain for headlines, policies, proof points, or personas, ensuring downstream outputs stay aligned.
+MsgStack fixes this by defining **the canon** — the authoritative, structured truth for each domain. Rather than letting AI tools guess or copy-paste from outdated, scattered documents, department SMEs (canon owners) curate their own domain content in MsgStack. MsgStack makes this canon **machine-readable and directly queryable** via the [Model Context Protocol](https://modelcontextprotocol.io/). Before any AI generates content, it queries the approved canon domain for headlines, policies, proof points, or personas, ensuring downstream outputs stay aligned.
 
 ---
 
@@ -33,7 +33,7 @@ MsgStack fixes this by defining **the canon** — the authoritative, structured 
 ```
 Source Document (PDF / DOCX / Drive)
          ↓  extract → LLM structure
-   Canon Domain  (positioning · tagline · personas · key messages · pillars)
+   Canon Domain  (positioning · tagline · personas · canon entries · pillars)
          ↓  embed → Turbovec  +  build → Knowledge Graph
     ┌─────────────────────────────────────────┐
     │  Semantic Search   │  Graph Traversal   │
@@ -43,15 +43,12 @@ Source Document (PDF / DOCX / Drive)
 Derived Output / Artifact  (one-pager · email · battlecard · LinkedIn · release notes · …)
 ```
 
-> [!NOTE]
-> *Implementation Detail:* Conceptual **Canon Domains** and **Canon Entries** are implemented via the `MessageHouse` and `KeyMessage` database tables and Python classes respectively to maintain backward-compatibility with active installations.
-
 **Two retrieval modes — neither approximates approved content:**
 - **Vector (Turbovec):** local semantic similarity for exploratory queries — finds thematically relevant canon entries (in-process, <0.1ms database latency)
 - **Graph (NetworkX):** deterministic traversal for verbatim approved content — returns exact taglines, locked proof points, specific buying triggers — never approximated
 
 **Dynamic Departmental Grounding Types:**
-While the flagship implementation targets product marketing positioning (via the `MessageHouse` model), MsgStack is designed to support custom grounding schemas mapped to specific department needs:
+MsgStack supports custom grounding schemas mapped to specific department needs:
 - **Corporate Narrative (Marketing):** Core values, company value pillars, and global target segments.
 - **Brand Guidelines (Brand):** Voice parameters, prohibited words dictionary, and approved phrasings.
 - **Competitive Briefs (Sales Intel):** Competitor feature metrics, defensive claims, and positioning angles.
@@ -125,27 +122,26 @@ Once connected, your AI assistant will discover all available tools automaticall
 
 ## MCP Tools
 
-Connect any MCP-compatible AI and it gains access to the following tools. 
-
-> [!NOTE]
-> **Transitional Tool Names:** While the conceptual product layer uses **Canon Domains** and **Canon Entries**, the underlying code and tool names retain their transitional names (like `_house` and `_framework`) for backward compatibility with existing client configurations.
+Connect any MCP-compatible AI and it gains access to the following tools:
 
 | Tool | What it does |
 |------|-------------|
-| `list_message_houses` | List all available Canon Domains — always call first to orient yourself |
-| `search_messaging` | Semantic + keyword search across approved Canon Entries |
+| `list_canon_domains` | List all available Canon Domains — always call first to orient yourself |
+| `search_canon` | Semantic + keyword search across approved Canon Entries |
 | `get_graph_connections` | Deterministic graph traversal — verbatim approved Canon Entries |
-| `set_active_house` | Pin a specific Canon Domain as active for the session |
-| `get_message_house` | Retrieve the full content of a Canon Domain for detailed research |
-| `generate_artifact` | Generate a derived artifact (datasheet, email, battlecard, post, …) grounded in the active Canon Domain |
+| `set_active_domain` | Pin a specific Canon Domain as active for the session |
+| `get_canon_domain` | Retrieve the full content of a Canon Domain for detailed research |
+| `generate_artifact` | Generate a derived output draft (datasheet, email, battlecard, post, …) grounded in the active Canon Domain |
 | `build_ui_artifact` | Get a visual HTML page URL for a generated derived artifact |
 | `list_skills` | List available derived artifact types (skills) with required context parameters |
 | `check_framework_completeness` | Score a Canon Domain against completeness specifications (0–100) |
-| `compare_houses` | Side-by-side comparison of two or more Canon Domains |
+| `compare_canon_domains` | Side-by-side comparison of two or more Canon Domains |
 | `get_grounding_context` | Current session state: active Canon Domain, used entries, confidence |
 | `reset_conversation` | Clear current session state and start fresh |
 | `get_framework_spec` | Retrieve validation specification criteria for a complete Canon Domain |
 | `list_channels` | List all publication channels (e.g. email, linkedin) associated with Canon Entries |
+
+*Note: For backward compatibility, legacy tool names (`list_message_houses`, `search_messaging`, `set_active_house`, `get_message_house`, `compare_houses`) are preserved as deprecated aliases that delegate to their canonical counterparts.*
 
 ### Artifact types (`skill_id`)
 
@@ -192,39 +188,39 @@ run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
 │   ├── base.html        # Jinja2 base (sidebar, nav, dark theme)
 │   └── dashboard.html   # Admin SPA — all sections + Graph Explorer
 │
-├── src/models.py        # Pydantic models (MessageHouse and KeyMessage back Canon Domain/Entry structures)
+├── src/models.py        # Pydantic models (CanonDomain and CanonEntry)
 ├── src/store.py         # SQLAlchemy ORM → SQLite (default) / PostgreSQL
 │
 ├── src/pipeline/
 │   ├── extract.py       # PDF / DOCX / TXT → high-fidelity Markdown text (pypdf, python-docx); 10MB guard
-│   ├── structure.py     # Ingested text → structured Canon Domain profile (StructuredHouse) via GPT-4o-mini
+│   ├── structure.py     # Ingested text → structured Canon Domain profile (StructuredDomain) via GPT-4o-mini
 │   ├── generator.py     # Skill template + active grounding context → derived output/artifact
 │   └── skills.py        # JSON skill file manager (12 built-in templates)
 │
 ├── src/grounding/
 │   ├── search.py        # Turbovec local vector search + SQLite pre-filtering + source_markdown indexing
 │   ├── graph.py         # NetworkX DiGraph — deterministic retrieval
-│   ├── session.py       # In-memory session (active house, used chunks, 30-min TTL)
+│   ├── session.py       # In-memory session (active domain, used chunks, 30-min TTL)
 │   └── tools.py         # Grounding tool implementations
 │
-├── data/sources/        # Auto-generated raw Markdown proxy files (one per house)
-└── seed_data/seed.py    # Sample message houses for development
+├── data/sources/        # Auto-generated raw Markdown proxy files (one per domain)
+└── seed_data/seed.py    # Sample canon domains for development
 ```
 
 **Single server, two interfaces:**
 - `POST /mcp` → FastMCP SSE transport (Claude, Cursor, any MCP client)
 - `GET/POST /api/*` → FastAPI admin REST endpoints
 - `GET /` → Admin single-page UI
-- `GET /artifact/{type}/{house_id}` → Standalone visual artifact pages
+- `GET /artifact/{type}/{domain_id}` → Standalone visual pages
 
 ---
 
 ## Data Model & Canon Schema
 
-MsgStack's core architecture divides the conceptual layer from the implementation database models. The product layer exposes **Canon Domains** and **Canon Entries**, while the database layer leverages backward-compatible model names.
+MsgStack's core architecture maps conceptual **Canon Domains** and **Canon Entries** to underlying SQLite database tables.
 
-### Canon Domain (DB Table: `message_houses`)
-The core concept is a **Canon Domain** — an authoritative domain of truth for a specific department or product. The database model implementing this is `MessageHouse`.
+### Canon Domain (DB Table: `canon_domains`)
+The core concept is a **Canon Domain** — an authoritative domain of truth for a specific department or product.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -238,8 +234,8 @@ The core concept is a **Canon Domain** — an authoritative domain of truth for 
 | `summary` | str | 2–3 sentence overview of the domain |
 | `status` | enum | `active` / `archived` / `needs_review` |
 
-### Canon Entry (DB Table: `key_messages`)
-Individual approved units of canon truth, linked to a specific canon domain. The database model implementing this is `KeyMessage`.
+### Canon Entry (DB Table: `canon_entries`)
+Individual approved units of canon truth, linked to a specific canon domain.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -248,16 +244,16 @@ Individual approved units of canon truth, linked to a specific canon domain. The
 | `content` | str | The approved canonical copy |
 | `variants` | dict | Channel-specific rewrites: `{linkedin: "...", email: "..."}` |
 | `personas` | list[str] | List of target personas this entry applies to |
-| `channels` | list[enum] | `all` / `linkedin` / `email` / `landing` / `paid` / `twitter` / `blog` |
+| `channels` | list[str] | Target channels associated with this entry |
 
 ### Knowledge Graph Schema
 The in-memory NetworkX DiGraph maps the organizational canon to resolve exact dependency relationships:
 ```
-CanonDomain (MessageHouse)
-  ├─[HAS_SECTION]──► Section ──[CONTAINS]──► CanonEntry (KeyMessage)
+CanonDomain
+  ├─[HAS_SECTION]──► Section ──[CONTAINS]──► CanonEntry
   │                                             ├─[ADDRESSES]──► Persona
   │                                             └─[APPLIES_TO]─► Channel
-  ├─[HAS_PILLAR]───► MessagingPillar ──[GROUPS]──► CanonEntry
+  ├─[HAS_PILLAR]───► CanonPillar ──[GROUPS]──► CanonEntry
   └─[TARGETS]──────► Persona
                        ├─[HAS_PAIN_POINT]──► PainPoint
                        ├─[HAS_TRIGGER]─────► BuyingTrigger
@@ -273,7 +269,7 @@ CanonDomain (MessageHouse)
 | `OPENAI_API_KEY` | **Yes** | — | LLM structuring, generation, embeddings |
 | `TURBOVEC_INDEX_PATH` | No | `data/msgstack_vectors.tvim` | Path to store the local Turbovec vector index |
 | `MSGSTACK_BASE_URL` | No | `http://localhost:8001` | Base URL for artifact links returned by MCP tools |
-| `DATABASE_URL` | No | `sqlite:///msgstack.db` | SQLAlchemy URL — use `postgresql://...` for production |
+| `DATABASE_URL` | No | `sqlite:///msgstack.db` | SQLAlchemy URL |
 | `MSGSTACK_AUTH_ENABLED` | No | `false` | Enable API key auth on admin endpoints |
 | `MSGSTACK_SOURCES_DIR` | No | `data/sources` | Directory where raw Markdown proxy files are saved |
 | `LOG_FORMAT` | No | `text` | `text` or `json` |
@@ -299,15 +295,6 @@ pytest tests/
 ruff check src/
 ```
 
-### Re-indexing vectors
-```bash
-# Single house
-curl -X POST http://localhost:8001/api/houses/{house_id}/index
-
-# All houses
-curl -X POST http://localhost:8001/api/index-all
-```
-
 ---
 
 ## Roadmap
@@ -317,27 +304,13 @@ See [ROADMAP.md](ROADMAP.md) for the full versioned roadmap.
 **Current version: v0.8.2**
 
 **Recent shipped:**
-- `v0.8.1` — Turbovec local vector search replacing Pinecone (zero external vector DB dependency)
+- `v0.8.1` — Turbovec local vector search (zero external vector DB dependency)
 - `v0.8.2` — Automatic Markdown Translation Layer: high-fidelity DOCX/PDF proxy files persisted and indexed under `source_markdown` section type for full-content RAG retrieval
 
 **Coming next:**
 - `v0.8.x` — Visual Artifact Engine (Fabric.js canvas, reveal.js presentations, Penpot export)
 - `v0.9` — Governance & Alignment Engine (enforce approval workflows and score content against canon domains)
 - `v1.0` — Competitive Intelligence & Cross-Department Canon (competitor ingestion, cross-department canon domains)
-
-Community-suggested items: open an issue with the `enhancement` label.
-
----
-
-## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
-
-Areas where community help is most useful right now:
-- **Source connectors** — Notion, Confluence, Box (see v1.3 roadmap)
-- **Additional MCP clients** — testing with OpenWebUI, Zed, LibreChat
-- **Skill templates** — new artifact types in `data/skills/`
-- **Bug reports** — especially around document extraction edge cases
 
 ---
 

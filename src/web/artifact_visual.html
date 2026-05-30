@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ house.name }} — {{ artifact_type_label }}</title>
+  <title>{{ domain.name }} — {{ artifact_type_label }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -181,30 +181,30 @@
   <!-- Hero -->
   <div class="hero">
     <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; {{ artifact_type_label }}</div>
-    <h1>{{ house.name }}</h1>
-    {% if house.tagline %}
-    <p class="hero-tagline">{{ house.tagline }}</p>
+    <h1>{{ domain.name }}</h1>
+    {% if domain.tagline %}
+    <p class="hero-tagline">{{ domain.tagline }}</p>
     {% endif %}
     <div class="hero-pills">
-      {% if house.audience %}<span class="hero-pill">{{ house.audience[:60] }}</span>{% endif %}
-      <span class="hero-pill">{{ message_count }} messages</span>
+      {% if domain.audience %}<span class="hero-pill">{{ domain.audience[:60] }}</span>{% endif %}
+      <span class="hero-pill">{{ entry_count }} entries</span>
       {% if persona_count > 0 %}<span class="hero-pill">{{ persona_count }} personas</span>{% endif %}
     </div>
   </div>
 
   <!-- Positioning -->
-  {% if house.positioning or house.differentiation %}
+  {% if domain.positioning or domain.differentiation %}
   <div class="card">
     <div class="card-label">Positioning</div>
-    {% if house.positioning %}<p class="prose">{{ house.positioning }}</p>{% endif %}
-    {% if house.differentiation %}<p class="prose">{{ house.differentiation }}</p>{% endif %}
+    {% if domain.positioning %}<p class="prose">{{ domain.positioning }}</p>{% endif %}
+    {% if domain.differentiation %}<p class="prose">{{ domain.differentiation }}</p>{% endif %}
   </div>
   {% endif %}
 
-  <!-- Key Messages -->
-  {% if message_count > 0 %}
+  <!-- Canon Entries -->
+  {% if entry_count > 0 %}
   <div class="card">
-    <div class="card-label">Key Messages &nbsp;·&nbsp; {{ message_count }} total</div>
+    <div class="card-label">Canon Entries &nbsp;·&nbsp; {{ entry_count }} total</div>
     <div class="msg-grid">
       {% for st in section_order %}
         {% if st in grouped and grouped[st] %}
