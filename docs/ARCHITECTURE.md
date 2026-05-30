@@ -2,7 +2,7 @@
 
 ## Overview
 
-MsgStack MCP is a dual-protocol server: it exposes an **MCP (Model Context Protocol) interface** for AI agents and a **FastAPI web application** for human operators. Both share the same process, database, and pipeline code. The core purpose is to transform raw marketing documents into structured "Message Houses" and generate on-brand content artifacts grounded in that messaging.
+MsgStack MCP is a dual-protocol server: it exposes an **MCP (Model Context Protocol) interface** for AI agents and a **FastAPI web application** for human operators. Both share the same process, database, and pipeline code. The core purpose is to transform raw source documents into structured "Canon Domains" (which implement B2B Message Houses and other departmental knowledge sets) and generate on-brand content artifacts grounded in that approved canon.
 
 ---
 
@@ -15,8 +15,9 @@ MsgStack MCP is a dual-protocol server: it exposes an **MCP (Model Context Proto
 │   PathRouter (ASGI)                                                     │
 │   ├── /mcp*  ──────────────────────► FastMCP Server (server.py)        │
 │   │                                   15 tools over streamable-HTTP     │
+│   │                                   (Grounded in Canon Domains)       │
 │   └── /*     ──────────────────────► FastAPI App (web_app.py)          │
-│                                        REST API + SPA frontend           │
+│                                        REST API + Jinja2 frontend       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -46,7 +47,7 @@ Built on **FastMCP 3.x** using the `streamable-http` transport. Exposes 15 tools
 
 | Category | Tools |
 |---|---|
-| House resolution | `list_message_houses`, `set_active_house`, `get_message_house`, `get_grounding_context` |
+| Domain resolution | `list_message_houses` (lists domains), `set_active_house` (activates domain), `get_message_house` (gets domain), `get_grounding_context` |
 | Search | `search_messaging` |
 | Comparison | `compare_houses` |
 | Generation | `generate_one_pager`, `generate_social_posts`, `generate_email_template`, `generate_artifact`, `build_ui_artifact` |
@@ -54,17 +55,17 @@ Built on **FastMCP 3.x** using the `streamable-http` transport. Exposes 15 tools
 | Inspection | `check_framework_completeness`, `get_framework_spec` |
 | Admin | `seed_database`, `reset_conversation` |
 
-**House resolution workflow** (enforced in tool descriptions):
+**Domain resolution workflow** (enforced in tool descriptions):
 ```
 list_message_houses → set_active_house → [any other tool]
 ```
-Tools that need a house accept `house_id` (UUID) or `house_name` (string) and call `_resolve_house()` to canonicalise.
+Tools that need a domain accept `house_id` (UUID) or `house_name` (string) and call `_resolve_house()` to canonicalise.
 
 ---
 
 ### 3. FastAPI Web App — `src/web_app.py`
 
-REST API + static SPA. All routes are under `/api/*` except the SPA root (`/`), artifact renderer (`/artifact/*`), and health check (`/health`).
+REST API + Jinja2 dashboard. All routes are under `/api/*` except the dashboard root (`/`), artifact renderer (`/artifact/*`), and health check (`/health`).
 
 **Middleware stack (inbound order):**
 1. `CORSMiddleware` — configurable origins via `CORS_ORIGINS` env var
@@ -150,12 +151,12 @@ Each skill defines:
 
 #### 4d. Generator — `generator.py`
 ```
-skill_id + house_id
-  → load skill + house + ALL messages + ALL personas
+skill_id + domain_id (house_id)
+  → load skill + domain + ALL approved canon entries + ALL personas
   → _build_context()
-        → group messages by section_type, sort by priority within each group
+        → group canon entries by section_type, sort by priority within each group
         → build full persona blocks: description + pain_points + buying_triggers + objections
-        → structured context_block: "## Key Messages (N total, all sections)\n### HEADLINE (3)\n  - ..."
+        → structured context_block: "## Canon Entries (N total, all sections)\n### HEADLINE (3)\n  - ..."
   → skills.fill_prompt()      [template.format(**context)]
   → grounding preamble        ["GROUNDING CONTEXT — do not introduce claims not present here"]
   → prompt = preamble + context_block + "---" + skill_task
@@ -319,6 +320,13 @@ Phase 2 (planned): Normalized DB tables (`pain_points`, `buying_triggers`, `obje
 ### 6. Data Store — `src/store.py`
 
 Single `Store` class wrapping a SQLAlchemy session factory. Exposed as a process-level singleton via `init_store()` / `get_store()`.
+
+> [!NOTE]
+> **Database & Terminology Mapping:**  
+> For backward compatibility with existing databases and tools, the underlying database schema and codebase reuse the original `message_houses` and `key_messages` names. The conceptual translation layer maps them as follows:
+> - **`message_houses` Table** ──► Represents a **Canon Domain** (e.g., product specification, legal compliance, HR handbook, or B2B marketing message house).
+> - **`key_messages` Table** ──► Represents **Canon Entries** (approved statements, facts, or guidelines within a domain).
+> - **`document_type` Column** ──► Dictates the department or purpose (`message_house`, `product_spec`, `legal_rules`, `hr_policies`, `security_specs`).
 
 **Schema:**
 

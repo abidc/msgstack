@@ -1,10 +1,16 @@
-# MsgStack — Roadmap
+# MsgStack — Product Roadmap
 
 **Last Updated:** May 2026  
 **License:** Apache 2.0 — open source, self-hostable  
 **Contributing:** See [CONTRIBUTING.md](CONTRIBUTING.md)
 
-This roadmap reflects current state and planned direction. Items are grouped by milestone, not calendar quarter — sequencing depends on community feedback and priority shifts. Items marked `[OSS]` are well-suited for community contribution.
+## Product Framing: The Canon Layer
+
+MsgStack is the **canon layer** for the organization. Departments own their domains of truth. AI tools and content workflows ground on that canon. When canon changes, downstream outputs stay aligned.
+
+MsgStack begins with product marketing because that is the highest-value first wedge. However, the underlying model is designed as an organizational canon layer. This roadmap maps the path from product marketing message houses to full cross-department canon domains owned by SMEs in Product, Marketing, Legal, HR, Support, and Security.
+
+This roadmap reflects the current state and planned direction. Items are grouped by milestone, not calendar quarter — sequencing depends on community feedback and priority shifts. Items marked `[OSS]` are well-suited for community contribution.
 
 ---
 
@@ -293,50 +299,62 @@ The current canvas app renders basic zones. This stream rebuilds the renderer to
 
 ### Shared Infrastructure (v0.8)
 - [ ] **`ArtifactRenderer` abstraction:** Common interface (`render_html`, `render_fabric`, `render_reveal`, `render_penpot`) — new rendering targets added without touching `generate_artifact`
-- [ ] **Renderer routing via skill metadata:** `renderer` field on each skill JSON routes `generate_artifact` to the correct path
-- [ ] **Brand asset store:** Per-workspace storage for logos, icons, and brand images; API endpoints for upload and retrieval; referenced by all renderers
-
----
+- [ ] **Renderer routing via skill metadata:** `renderer` field on each skil---
 
 ## v0.9 — Governance & Alignment Engine
 
-**Goal:** Make MsgStack the messaging governance layer, not just a generation tool. This milestone introduces the features that give marketing ops a reason to open MsgStack every week — not just when they need a new artifact.
+**Goal:** Turn MsgStack into the organizational canon governance layer, not just a generation tool. This milestone introduces the features that give compliance and brand owners a reason to open MsgStack every week — ensuring all content is verified against approved truth.
 
 ### Alignment Scoring
-The most novel capability in the roadmap. Evaluates any piece of content against the structured message house and returns a per-section alignment report. Possible only because the message house is machine-readable — no other tool can do this.
+The core governance capability. Evaluates any piece of content against the structured canon domains and returns a per-section alignment report. Possible only because the canon is machine-readable and semantically indexed.
 
-- [ ] **`score_alignment` API endpoint:** Accepts arbitrary text + house_id; returns per-section scores (0–100) plus specific gaps and contradictions against approved messaging
-- [ ] **`score_alignment` MCP tool:** AI assistants can score a draft before submitting it — "check this LinkedIn post against the CHRO persona messaging before I publish"
+- [ ] **`score_alignment` API endpoint:** Accepts arbitrary text + domain_id; returns per-section scores (0–100) plus specific gaps, out-of-date facts, and contradictions against approved canon entries
+- [ ] **`score_alignment` MCP tool:** AI assistants can score a draft before submitting it — "check this product release summary against the product spec canon domain before I publish"
 - [ ] **Alignment report UI:** Paste content into the admin UI → receive color-coded alignment breakdown with specific suggestions ("Missing: proof point about efficiency. Contradicts: positioning on AI autonomy.")
-- [ ] **Batch scoring:** Connect a HubSpot content library or Google Drive folder → score all assets against the active house → report sorted by alignment score
-- [ ] **Drift report:** Weekly summary of all generated artifacts that have diverged from the message house since it was last updated
-- [ ] **Alignment score on artifact history:** Every saved artifact record shows its alignment score at time of generation; re-scored automatically when the house is updated
+- [ ] **Batch scoring:** Connect a CRM or Google Drive folder → score all assets against the active canon → report sorted by alignment score
+- [ ] **Drift report:** Weekly summary of all generated artifacts that have diverged from the canon domain since the source document was last updated
+- [ ] **Alignment score on artifact history:** Every saved artifact record shows its alignment score at time of generation; re-scored automatically when the parent canon is updated
 
-### Message Approval Workflow
-- [ ] **Message status field:** `Draft` | `In Review` | `Approved` | `Outdated` | `Locked` on every key message, persona, and house field
-- [ ] **Approval-gated generation:** `generate_artifact` and grounding search skip non-`Approved` messages by default; optional `include_drafts` override for authoring sessions
-- [ ] **Review request flow:** Author marks message as "Ready for Review" → reviewer receives notification → approves or comments → status updates → vector index refreshed
-- [ ] **Drift detection:** When a message is updated, all artifact history records that used it are flagged as potentially outdated
-- [ ] **Locked messages:** "Core Messaging" locked status prevents any edits without admin override; graph retrieval always returns locked messages verbatim
+### Canon Approval Workflow
+- [ ] **Canon entry status field:** `Draft` | `In Review` | `Approved` | `Outdated` | `Locked` on every canon entry, persona, and domain field
+- [ ] **Approval-gated grounding:** `generate_artifact` and grounding search skip non-`Approved` canon entries by default; optional `include_drafts` override for editing/staging sessions
+- [ ] **Review request flow:** Domain author marks an entry as "Ready for Review" → domain owner receives notification → approves or comments → status updates → vector index refreshed
+- [ ] **Drift detection:** When a canon entry is updated, all artifact history records that used it are flagged as potentially outdated
+- [ ] **Locked canon:** "Core Canon" locked status prevents any edits without admin or designated SME override; graph retrieval always returns locked entries verbatim
 
-### Self-Service Field Portal
-- [ ] **Portal URL per workspace:** Shareable link (no MsgStack account required) scoped to one or more approved message houses
+### Self-Service Canon Consumption Portal
+- [ ] **Portal URL per workspace:** Shareable link (no admin account required) scoped to specific approved canon domains
 - [ ] **Simplified generation UI:** Persona selector → artifact type selector → optional context inputs → generate → download/share
-- [ ] **Generation-only access:** Portal users cannot view or edit the message house; they only see approved messages in the artifact output
-- [ ] **Agency submission mode:** Generated artifacts go to a "Pending Approval" queue rather than being immediately downloadable; marketing manager approves before agency can use
+- [ ] **Generation-only access:** Portal users cannot view or edit the source canon; they only generate derived artifacts from approved entries
+- [ ] **Agency submission mode:** Generated artifacts go to a "Pending Approval" queue rather than being immediately downloadable; canon owners approve before agency can use
 - [ ] **Portal analytics:** Log all field portal generation activity — who generated what, when, with which inputs — for audit and usage insight
 
 ---
 
-## v1.0 — Competitive Intelligence
+## v1.0 — Competitive & Cross-Department Canon
 
-**Goal:** Make battlecards and competitive content accurate against what competitors are actually saying, not just what you wish they were saying.
+**Goal:** Expand MsgStack from a marketing-only message house repository to a cross-department canon layer. Product, Legal, HR, and Security teams can curate and connect their respective domains of truth.
 
-- [ ] **Competitor document import:** Upload competitor website pages, datasheets, or sales decks → structuring pipeline extracts their message structure into a `competitive_brief` house
-- [ ] **Competitive gap analysis:** Compare your message house to a competitor's extracted house — where are you weak? Where are you differentiated? Surface specific messages that counter their actual claims.
-- [ ] **Battlecard auto-sharpen:** When generating a battlecard, automatically load the competitor's extracted house and ensure each response directly counters their stated positioning
-- [ ] **Competitor change detection (stretch):** Periodic re-fetch of monitored competitor URLs; alert when messaging has materially changed and existing battlecards need refreshing
-- [ ] **Competitive landscape view:** Admin UI panel showing all imported competitor houses with last-updated timestamp and key positioning differences
+### Cross-Department Canon Domains
+- [ ] **Product Canon:** Product managers curate specifications, release notes, integration requirements, and roadmap claims.
+- [ ] **Legal & Compliance Canon:** Legal SMEs curate approved disclosures, privacy statements, trademark rules, and liability limits.
+- [ ] **HR & Culture Canon:** HR admins curate core values, workplace policies, onboarding guidelines, and benefits summaries.
+- [ ] **Security & IT Canon:** Security teams curate compliance status (SOC 2, ISO), data retention rules, and vendor security answers.
+- [ ] **Sales Enablement Canon:** Enablement teams curate sales playbooks, objection handlers, and pricing structures.
+
+### Canon Domain Ownership
+- [ ] **Department SME Owners:** Assign read/write permissions to specific department wrappers (e.g., HR Team owns HR Domain, Legal Team owns Legal Domain).
+- [ ] **Review Trails:** Changes to a domain must be signed off by designated owners, creating a secure compliance audit trail.
+
+### Multi-Domain Dependency Graph
+- [ ] **`INFORMS` / `DEPENDS_ON` Edges:** Define explicit graph relationships between different canon domains (e.g., Product Specifications `INFORMS` Product Marketing Messaging, which `INFORMS` Sales Objection Handlers, which `INFORMS` Legal Disclosures).
+- [ ] **Cascade Drift Detection:** When a parent canon entry (e.g., a product specification limit) is updated by a Product Manager, all downstream messaging and generated battlecards are automatically flagged as "Outdated" and trigger alerts to their respective owners to re-evaluate and regenerate.
+
+### Competitive Intelligence
+- [ ] **Competitor document import:** Upload competitor website pages, datasheets, or sales decks → structuring pipeline extracts their claims into a `competitive_brief` domain
+- [ ] **Competitive gap analysis:** Compare your canon domain to a competitor's extracted claims — identify where you are differentiated vs where they challenge you
+- [ ] **Battlecard auto-sharpen:** When generating a battlecard, automatically load the competitor's extracted claims and ensure each response directly counters their stated positioning using approved canon entries
+- [ ] **Competitor change detection (stretch):** Periodic re-fetch of monitored competitor URLs; alert when competitor messaging has changed and existing battlecards need refreshing
 
 ---
 
@@ -348,39 +366,39 @@ The most novel capability in the roadmap. Evaluates any piece of content against
 - [ ] **LinkedIn integration:** Publish social card artifacts to LinkedIn company page or personal profile via LinkedIn API; pull recent posts for alignment scoring
 - [ ] **Salesforce integration:** Push approved key messages and battlecard content into Salesforce CRM as content snippets accessible to reps in opportunity records
 - [ ] **Google Docs export:** Export any artifact as a formatted Google Doc into a designated Drive folder — closes the agency collaboration loop without email
-- [ ] **Slack app:** `/msgstack generate one-pager [house name]` slash command returns grounded content in Slack; no admin UI required for field teams
+- [ ] **Slack app:** `/msgstack generate one-pager [domain name]` slash command returns grounded content in Slack; no admin UI required for field teams
 - [ ] **Webhook outbound:** Generic webhook on artifact generation — send any generated artifact to any external system via POST
 
 ---
 
 ## v1.2 — Activation & Built-In AI Interface
 
-**Goal:** A VP of Marketing can evaluate and adopt MsgStack without involving IT or a developer. First artifact in under 5 minutes from landing on the product.
+**Goal:** A team lead or department SME can evaluate and adopt MsgStack without involving IT or a developer. First grounded artifact generated in under 5 minutes from landing on the product.
 
 ### Onboarding & Activation
 - [ ] **Hosted SaaS mode:** Cloud-hosted instance with managed database, vector index, and server — no infrastructure decisions required
-- [ ] **Onboarding wizard:** Upload document → review extracted message house → generate first artifact → share link — no configuration steps
-- [ ] **Industry starter templates:** Pre-built message house skeletons for B2B SaaS, Professional Services, Enterprise Software, Financial Services — shows users what a complete house looks like before they build one
-- [ ] **Completeness coaching:** Admin UI actively prompts to fill gaps with specific value-add language ("Your house is missing proof points — battlecard generation requires at least 2")
-- [ ] **Sample house:** "Try MsgStack with an example" — loads a pre-built demo house so users can explore generation before committing to their own content
+- [ ] **Onboarding wizard:** Upload document → review extracted canon domain → generate first artifact → share link — no configuration steps
+- [ ] **Industry starter templates:** Pre-built canon domain skeletons for B2B SaaS, Professional Services, Enterprise Software, Financial Services — shows users what a complete canon domain looks like before they build one
+- [ ] **Completeness coaching:** Admin UI actively prompts to fill gaps with specific value-add language ("Your domain is missing proof points — battlecard generation requires at least 2")
+- [ ] **Sample domains:** "Try MsgStack with an example" — loads a pre-built demo domain so users can explore generation before committing to their own content
 
 ### Built-In AI Chat Interface
-- [ ] **Chat panel in admin UI:** Embedded chat interface — model pre-instructed with `system_instructions`, active house pre-loaded, grounding automatic; no MCP client required
-- [ ] **Conversation starters:** Pre-configured prompt links for common tasks — "Generate CHRO LinkedIn post," "Write a battlecard vs Workday," "Summarize this framework for a new hire"
-- [ ] **Shareable session links:** Marketing manager creates a pre-configured session link and sends it to a colleague or agency — they click it and are dropped into a ready-to-use chat with the right house and persona context already set
+- [ ] **Chat panel in admin UI:** Embedded chat interface — model pre-instructed with `system_instructions`, active domain pre-loaded, grounding automatic; no MCP client required
+- [ ] **Conversation starters:** Pre-configured prompt links for common tasks — "Generate CHRO LinkedIn post," "Write a battlecard vs Workday," "Summarize this product spec for a new hire"
+- [ ] **Shareable session links:** Canon owner creates a pre-configured session link and sends it to a colleague or agency — they click it and are dropped into a ready-to-use chat with the right domain and persona context already set
 - [ ] **Multi-LLM support:** Bring-your-own API key for OpenAI, Anthropic Claude, Azure OpenAI, or Google Gemini — workspace-level model setting with fallback
 
 ### Content Analytics
-- [ ] **Message usage heatmap:** Which key messages appear most in generated artifacts — surface dead messages that need to be revised or removed
+- [ ] **Canon usage heatmap:** Which canon entries appear most in generated artifacts — surface dead messages/claims that need to be revised or removed
 - [ ] **Artifact engagement:** Views, downloads, and shares of hosted artifact links
 - [ ] **Generation → export rate:** Percentage of generated artifacts that were downloaded (proxy for quality)
-- [ ] **Per-persona coverage:** Are all personas in the house served by the key message set? Flag gaps.
+- [ ] **Per-persona coverage:** Are all personas in the canon domain served by the approved claims? Flag gaps.
 
 ---
 
 ## v1.3 — Document Source Integrations
 
-**Goal:** Connect MsgStack directly to where marketing documents already live — eliminating the manual upload step and keeping frameworks automatically in sync as source documents evolve.
+**Goal:** Connect MsgStack directly to where team documents already live — eliminating the manual upload step and keeping canon domains automatically in sync as source documents evolve.
 
 ### Google Drive Integration
 - ✅ OAuth2 Connector — authenticate and authorize Drive access
@@ -389,7 +407,7 @@ The most novel capability in the roadmap. Evaluates any piece of content against
 - [ ] **Drive Picker UI:** Embed Google Drive file picker in the Upload section
 - [ ] **Sync status UI:** "Source in Drive" badge; "outdated" warning when Drive file is newer
 - [ ] **Conflict diff UI:** Show structured diff of changed sections before re-ingesting
-- [ ] **Push back to Drive (optional):** Export finalized Message House as a formatted Google Doc
+- [ ] **Push back to Drive (optional):** Export finalized Canon Domain as a formatted Google Doc
 
 ### OneDrive & SharePoint Integration
 - [ ] **Microsoft MSAL Auth:** OAuth2 PKCE flow for OneDrive and SharePoint Online via Microsoft Graph API
@@ -402,22 +420,22 @@ The most novel capability in the roadmap. Evaluates any piece of content against
 
 ### Source Sync Infrastructure
 - [ ] **SourceConnector Abstraction:** Pluggable connector interface (`connect()`, `watch()`, `fetch()`, `push()`) for Notion, Confluence, Box in future milestones
-- [ ] **Sync Dashboard Widget:** Dashboard panel showing all connected sources, per-framework sync status, failed/pending jobs with retry controls
-- [ ] **Manual Re-Sync Button:** Per-framework "Sync from source" button to force an immediate refresh
+- [ ] **Sync Dashboard Widget:** Dashboard panel showing all connected sources, per-domain sync status, failed/pending jobs with retry controls
+- [ ] **Manual Re-Sync Button:** Per-domain "Sync from source" button to force an immediate refresh
 
 ---
 
 ## v1.4 — Advanced Graph Operations & Visualization
 
 ### Graph-Powered Queries
-- [ ] **Persona Coverage Analysis:** Which messages address which personas? Identify coverage gaps.
-- [ ] **Channel Reachability:** Which channels can a message reach through APPLIES_TO relationships?
-- [ ] **Cross-Framework Comparison:** Compare messaging relationships across multiple houses
+- [ ] **Persona Coverage Analysis:** Which canon entries address which personas? Identify coverage gaps.
+- [ ] **Channel Reachability:** Which channels can a claim reach through APPLIES_TO relationships?
+- [ ] **Cross-Domain Comparison:** Compare claims and relationships across multiple canon domains
 
 ### Cross-Document Intelligence
-- [ ] **GroundingCollection:** Bundle multiple documents (brand guide + message house + persona library) into a named collection
-- [ ] **INFORMS Edge:** Cross-document relationship — graph traversal surfaces the source-of-truth document behind a message
-- [ ] **Path Finder UI:** Visualize relationship paths between entities
+- [ ] **GroundingCollection:** Bundle multiple documents (brand guide + product spec + persona library) into a named collection
+- [ ] **INFORMS Edge:** Cross-document relationship — graph traversal surfaces the source-of-truth document behind a canon entry
+- [ ] **Path Finder UI:** Visualize relationship paths between cross-department entities
 
 ### Graph Maintenance
 - [ ] **Sync Pipeline:** Keep graph in sync with SQLite/PostgreSQL changes on every write
@@ -429,9 +447,9 @@ The most novel capability in the roadmap. Evaluates any piece of content against
 ## v1.5 — Platform & Ecosystem
 
 ### Additional Integrations
-- [ ] **Notion connector** — Sync frameworks to/from Notion pages
-- [ ] **Slack app** — Query messaging and generate artifacts via Slack command
-- [ ] **HubSpot / Salesforce** — Push approved messaging to CRM as snippet library
+- [ ] **Notion connector** — Sync domains to/from Notion pages
+- [ ] **Slack app** — Query canon and generate artifacts via Slack command
+- [ ] **HubSpot / Salesforce** — Push approved claims to CRM as snippet library
 - [ ] **Confluence connector** — Watch a Confluence space for source documents
 
 ### Auth & Identity
@@ -439,9 +457,9 @@ The most novel capability in the roadmap. Evaluates any piece of content against
 - [ ] **Workspace invites** — Email-based invite flow with role assignment
 
 ### Advanced Search & Governance
-- [ ] **Cross-framework search** — "What do all our product teams say about security?"
-- [ ] **Gap analysis** — "Which frameworks lack proof points for the CISO persona?"
-- [ ] **Audit Trail** — Comprehensive changelog of all framework modifications
+- [ ] **Cross-domain search** — "What do all our product teams say about security?"
+- [ ] **Gap analysis** — "Which domains lack proof points for the CISO persona?"
+- [ ] **Audit Trail** — Comprehensive changelog of all domain modifications
 
 ---
 
@@ -451,7 +469,7 @@ The most novel capability in the roadmap. Evaluates any piece of content against
 - Custom embedding models
 - Import from PPTX
 - CLI tool (`msgstack search "..."`)
-- VS Code extension for inline messaging suggestions
+- VS Code extension for inline claims suggestions
 - Inline rich-text editor for polishing AI drafts
 - Print-First Documents via Paged.js (typeset PDFs with real margins and bleed)
 
@@ -459,10 +477,10 @@ The most novel capability in the roadmap. Evaluates any piece of content against
 
 ## What We're Not Building
 
-- A full CMS or content calendar (we generate and publish; we don't manage the editorial schedule)
+- A full CMS or content calendar (we generate and verify; we don't manage the editorial schedule)
 - A social media scheduling platform (publishing integrations push to existing schedulers, not replace them)
 - A CRM (Salesforce/HubSpot integrations push content into CRMs; we don't replace them)
 - A design tool (Fabric.js canvas and Penpot export complement design tools; they don't replace Figma)
 - A localization platform (localization is a quality-of-life feature, not the core problem)
 
-MsgStack is **messaging governance infrastructure** — the structured, machine-readable data layer that ensures every piece of content your company produces, regardless of who or what created it, is anchored in approved positioning.
+MsgStack is **organizational canon infrastructure** — the structured, machine-readable data layer that ensures every piece of content your company produces, regardless of who or what created it, is anchored in approved truth.

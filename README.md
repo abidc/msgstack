@@ -8,43 +8,43 @@
 [![FastMCP](https://img.shields.io/badge/MCP-FastMCP-blueviolet)](https://github.com/jlowin/fastmcp)
 [![GitHub Stars](https://img.shields.io/github/stars/abidc/msgstack-mcp?style=social)](https://github.com/abidc/msgstack-mcp)
 
-**The messaging governance layer for AI-powered marketing teams.**
+**The organizational canon layer for AI grounding.**
 
-> Your AI agents are freelancing your brand. MsgStack gives them a rulebook.
+> MsgStack is the canon layer for the organization. Departments own their domains of truth. AI tools and content workflows ground on that canon. When canon changes, downstream outputs stay aligned.
 
-MsgStack is an open source MCP server + admin UI that turns your brand messaging documents into a structured knowledge graph. Every AI tool on your team — Claude, Cursor, ChatGPT, or your own agents — can query it before generating content, ensuring what comes out is anchored in approved positioning.
+MsgStack is an open source MCP server + admin UI that turns your organization's authoritative, structured grounding content (the **"canon"**) into a structured knowledge graph. Every AI tool on your team — Claude, Cursor, ChatGPT, or your own agents — can query it before generating content, ensuring what comes out is anchored in approved truth. While MsgStack begins with product marketing as its highest-value first wedge, it scales to host and connect canon domains across product, HR, legal, security, sales enablement, and support.
 
 ---
 
 ## Why MsgStack?
 
-When marketing teams adopt AI for content generation, a new problem emerges: **the AI doesn't know what your brand is actually approved to say.**
+When teams adopt AI for content generation and automation, a critical problem emerges: **AI agents don't know what is actually approved and true for your organization.**
 
-- An SDR asks Claude to write a cold email. Claude doesn't know your positioning, so it freelances.
-- A regional team uses ChatGPT to localize a one-pager. The output contradicts your core differentiators.
-- A new hire prompts Copilot to draft a LinkedIn post. It makes up a proof point.
+- An SDR asks Claude to write a cold email. Claude doesn't know your positioning or legal constraints, so it freelances.
+- A product engineer uses Copilot to draft release notes. It hallucinated integration details.
+- A regional team uses ChatGPT to localize a datasheet. The output contradicts the latest security or compliance facts.
 
-MsgStack fixes this by making your messaging frameworks **machine-readable and directly queryable** via the [Model Context Protocol](https://modelcontextprotocol.io/). Before any AI generates content, it searches your approved message house for the right headlines, proof points, personas, and positioning — and uses those verbatim.
+MsgStack fixes this by defining **the canon** — the authoritative, structured truth for each domain. Rather than letting AI tools guess or copy-paste from outdated, scattered PDFs, department SMEs (canon owners) curate their own domain content in MsgStack. MsgStack makes this canon **machine-readable and directly queryable** via the [Model Context Protocol](https://modelcontextprotocol.io/). Before any AI generates content, it queries the approved canon domain for headlines, policies, proof points, or personas, ensuring downstream outputs stay aligned.
 
 ---
 
 ## What it does
 
 ```
-Your Source Document (PDF / DOCX / Google Drive)
+Source Document (PDF / DOCX / Drive)
          ↓  extract → LLM structure
-MessageHouse  (positioning · tagline · personas · key messages · pillars)
+Canon Domain / MessageHouse  (positioning · tagline · personas · key messages · pillars)
          ↓  embed → Turbovec  +  build → Knowledge Graph
     ┌─────────────────────────────────────────┐
     │  Semantic Search   │  Graph Traversal   │
     │  (vector approx.)  │  (verbatim exact)  │
     └────────────────────┴────────────────────┘
          ↓  skill template + grounding context + LLM
-Grounded Artifact  (one-pager · email · battlecard · LinkedIn · blog · …)
+Derived Artifact  (one-pager · email · battlecard · LinkedIn · release notes · …)
 ```
 
 **Two retrieval modes — neither approximates approved content:**
-- **Vector (Turbovec):** local semantic similarity for exploratory queries — finds thematically relevant messaging (in-process, <0.1ms database latency)
+- **Vector (Turbovec):** local semantic similarity for exploratory queries — finds thematically relevant canon entries (in-process, <0.1ms database latency)
 - **Graph (NetworkX):** deterministic traversal for verbatim approved content — returns exact taglines, locked proof points, specific buying triggers — never approximated
 
 ---
@@ -205,42 +205,43 @@ run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
 
 ---
 
-## Data Model
+## Data Model & Canon Schema
 
-### MessageHouse
-The core entity — a structured representation of a product's approved messaging.
+### MessageHouse (Canon Domain)
+The core database entity representing a structured **Canon Domain** — an authoritative domain of truth for a specific department or product.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | str | Framework name |
+| `name` | str | Canon domain or framework name |
 | `document_type` | enum | `message_house` / `brand_guide` / `competitive_brief` / `corp_narrative` / `persona_library` |
-| `positioning` | str | Core positioning statement |
-| `tagline` | str | Punchy tagline (≤7 words) |
-| `differentiation` | str | Key differentiators |
-| `audience` | str | Target buyer + user roles |
-| `brand_personality` | str | Tone, voice, style |
-| `summary` | str | 2–3 sentence product overview |
+| `positioning` | str | Core positioning statement / foundational domain thesis |
+| `tagline` | str | Punchy tagline (≤7 words) / domain primary claim |
+| `differentiation` | str | Key differentiators / core competitive claims |
+| `audience` | str | Target buyer + user roles / target persona wrapper |
+| `brand_personality` | str | Tone, voice, style rules |
+| `summary` | str | 2–3 sentence domain overview |
 | `status` | enum | `active` / `archived` / `needs_review` |
 
-### KeyMessage
-Individual approved message units, linked to a house.
+### KeyMessage (Canon Entry)
+Individual approved units of canon truth, linked to a specific canon domain.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `section_type` | enum | `headline` / `subhead` / `benefit` / `use_case` / `proof_point` / `objection` / `social_proof` / `positioning` |
 | `priority` | int 1–5 | 1 = highest priority |
-| `content` | str | The approved message copy |
+| `content` | str | The approved canonical copy |
 | `variants` | dict | Channel rewrites: `{linkedin: "...", email: "..."}` |
 | `personas` | list[str] | Which personas this applies to |
 | `channels` | list[enum] | `all` / `linkedin` / `email` / `landing` / `paid` / `twitter` / `blog` |
 
 ### Knowledge Graph Schema
+The in-memory NetworkX DiGraph maps the organizational canon to resolve exact dependency relationships:
 ```
-MessageHouse
-  ├─[HAS_SECTION]──► Section ──[CONTAINS]──► KeyMessage
+CanonDomain (MessageHouse)
+  ├─[HAS_SECTION]──► Section ──[CONTAINS]──► CanonEntry (KeyMessage)
   │                                             ├─[ADDRESSES]──► Persona
   │                                             └─[APPLIES_TO]─► Channel
-  ├─[HAS_PILLAR]───► MessagingPillar ──[GROUPS]──► KeyMessage
+  ├─[HAS_PILLAR]───► MessagingPillar ──[GROUPS]──► CanonEntry
   └─[TARGETS]──────► Persona
                        ├─[HAS_PAIN_POINT]──► PainPoint
                        ├─[HAS_TRIGGER]─────► BuyingTrigger
@@ -305,8 +306,8 @@ See [ROADMAP.md](ROADMAP.md) for the full versioned roadmap.
 
 **Coming next:**
 - `v0.8.x` — Visual Artifact Engine (Fabric.js canvas, reveal.js presentations, Penpot export)
-- `v0.9` — Governance & Alignment Engine (score any content against the message house)
-- `v1.0` — Competitive Intelligence (import competitor docs, auto-sharpen battlecards)
+- `v0.9` — Governance & Alignment Engine (enforce approval workflows and score content against canon domains)
+- `v1.0` — Competitive Intelligence & Cross-Department Canon (competitor ingestion, cross-department canon domains)
 
 Community-suggested items: open an issue with the `enhancement` label.
 

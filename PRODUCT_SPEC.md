@@ -10,24 +10,24 @@
 
 ## 1. Problem Statement
 
-Marketing and sales teams at B2B companies spend significant time re-deriving the same positioning and messaging — in pitch decks, emails, LinkedIn posts, battlecards, and one-pagers — because approved messaging frameworks live in disconnected documents that aren't discoverable or machine-readable.
+Organizations spend significant time re-deriving the same core claims, policies, and product details — in release notes, legal agreements, sales decks, customer support templates, and marketing campaigns — because approved grounding facts (the **"canon"**) live in disconnected docs that aren't machine-readable or trackable.
 
 The result:
-- AI-generated content drifts from approved positioning because LLMs have no access to the company's actual messaging
-- Sales and marketing teams are inconsistent across channels — same product, different story depending on who's talking
-- New hires and agencies have no reliable source of truth and freelance the copy
-- Marketing ops has no way to know if published content is on-message without reading every piece
-- Messaging frameworks sit in PowerPoints or Google Docs, get outdated, and are ignored
+- AI-generated content drifts from approved truth because LLMs have no access to the company's actual canon
+- Cross-department teams are inconsistent — same product capability, different story depending on who or which AI tool writes it
+- Legal, HR, and Security specs are frequently violated by AI writing tools that guess policies or capabilities
+- Domain owners (SMEs) have no way to know if published or generated content is aligned with their approved truth
+- Core specifications sit in static PowerPoints, PDFs, or Google Docs, get outdated, and are ignored
 
-MsgStack solves this by making messaging frameworks **structured, searchable, and directly accessible to AI assistants**. The hybrid Knowledge Graph + Vector RAG architecture (now implemented) combines semantic vector search with deterministic graph retrieval — verbatim approved messaging is returned exactly, not approximated by nearest-neighbor search.
+MsgStack solves this by making the organizational canon **structured, searchable, and directly accessible to AI assistants**. The hybrid Knowledge Graph + Vector RAG architecture combines semantic vector search with deterministic graph retrieval — verbatim approved canon entries are returned exactly, never approximated by nearest-neighbor search.
 
 ---
 
 ## 2. Vision
 
-> Messaging as infrastructure: a structured, always-current data layer that any AI assistant, field team member, or agency can generate from — with the confidence that what comes out is anchored in approved positioning, and the visibility to know when it isn't.
+> The organizational canon layer for AI grounding: a structured, always-current data layer that any AI assistant or human team member can generate from — with the confidence that what comes out is anchored in approved truth, and the governance to know when it isn't.
 
-The long-term goal is not a content creation tool. It's the **messaging governance layer** for B2B marketing organizations — the system of record for what the company is authorized to say, and the engine that enforces it across every channel, team, and tool.
+The long-term goal is not a content creation tool. It's the **canon infrastructure** for enterprise AI — the system of record for what the company is authorized to say, and the engine that enforces it across every channel, team, and tool. While product marketing message houses are the initial high-value wedge, the platform scales to support cross-department canon domains owned by SMEs across Product, Legal, HR, and Security.
 
 ---
 
@@ -49,125 +49,76 @@ The open core model: the self-hosted product is fully featured and always free. 
 
 The self-hosted experience will never be artificially limited to push users toward paid tiers.
 
-## 3. Target Users
+## 3. Target Users & Canon Owners
 
-### Primary: Product Marketing & Brand Teams
-- Build and maintain Message Houses from source strategy documents
-- Define approved positioning, personas, key messages, proof points
-- Control which messages are approved for use vs still in draft
-- Monitor alignment of generated and published content against the framework
+### Primary: Canon Domain Owners (Department SMEs)
+- **Product Managers:** Define product capabilities, specs, release details, and roadmap facts.
+- **Product Marketers:** Own and maintain the message houses, positioning pillars, and buyer personas.
+- **Legal & Compliance Officers:** Own legal disclaimers, liability warnings, and trademark guidelines.
+- **HR & Security Administrators:** Own HR guidelines, employee handbooks, security posture highlights, and SOC 2 answers.
+- SMEs control which canon entries are `Approved` vs `Draft` and review dependency alerts.
 
-### Secondary: Field Marketing, Sales, Regional Teams
-- Self-service artifact generation from approved messaging — no message house editing access
-- Access via field portal (URL-based, no admin account required)
-- Generate region-specific or persona-specific content that stays on-brand
+### Secondary: Field Teams & Downstream Consumers
+- **Field Marketing & Sales Enablement:** Generate localized, persona-specific battlecards, emails, and pitch decks.
+- **Customer Success & Support Agents:** Query the security, HR, or product canon for verified answers.
+- **Access Path:** Utilize the Self-Service Field Portal to consume approved canon without editor/admin rights.
 
-### Tertiary: Agencies & Contractors
-- Receive a scoped, read-only view of the message house for a specific product or campaign
-- Generate draft materials from approved messaging that get submitted back for review
-- No direct message house access; all generation through the approved message set
+### Tertiary: External Agencies & Partners
+- Access read-only views of specific camon domains (e.g. campaign positioning or brand voice).
+- Generate draft assets that require approval by the internal Canon Domain Owner before distribution.
 
-### Quaternary: AI Assistants (Claude, ChatGPT, Cursor, Copilot)
-- MCP client consuming grounding tools during content generation sessions
-- Generate grounded artifacts on demand via `generate_artifact`
-- Alignment scoring of drafted content before it's submitted for review
+### Quaternary: AI Agents & Assistants (Claude, ChatGPT, Cursor, Copilot)
+- MCP clients querying grounding context directly during developer, writer, or ops sessions.
+- Automatically verify alignment of generated outputs before submitting for human review.
 
 ---
 
-## 3.5 Strategic Gaps — What Makes This a Product Marketing Teams Buy
+## 3.5 Strategic Gaps — Value Drivers for Enterprise Governance
 
-The current build solves a technical problem (AI grounding) well. The features below are what translate that into a product a VP of Marketing will buy and a marketing ops team will actually use. They are listed in order of adoption impact — each one removes a reason a marketing department would say "this isn't for us yet."
+The core build solves the technical grounding problem. The features below translate that into an enterprise-wide platform that compliance, brand, and operations teams trust.
 
-### Gap 1 — Alignment Scoring (Most Novel Feature)
+### Gap 1 — Alignment Scoring (Continuous Governance)
+MsgStack can ground AI generation, but it must also evaluate content that already exists — whether a draft post, an email sequence, or a developer document — and score it against the approved canon.
+- **The Value:** paste draft content or connect a content library (HubSpot, Google Docs) and receive a per-section alignment score.
+- **What it flags:** "This document scores 74% against the Legal compliance canon. Warning: contains an unapproved guarantee. Missing: required disclosure statement."
+- **Feedback Loop:** Generates a weekly "drift report" showing where published or saved content has diverged from updated canon.
 
-MsgStack has a structured message house and can generate from it. What it cannot yet do is evaluate content that already exists — the blog post that went live last quarter, the SDR email sequence, the agency campaign that shipped last month — and score how well it maps to the approved framework.
+### Gap 2 — Governance & Approval workflows
+Without gated generation, canon is suggestion, not authority. SMEs need structured workflows to move canon entries from draft to live grounding.
+- **Status lifecycle:** `Draft` | `In Review` | `Approved` | `Outdated` | `Locked`.
+- **Gated grounding:** The MCP grounding server and generator pipeline refuse to serve draft or outdated entries by default.
+- **Dependency Tracking:** When a Product PM updates a specification in the product canon, all downstream marketing message houses and legal guidelines that depend on that specification are flagged as `Outdated`.
 
-**Why this is novel:** Nobody else can do this because nobody else has a machine-readable message house to score against. Every other AI writing tool can generate content; none of them can tell you whether existing content is on-brand in a structured, quantitative way.
-
-**What it looks like:**
-- Paste any piece of content → receive a per-section alignment score against the active message house
-- "This email scores 78% against the CHRO persona messaging. Missing: proof point about efficiency gains. Contradicts: approved positioning on AI."
-- Batch scoring: connect your HubSpot or Salesforce content library and run alignment scoring across all published assets
-- "Drift report" — generate a weekly report showing which published content has diverged from the message house since the framework was last updated
-
-**What it unlocks:** This is the ongoing reason marketing ops opens MsgStack every week, not just when they need a new asset. It closes the feedback loop between generation and governance.
-
-### Gap 2 — Governance That Can't Be Bypassed
-
-Without approval-gated generation, the message house is advice, not authority. Marketing managers need to be able to mark certain messages as `Draft`, `Under Review`, or `Approved`, and have the generation pipeline refuse to generate from anything that isn't `Approved`. They need to know that field teams and agencies generating from the system are using only cleared messaging — not draft proof points that haven't passed legal review.
-
-**What it looks like:**
-- Message-level status: `Draft` | `Approved` | `Outdated` | `Locked`
-- Generation refuses to use non-`Approved` messages, surfacing a warning to the user
-- Approval workflow: message author submits for review → reviewer approves or comments → status updates → grounding index refreshed
-- Drift detection: when the message house is updated, all previously generated artifacts that used the changed messages are automatically flagged as potentially outdated
-
-### Gap 3 — Self-Service Field Portal
-
-The people who most need grounded content are the ones farthest from the message house: SDRs, regional marketers, partner managers, and agencies. They don't need the admin UI. They need to open a URL, pick what they want to create, and get a grounded draft in 30 seconds.
-
-**What it looks like:**
-- Shareable portal URL scoped to one or more message houses — no login required, or simple email-based access
-- Simplified generation UI: choose artifact type → choose persona (optional) → generate → download or share
-- Field users cannot edit the message house, only generate from it
-- All generation from the portal is logged against the field user's identifier for audit purposes
-- Agency submission mode: generated artifacts are submitted back to the marketing team for approval before use, not immediately downloadable
+### Gap 3 — Self-Service Canon Portal
+Stakeholders like sales reps, regional teams, and external writers do not need the complex Admin UI. They need a simple, self-service search and generation dashboard.
+- **The Value:** A shareable, login-free (or email-gated) portal scoped to specific approved canon domains.
+- **Capabilities:** Choose channel → choose persona → generate grounded copy. Cannot edit the source canon.
+- **Agency approval flow:** Generated drafts are held in a pending queue for SME approval.
 
 ### Gap 4 — Competitive Intelligence
+Grounding is only half the battle; AI agents must also counter competitor claims.
+- **Ingestion:** Import competitor datasheets and web pages → extract their claims into a `competitive_brief` domain.
+- **Battlecard Sharpening:** Renders battlecards by matching your approved differentiation claims directly against the competitor's extracted claims.
 
-Battlecards are only useful if they reflect what competitors are actually saying today. MsgStack can generate battlecards from your messaging; it cannot yet help you understand the competitive landscape you're responding to.
+### Gap 5 — Channel Publishing Integrations
+Copy-paste is where grounding breaks. Content must push directly to destination platforms.
+- **Integrations:** HubSpot (email drafts and social campaigns), LinkedIn (social posts), Salesforce (snippet library for sales reps), Google Docs (collaboration folder).
+- **Slack:** Slash commands (`/msgstack query HR compliance`) return grounded facts directly in chat.
 
-**What it looks like:**
-- Competitor document import: upload a competitor's website pages, datasheets, or sales decks → the structuring pipeline extracts their message house (headline claims, differentiation, personas targeted, tone)
-- Competitor house stored as a `competitive_brief` document type with comparison metadata
-- Automatic battlecard sharpening: when generating a battlecard, the system uses the competitor's extracted message house to ensure every response directly counters their actual claims
-- Competitor monitoring (stretch): periodic re-fetch of competitor URLs; alert when their messaging has meaningfully changed and battlecard refresh is needed
+### Gap 6 — SME-Focused Activation
+MsgStack must be setup-friendly for non-technical domain owners.
+- **Wizard Onboarding:** Drag-and-drop a document → review auto-extracted canon domain → run first alignment check.
+- **Starter Templates:** Out-of-the-box domain skeletons for product specs, brand voice, HR policy, and security answers.
 
-### Gap 5 — Direct Publishing Integrations
+### Gap 7 — Embedded Grounded Chat
+Users want a sandbox to query their canon directly without setting up external MCP clients.
+- **Embedded Sandbox:** Chat window preloaded with workspace domains and pre-instructed system prompt templates.
+- **Shareable Sessions:** SMEs can pre-configure chat sessions ("Help our SDR team draft emails using the Product spec") and distribute the link.
 
-Every artifact generated in MsgStack needs to be copy-pasted into another tool before it reaches the market. That copy-paste moment is where grounding breaks — content gets edited in transit and drifts. Direct publishing integrations close this gap.
-
-**Priority integrations:**
-- **HubSpot:** push email templates directly into HubSpot email drafts; push social posts to HubSpot social publish queue
-- **LinkedIn:** publish social card artifacts directly to LinkedIn company page or personal profile via LinkedIn API
-- **Salesforce:** push approved key messages and battlecard content into Salesforce CRM as content snippet library accessible to reps
-- **Google Docs:** export any artifact as a formatted Google Doc into a designated Drive folder (closes the agency collaboration loop)
-- **Slack:** slash command `/msgstack generate one-pager HR` — returns grounded content in Slack, no admin UI required
-
-### Gap 6 — Activation Path for Non-Technical Buyers
-
-A marketing manager who is not a developer cannot currently set up MsgStack. The setup requires configuring a Python environment, setting up a Cloudflare tunnel, and running a server process. This kills adoption at the evaluation stage.
-
-**What "activation in 5 minutes" looks like:**
-- Hosted SaaS mode: cloud-hosted instance with no infrastructure to manage (server and DB all managed — no external vector DB required; Turbovec runs in-process)
-- Onboarding wizard: upload a document → review the extracted message house → generate first artifact → done
-- Industry-specific starter templates: pre-built message house skeletons for B2B SaaS, Professional Services, Enterprise Software, Financial Services — so users understand what a complete message house looks like before they build one
-- Completeness coaching: the admin UI actively prompts users to fill gaps ("Your house is missing proof points — add 2 to unlock battlecard generation")
-
-### Gap 7 — Built-In AI Chat Interface
-
-Currently the AI experience requires a separate MCP client (OpenWebUI, Claude Desktop). This is a barrier for marketing teams who don't want to configure additional tools. A built-in chat interface in the admin UI removes this barrier.
-
-**What it looks like:**
-- Chat panel embedded in the admin UI — model pre-instructed, message house pre-loaded, grounding automatic
-- Conversation starters: pre-configured session links ("Generate CHRO-targeted LinkedIn content for the HR house") that any team member can click without setup
-- Shareable sessions: send a colleague a link that opens a pre-configured chat context so they can generate without understanding the system
-- AI is the primary interaction mode for field teams and agencies; the admin UI is the authoring mode for product marketing
-
-### Gap 8 — Content Analytics
-
-MsgStack knows what messages exist and what artifacts were generated. It does not know which messages are being used, which are being ignored, or which generated artifacts were actually published.
-
-**What it looks like:**
-- Message usage heatmap: which key messages appear most frequently in generated artifacts
-- "Dead messages": proof points and headlines that have never been used in a generated artifact and may need to be revised or removed
-- Artifact engagement: views, downloads, and shares of artifact links (if hosted by MsgStack)
-- Generation → publish rate: what percentage of generated artifacts were actually downloaded/exported (proxy for quality)
-- Per-persona message coverage: are there personas in the message house that are underserved by the key messages?
-
----
-
-## 4. Core Capabilities
+### Gap 8 — Usage Analytics
+SMEs must know which canon entries are actively utilized vs which are "dead weight."
+- **Heatmap:** Highlights heavily accessed claims, proof points, and rules.
+- **Audit Logs:** Logs who generated what, which AI tools accessed which domains, and who approved each change.
 
 ### 4.1 Message House Specifications
 
@@ -241,22 +192,22 @@ Two complementary retrieval layers:
 
 **Fallback chain:** Vector → Keyword (if Turbovec index missing or empty). Graph traversal works regardless of vector index status.
 
-**Session tracking:** Active house, used chunks, confidence level, persona context.
+**Session tracking:** Active canon domain, used chunks, confidence level, persona context.
 
 ### 4.4 Artifact Generation
 
-**Grounding contract:** `generate_artifact` loads ALL key messages from the house (grouped by section type, sorted by priority — no caps), ALL personas with complete attributes (pain points, buying triggers, objections), and full brand positioning. A structured grounding block is prepended to every prompt with an explicit instruction: "do not introduce capabilities, statistics, or claims not present here."
+**Grounding contract:** `generate_artifact` loads ALL approved canon entries from the domain (grouped by section type, sorted by priority — no caps), ALL personas with complete attributes (pain points, buying triggers, objections), and full brand positioning. A structured grounding block is prepended to every prompt with an explicit instruction: "do not introduce capabilities, statistics, or claims not present here."
 
 **Skill Templates** (`generator.py` + `skills.py`)
 - 12 pre-built skill templates stored as JSON in `data/skills/`
 - Each skill has a `prompt_template` and `sections` definition
-- `_build_context()` builds a structured context block grouping messages by section type with per-group message counts and priority ordering
+- `_build_context()` builds a structured context block grouping canon entries by section type with per-group entry counts and priority ordering
 - GPT-4o-mini fills the template (temperature 0.7, max 4000 tokens)
 - Default skill files always written on server start — template improvements land automatically
 - Output: `GeneratedArtifact` with raw LLM content + parsed sections dict + full `grounded_messages` list
 
 **Direct Generation** (`web_app.py`)
-- Per-section LLM generation for filling missing framework sections
+- Per-section LLM generation for filling missing canon domain sections
 - Used by the "Generate with AI" buttons in the upload flow
 
 ### 4.5 Visual Artifacts
@@ -422,8 +373,8 @@ The LLM's role in visual generation is copy editing, not data organization. The 
 **MCP Prompts** — `system_instructions` (full operating guide), `quick_start` (new user onboarding)
 
 **Grounding guardrails baked into protocol:**
-- `list_message_houses` returns `_next_step` field explicitly directing agents to call `generate_artifact` or `get_message_house` — not to write content from metadata
-- `get_message_house` docstring includes "CRITICAL: Do NOT use this data to manually write artifacts — use `generate_artifact` instead"
+- `list_message_houses` (listing canon domains) returns `_next_step` field explicitly directing agents to call `generate_artifact` or `get_message_house` — not to write content from metadata
+- `get_message_house` (retrieving canon domain) docstring includes "CRITICAL: Do NOT use this data to manually write artifacts — use `generate_artifact` instead"
 - `system_instructions` prompt contains "NEVER write the content yourself" rules with trigger word lists
 
 ### 4.7 Admin UI
@@ -432,8 +383,8 @@ Jinja2 template system (`base.html` + `dashboard.html`) served at `/`. No build 
 
 **Sections:**
 - Dashboard (stats card + graph stats widget)
-- Frameworks (list + tabbed detail editor: Overview / Messages / Personas)
-- Artifacts (framework selector, skill selector, context inputs, output + visual link)
+- Canon Domains / Frameworks (list + tabbed detail editor: Overview / Messages / Personas)
+- Artifacts (domain selector, skill selector, context inputs, output + visual link)
 - Upload (drag-drop → preview → confirm flow)
 - Skills (search, create, edit, delete)
 - Channels (view and manage channels)
@@ -472,9 +423,9 @@ Jinja2 template system (`base.html` + `dashboard.html`) served at `/`. No build 
 ```
 Upload (file)
   → extract_text()              [pypdf / python-docx — high-fidelity Markdown tables preserved]
-  → save_proxy_markdown()       [data/sources/{house_id}.md — raw, untruncated source proxy]
+  → save_proxy_markdown()       [data/sources/{domain_id}.md — raw, untruncated source proxy]
   → structurer.structure()      [GPT-4o-mini]
-  → store.upsert_house()        [SQLite/PostgreSQL]
+  → store.upsert_house()        [SQLite/PostgreSQL upsert domain]
   → engine.index_house()        [Turbovec: structured chunks + source_markdown proxy chunks]
   → graph_engine.rebuild()      [NetworkX DiGraph from DB]
 
@@ -484,18 +435,18 @@ MCP search_messaging(query)
   → _rerank(matches)
   → GroundingResponse
 
-MCP get_graph_connections(house_id)
+MCP get_graph_connections(domain_id)
   → graph_engine.get_connections()  [NetworkX traversal — no LLM, no vector]
   → chunks via typed relationships
 
-MCP generate_artifact(skill_id, house_id)
-  → store.get_key_messages()    [ALL messages — no cap]
+MCP generate_artifact(skill_id, domain_id)
+  → store.get_key_messages()    [ALL canon entries — no cap]
   → store.get_personas()        [ALL personas with full attributes]
   → _build_context()            [structured block: sections grouped by type + persona detail]
   → grounding preamble + skill template → GPT-4o-mini
   → GeneratedArtifact
 
-GET /artifact/{type}/{house_id}
+GET /artifact/{type}/{domain_id}
   → store.get_house()
   → render HTML artifact page
 ```
@@ -540,12 +491,12 @@ GET /artifact/{type}/{house_id}
 ## 9. Quality Criteria
 
 A generated artifact is considered "grounded" if:
-- All key messages from the active framework were available to the generator (no truncation)
+- All approved canon entries from the active canon domain were available to the generator (no truncation)
 - Full persona context (pain points, triggers, objections) was included in the prompt
 - A structured grounding block with explicit "do not invent" instruction was prepended
 - No vector approximation path was used for governance-critical content (use graph mode)
 
-A Message House is considered "complete" if:
+A Canon Domain is considered "complete" if:
 - All required fields populated (summary, audience, positioning, tagline, differentiation)
 - Minimum 2 headlines, 3 benefits, 2 proof points, 1 objection
 - At least 1 persona with pain points and buying triggers
@@ -556,42 +507,23 @@ A Message House is considered "complete" if:
 ## 10. Planned Milestones
 
 ### v0.8 — Visual Artifact Engine
+Produces professional, brand-accurate visual artifacts. Four streams:
+- **Stream 1 — Design System Foundation:** Design JSON schema v2, workspace brand settings, template registry.
+- **Stream 2 — Template Designs:** Datasheet, Battlecard, Social Card, Executive Summary.
+- **Stream 3 — LLM Prompt Engineering:** Zone-aware prompts, `_build_visual_context()` context builder, output validation.
+- **Stream 4 — Canvas Renderer:** Fabric.js layout rendering, token resolution, interactive editing, print export.
+- **Stream 5 & 6:** reveal.js presentation engine, Penpot integration.
 
-Produces professional, brand-accurate visual artifacts. Four interdependent streams:
+### v0.9 — Governance & Alignment Engine
+- **Alignment Scoring:** `score_alignment` API & MCP tools, batch folder/CRM scoring, visual alignment reports.
+- **Canon Workflows:** Approval-gated grounding, state lifecycle (`Draft` | `In Review` | `Approved` | `Outdated` | `Locked`), cascading drift notifications.
+- **SME Portal:** Sharing portal scoped to approved canon domains, generation-only access, agency submission mode.
 
-**Stream 1 — Design System Foundation**
-- Design JSON schema v2: page spec, layout grid, expanded zone types (header, hero, pillar_grid, message_list, persona_strip, proof_block, cta_footer), brand token references
-- Workspace brand settings: primary/secondary/accent colors, heading/body fonts, logo upload and storage
-- Artifact template registry: JSON template definitions for datasheet, battlecard, social card, executive summary
+### v1.0 — Competitive & Cross-Department Canon
+- **Cross-Department Domains:** Product, Legal, HR, Security, and Sales Enablement domain schemas.
+- **Ownership Scoping:** Assigned domain SME owners and review approval trails.
+- **Domain Dependencies:** Graph dependency tracking (`INFORMS` / `DEPENDS_ON`) with cascade update flags.
+- **Competitor Extraction:** Import competitor docs, extract claim profiles, battlecard auto-sharpening.
 
-**Stream 2 — Default Template Designs**
-- Datasheet: branded header + tagline hero + 3-col differentiator grid + 2-col key messages + persona strip + proof stats + CTA footer
-- Battlecard: landscape 2-col Us vs Them with verbatim objection responses from graph
-- Social card: full-bleed, single key message, logo
-- Executive summary: minimal, 3 numbered pillars, persona-value table
-
-**Stream 3 — LLM Prompt Engineering**
-- Rewrites `one_pager_visual` prompt to inject template zone structure so LLM maps content to named zones
-- New `datasheet` skill with field-level mapping instructions
-- `_build_visual_context()` pre-assigns messaging content to template zones before LLM call — LLM polishes, not organizes
-- Pydantic validation of design spec output + fallback fill for missing zones
-
-**Stream 4 — Canvas Renderer (Fabric.js)**
-- Zone type renderer functions for all defined zone types
-- Grid layout engine from zone row/col/colspan properties
-- Brand token resolution from workspace settings
-- Interactive editing: text IText, logo drag-and-drop, color override, section reorder
-- Export: PNG (2× resolution), PDF (jsPDF), SVG
-
-**Stream 5 — reveal.js** — Slide deck generation for `sales_deck`, `event_presentation`, `executive_readout`
-
-**Stream 6 — Penpot** — Programmatic artifact creation via Penpot API; returns edit link for pixel-perfect polish
-
-See [ROADMAP.md](ROADMAP.md) for full task breakdown.
-
-### v0.9 — Document Source Integrations
-
-- **Google Drive (partial ✅):** OAuth2 connector, background sync loop, DOCX native support shipped. Remaining: Drive Picker UI, sync status badges, conflict diff UI
-- **OneDrive & SharePoint:** Microsoft MSAL auth, SharePoint document library watch, Microsoft Graph webhooks for real-time sync, Word Online native extraction
-- **SourceConnector abstraction:** Pluggable interface enabling Notion, Confluence, and Box without touching core pipeline
-- **Sync dashboard widget:** All connected sources, per-framework status, retry controls
+### v1.1 to v1.5 — Integrations & Platform Scale
+See [ROADMAP.md](ROADMAP.md) for full task breakdown including publishing connectors, document source syncing (Google Drive/SharePoint), and enterprise SSO.
