@@ -50,6 +50,14 @@ Derived Output / Artifact  (one-pager · email · battlecard · LinkedIn · rele
 - **Vector (Turbovec):** local semantic similarity for exploratory queries — finds thematically relevant canon entries (in-process, <0.1ms database latency)
 - **Graph (NetworkX):** deterministic traversal for verbatim approved content — returns exact taglines, locked proof points, specific buying triggers — never approximated
 
+**Dynamic Departmental Grounding Types:**
+While the flagship implementation targets product marketing positioning (via the `MessageHouse` model), MsgStack is designed to support custom grounding schemas mapped to specific department needs:
+- **Corporate Narrative (Marketing):** Core values, company value pillars, and global target segments.
+- **Brand Guidelines (Brand):** Voice parameters, prohibited words dictionary, and approved phrasings.
+- **Competitive Briefs (Sales Intel):** Competitor feature metrics, defensive claims, and positioning angles.
+- **API Specifications (Product/Eng):** Endpoint paths, version rate limits, and parameter constraints.
+- **SOC2 Compliance (Security/Legal):** Active security policies, control objectives, and data logs.
+
 ---
 
 ## Quick Start

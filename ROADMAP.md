@@ -336,6 +336,7 @@ The core governance capability. Evaluates any piece of content against the struc
 **Goal:** Expand MsgStack from a marketing-only message house repository to a cross-department canon layer. Product, Legal, HR, and Security teams can curate and connect their respective domains of truth.
 
 ### Cross-Department Canon Domains
+- [ ] **Dynamic Grounding Schemas:** Support dynamic Pydantic/JSON Schema validation per domain, allowing custom schemas by department (e.g., `BrandGuidelines`, `ApiSpecification`, `Soc2Compliance`) beyond just the default `MessageHouse` layout.
 - [ ] **Product Canon (Family of Domains):** Product managers and technical leads curate distinct specifications and guidelines for core features, API specifications, release/versioning facts, and developer policies.
 - [ ] **Legal & Compliance Canon:** Legal SMEs curate approved disclosures, privacy statements, trademark rules, and liability limits.
 - [ ] **HR & Culture Canon:** HR admins curate core values, workplace policies, onboarding guidelines, and benefits summaries.
