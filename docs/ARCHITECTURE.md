@@ -259,7 +259,7 @@ Grounding degrades gracefully — if the Turbovec index file is missing or empty
 
 Separates deterministic retrieval from semantic search. The graph layer guarantees that verbatim approved content is returned exactly when queried by relationship — the vector layer handles thematic similarity for exploratory queries.
 
-**Design rationale:** vector nearest-neighbor search can return a *similar but not approved* message when messaging governance matters. Graph traversal from `(GroundingDocument)-[:CONTAINS]->(GroundingChunk)` returns exactly the messages associated with a framework, with no approximation.
+**Design rationale:** vector nearest-neighbor search can return a *similar but not approved* message when messaging governance matters. Graph traversal from `(GroundingDocument)-[:CONTAINS]->(GroundingChunk)` returns exactly the messages associated with a Canon Domain, with no approximation.
 
 **Implementation:** NetworkX `DiGraph` built in-memory from SQLite/PostgreSQL on server start and on each `rebuild()` call. `GraphEngine` is a process-level singleton. The `_ensure_built()` guard rebuilds lazily on first access.
 
@@ -424,7 +424,7 @@ Jinja2 template system. No build step — rendered server-side by FastAPI via `J
 | Section | Key Implementation |
 |---|---|
 | Dashboard | Stats cards + graph stats widget (nodes/edges by type) |
-| Frameworks | House list + tabbed detail (Overview / Messages / Personas) |
+| Canon Domains | Domain list + tabbed detail (Overview / Messages / Personas) |
 | Artifacts | Skill selector + context inputs + generator UI |
 | Upload | Drag-drop → preview → confirm flow |
 | Skills | CRUD for skill templates |
@@ -443,7 +443,7 @@ Jinja2 template system. No build step — rendered server-side by FastAPI via `J
 
 ## Request Data Flows
 
-### Flow 1 — Document Upload → Message House
+### Flow 1 — Document Ingestion & Structuring Pipeline
 
 ```
 Browser                 FastAPI              Pipeline              External
@@ -548,7 +548,7 @@ msgstack-mcp/
 ├── src/
 │   ├── server.py          # FastMCP server + 20+ tools + MCP prompts
 │   ├── web_app.py         # FastAPI app — REST API + Jinja2 rendering
-│   ├── models.py          # Pydantic models: MessageHouse, KeyMessage, Persona, Pillar, etc.
+│   ├── models.py          # Pydantic models (MessageHouse and KeyMessage back Canon Domain/Entry structures)
 │   ├── store.py           # SQLAlchemy ORM + Store class (includes Pillar, PainPoint, etc.)
 │   ├── config.py          # Settings from env vars
 │   ├── auth.py            # API key auth, AuthContext

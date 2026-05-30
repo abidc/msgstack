@@ -1,9 +1,9 @@
 # MsgStack Brand & Style Guide
 
-**Marketing messaging infrastructure for AI assistants.**
+**Authoritative grounding infrastructure for AI assistants.**
 
 ## 1. Brand Identity & Vibe
-MsgStack is the bridge between creative marketing strategy and precise AI engineering. It represents structure, intelligence, and a "single source of truth."
+MsgStack is the bridge between organizational strategy and precise AI engineering. It represents structure, intelligence, and a "single source of truth."
 
 *   **Vibe:** Technical, intelligent, structured, precise, and premium.
 *   **Aesthetic:** Dark-mode first, sleek, developer-friendly but marketing-savvy. It should feel like a high-end command center or a data intelligence hub.
@@ -68,7 +68,7 @@ When building the Admin UI or external-facing marketing sites, adhere to these p
 2.  **Glassmorphism & Depth:** Use subtle translucent backgrounds (`rgba(26, 34, 53, 0.7)`) with background blur (`backdrop-filter: blur(12px)`) for floating elements, dropdowns, and sticky headers to create a sense of depth and layering.
 3.  **Micro-Interactions:** Buttons and graph nodes should have smooth, quick transitions (e.g., `transition: all 0.2s ease`). Hovering over a message block should slightly elevate it and illuminate its border with the *Intelligence Gradient*.
 4.  **Structured Layouts:** Use prominent CSS Grid and Flexbox structures. Everything should feel rigidly aligned, representing the "structured data" nature of the application.
-5.  **Visual Grounding:** When showing connections between a "Message House" and a generated "Artifact", use visual splines or Cytoscape.js networks to literally *show* the grounding process.
+5.  **Visual Grounding:** When showing connections between a "Canon Domain" and a generated "Artifact", use visual splines or Cytoscape.js networks to literally *show* the grounding process.
 6.  **Minimalist Inputs:** Form inputs (for uploading PDFs or editing messages) should be borderless or have very subtle bottom borders, expanding or glowing only on focus.
 
 ---

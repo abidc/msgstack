@@ -33,15 +33,18 @@ MsgStack fixes this by defining **the canon** — the authoritative, structured 
 ```
 Source Document (PDF / DOCX / Drive)
          ↓  extract → LLM structure
-Canon Domain / MessageHouse  (positioning · tagline · personas · key messages · pillars)
+   Canon Domain  (positioning · tagline · personas · key messages · pillars)
          ↓  embed → Turbovec  +  build → Knowledge Graph
     ┌─────────────────────────────────────────┐
     │  Semantic Search   │  Graph Traversal   │
     │  (vector approx.)  │  (verbatim exact)  │
     └────────────────────┴────────────────────┘
          ↓  skill template + grounding context + LLM
-Derived Artifact  (one-pager · email · battlecard · LinkedIn · release notes · …)
+Derived Output / Artifact  (one-pager · email · battlecard · LinkedIn · release notes · …)
 ```
+
+> [!NOTE]
+> *Implementation Detail:* Conceptual **Canon Domains** and **Canon Entries** are implemented via the `MessageHouse` and `KeyMessage` database tables and Python classes respectively to maintain backward-compatibility with active installations.
 
 **Two retrieval modes — neither approximates approved content:**
 - **Vector (Turbovec):** local semantic similarity for exploratory queries — finds thematically relevant canon entries (in-process, <0.1ms database latency)
@@ -123,18 +126,18 @@ Connect any MCP-compatible AI and it gains access to the following tools.
 |------|-------------|
 | `list_message_houses` | List all available Canon Domains — always call first to orient yourself |
 | `search_messaging` | Semantic + keyword search across approved Canon Entries |
-| `get_graph_connections` | Deterministic graph traversal — verbatim approved canon content |
+| `get_graph_connections` | Deterministic graph traversal — verbatim approved Canon Entries |
 | `set_active_house` | Pin a specific Canon Domain as active for the session |
-| `get_message_house` | Retrieve a full Canon Domain for detailed research |
-| `generate_artifact` | Generate a grounded artifact (datasheet, email, battlecard, post, …) from the active domain |
-| `build_ui_artifact` | Get a visual HTML page URL for a generated artifact |
-| `list_skills` | List available artifact types (skills) with required context parameters |
+| `get_message_house` | Retrieve the full content of a Canon Domain for detailed research |
+| `generate_artifact` | Generate a derived artifact (datasheet, email, battlecard, post, …) grounded in the active Canon Domain |
+| `build_ui_artifact` | Get a visual HTML page URL for a generated derived artifact |
+| `list_skills` | List available derived artifact types (skills) with required context parameters |
 | `check_framework_completeness` | Score a Canon Domain against completeness specifications (0–100) |
 | `compare_houses` | Side-by-side comparison of two or more Canon Domains |
 | `get_grounding_context` | Current session state: active Canon Domain, used entries, confidence |
 | `reset_conversation` | Clear current session state and start fresh |
-| `get_framework_spec` | Full specification criteria for a complete Canon Domain |
-| `list_channels` | All messaging and publishing channels including custom ones |
+| `get_framework_spec` | Retrieve validation specification criteria for a complete Canon Domain |
+| `list_channels` | List all publication channels (e.g. email, linkedin) associated with Canon Entries |
 
 ### Artifact types (`skill_id`)
 
@@ -181,13 +184,13 @@ run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
 │   ├── base.html        # Jinja2 base (sidebar, nav, dark theme)
 │   └── dashboard.html   # Admin SPA — all sections + Graph Explorer
 │
-├── src/models.py        # Pydantic: MessageHouse, KeyMessage, Persona, Pillar, …
+├── src/models.py        # Pydantic models (MessageHouse and KeyMessage back Canon Domain/Entry structures)
 ├── src/store.py         # SQLAlchemy ORM → SQLite (default) / PostgreSQL
 │
 ├── src/pipeline/
 │   ├── extract.py       # PDF / DOCX / TXT → high-fidelity Markdown text (pypdf, python-docx); 10MB guard
-│   ├── structure.py     # Text → StructuredHouse via GPT-4o-mini
-│   ├── generator.py     # Skill template + full grounding context → artifact
+│   ├── structure.py     # Ingested text → structured Canon Domain profile (StructuredHouse) via GPT-4o-mini
+│   ├── generator.py     # Skill template + active grounding context → derived output/artifact
 │   └── skills.py        # JSON skill file manager (12 built-in templates)
 │
 ├── src/grounding/

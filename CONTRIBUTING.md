@@ -70,7 +70,7 @@ Each skill file defines:
   "name": "My Artifact Type",
   "description": "What this generates",
   "system_prompt": "You are a marketing writer...",
-  "user_prompt": "Given this messaging framework:\n\n{grounding_context}\n\nWrite a...",
+  "user_prompt": "Given this grounding context:\n\n{grounding_context}\n\nWrite a...",
   "output_sections": ["section_1", "section_2"],
   "channels": ["email", "linkedin"]
 }
