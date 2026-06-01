@@ -42,6 +42,14 @@ class GroundingType(str, Enum):
 DocumentType = GroundingType  # Deprecated alias
 
 
+DEPARTMENT_PRIMARY_GROUNDING = {
+    "Product Marketing": GroundingType.MESSAGE_HOUSE,
+    "Company Marketing": GroundingType.CORP_NARRATIVE,
+    "Enablement": GroundingType.PERSONA_LIBRARY,
+    "Product Management": GroundingType.COMPETITIVE_BRIEF,
+}
+
+
 class Channel(str, Enum):
     """Enum kept for backward compatibility; channel IDs used in Pydantic layer."""
     ALL = "all"
@@ -94,6 +102,7 @@ class CanonDomain(BaseModel):
     tagline: str = ""
     differentiation: str = ""
     status: DomainStatus = DomainStatus.ACTIVE
+    department: str = "General"
     last_synced: datetime | None = None
     last_reviewed: datetime | None = None
 
@@ -465,6 +474,7 @@ class SearchFilters(BaseModel):
     min_priority: int | None = None
     min_confidence: float | None = None
     include_drafts: bool = False
+    include_unapproved: bool = False
 
     @property
     def message_houses(self) -> list[str] | None:

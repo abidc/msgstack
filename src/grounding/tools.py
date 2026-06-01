@@ -55,8 +55,13 @@ def search_messaging(
     min_confidence: Optional[float] = None,
     workspace_id: Optional[str] = None,
     retrieval_mode: str = "hybrid",
+    include_unapproved: bool = False,
 ) -> GroundingResponse:
     """Search messaging frameworks for relevant content.
+
+    By default only returns entries with status APPROVED or LOCKED.
+    Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
+    OUTDATED entries are always excluded.
 
     Args:
         query: Natural language search query. Include section types (headline, benefit),
@@ -70,6 +75,7 @@ def search_messaging(
         min_priority: Only return messages at or above this priority (1=highest).
         min_confidence: Warn if average result confidence is below this threshold (0.0–1.0).
         workspace_id: Filter to a specific workspace.
+        include_unapproved: If True, also return DRAFT and IN_REVIEW entries.
 
     Returns:
         GroundingResponse with matched chunks and confidence context.
@@ -82,6 +88,7 @@ def search_messaging(
         include_variants=include_variants,
         min_priority=min_priority,
         min_confidence=min_confidence,
+        include_drafts=include_unapproved,
     )
 
     engine = _get_engine(workspace_id)
@@ -145,14 +152,20 @@ def get_message_house(
     house_id: Optional[str] = None,
     house_name: Optional[str] = None,
     include: Optional[list[str]] = None,
+    include_unapproved: bool = False,
 ) -> dict:
     """Retrieve a full message house with key messages and personas.
+
+    By default only returns entries with status APPROVED or LOCKED.
+    Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
+    OUTDATED entries are always excluded.
 
     Args:
         house_id: UUID of the message house.
         house_name: Name of the message house (alternative to house_id).
         include: Sections to include: ['key_messages'], ['personas'], ['positioning'], or ['all'].
                  Defaults to ['all'].
+        include_unapproved: If True, also include DRAFT and IN_REVIEW entries.
     """
     engine = _get_engine()
     store = engine.store
@@ -204,13 +217,14 @@ def get_message_house(
         )
 
     if "all" in include or "key_messages" in include:
-        messages = store.get_key_messages(house.id)
+        messages = store.get_key_messages(house.id, include_unapproved=include_unapproved)
         result["key_messages"] = [
             {
                 "id": str(m.id),
                 "section_type": str(m.section_type),
                 "priority": m.priority,
                 "content": m.content,
+                "status": str(m.status),
                 "variants": m.variants,
                 "personas": m.personas,
                 "channels": [str(c) for c in m.channels],
@@ -253,6 +267,7 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
             "source": h.source,
             "status": h.status,
             "summary": h.summary,
+            "department": h.department,
             "persona_count": len(store.get_personas(h.id)),
             "message_count": len(store.get_key_messages(h.id)),
             "last_synced": h.last_synced.isoformat() if h.last_synced else None,
@@ -284,8 +299,13 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
     }
 
 
-def compare_houses(house_ids: list[str]) -> dict:
-    """Pull multiple message houses side-by-side for comparison."""
+def compare_houses(house_ids: list[str], include_unapproved: bool = False) -> dict:
+    """Pull multiple message houses side-by-side for comparison.
+
+    By default only returns entries with status APPROVED or LOCKED.
+    Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
+    OUTDATED entries are always excluded.
+    """
     engine = _get_engine()
     store = engine.store
 
@@ -295,7 +315,7 @@ def compare_houses(house_ids: list[str]) -> dict:
         if not house:
             houses_data.append({"id": hid, "error": "not found"})
             continue
-        messages = store.get_key_messages(house.id)
+        messages = store.get_key_messages(house.id, include_unapproved=include_unapproved)
         personas = store.get_personas(house.id)
         houses_data.append(
             {
@@ -553,6 +573,42 @@ def export_to_penpot(
     result["status"] = "success"
 
     return result
+
+
+def get_entry_history(entry_id: str) -> dict:
+    """Get the full approval/status-change audit trail for a specific canon entry.
+
+    Returns the complete history of status changes, reviews, and approvals
+    for the given entry, ordered newest-first.
+
+    Args:
+        entry_id: The UUID of the canon entry.
+
+    Returns:
+        dict with entry_id, trail (list of review log entries), and count.
+    """
+    store = _get_store()
+    try:
+        entry_uuid = UUID(entry_id)
+    except (ValueError, AttributeError):
+        return {"error": "Invalid entry_id — must be a valid UUID"}
+
+    entry = store.get_canon_entry(entry_uuid)
+    if not entry:
+        return {"error": f"Entry {entry_id} not found"}
+
+    trail = store.get_entry_review_trail(entry_id)
+    return {
+        "entry_id": entry_id,
+        "message_id": entry_id,
+        "canon_domain_id": str(entry.canon_domain_id),
+        "message_house_id": str(entry.canon_domain_id),
+        "current_status": str(entry.status),
+        "trail": trail,
+        "count": len(trail),
+    }
+
+get_message_history = get_entry_history  # Deprecated alias
 
 
 def set_penpot_project(workspace_id: str, project_id: str) -> dict:

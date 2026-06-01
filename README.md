@@ -127,7 +127,7 @@ Connect any MCP-compatible AI and it gains access to the following tools:
 | Tool | What it does |
 |------|-------------|
 | `list_canon_domains` | List all available Canon Domains — always call first to orient yourself |
-| `search_canon` | Semantic + keyword search across approved Canon Entries |
+| `search_canon` | Semantic + keyword search across approved Canon Entries (hides DRAFT/IN_REVIEW/OUTDATED by default) |
 | `get_graph_connections` | Deterministic graph traversal — verbatim approved Canon Entries |
 | `set_active_domain` | Pin a specific Canon Domain as active for the session |
 | `get_canon_domain` | Retrieve the full content of a Canon Domain for detailed research |
@@ -137,11 +137,12 @@ Connect any MCP-compatible AI and it gains access to the following tools:
 | `check_framework_completeness` | Score a Canon Domain against completeness specifications (0–100) |
 | `compare_canon_domains` | Side-by-side comparison of two or more Canon Domains |
 | `get_grounding_context` | Current session state: active Canon Domain, used entries, confidence |
+| `get_entry_history` | Retrieve the full audit trail for a specific Canon Entry (status changes, timestamps, previous content) |
 | `reset_conversation` | Clear current session state and start fresh |
 | `get_framework_spec` | Retrieve validation specification criteria for a complete Canon Domain |
 | `list_channels` | List all publication channels (e.g. email, linkedin) associated with Canon Entries |
 
-*Note: For backward compatibility, legacy tool names (`list_message_houses`, `search_messaging`, `set_active_house`, `get_message_house`, `compare_houses`) are preserved as deprecated aliases that delegate to their canonical counterparts.*
+*Note: For backward compatibility, legacy tool names (`list_message_houses`, `search_messaging`, `set_active_house`, `get_message_house`, `compare_houses`, `get_message_history`) are preserved as deprecated aliases that delegate to their canonical counterparts.*
 
 ### Artifact types (`skill_id`)
 
@@ -182,7 +183,7 @@ Navigate to `http://localhost:8001/` for the web interface:
 
 ```
 run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
-├── src/server.py        # FastMCP — 17 MCP tools + 2 prompts
+├── src/server.py        # FastMCP — 18 MCP tools + 2 prompts
 ├── src/web_app.py       # FastAPI admin UI — CRUD, upload, artifact endpoints
 ├── src/web/
 │   ├── base.html        # Jinja2 base (sidebar, nav, dark theme)
@@ -301,15 +302,16 @@ ruff check src/
 
 See [ROADMAP.md](ROADMAP.md) for the full versioned roadmap.
 
-**Current version: v0.8.2**
+**Current version: v0.8.3**
 
 **Recent shipped:**
 - `v0.8.1` — Turbovec local vector search (zero external vector DB dependency)
 - `v0.8.2` — Automatic Markdown Translation Layer: high-fidelity DOCX/PDF proxy files persisted and indexed under `source_markdown` section type for full-content RAG retrieval
+- `v0.8.3` — Approval-Gated Grounding & Entry History: grounding tools default to hiding DRAFT/IN_REVIEW/OUTDATED entries; `include_unapproved` parameter overrides the gate; `get_entry_history` MCP tool exposes full audit trail per entry
 
 **Coming next:**
 - `v0.8.x` — Visual Artifact Engine (Fabric.js canvas, reveal.js presentations, Penpot export)
-- `v0.9` — Governance & Alignment Engine (enforce approval workflows and score content against canon domains)
+- `v0.9` — Alignment Scoring Engine (continuous scoring and drift reports against approved canon)
 - `v1.0` — Competitive Intelligence & Cross-Department Canon (competitor ingestion, cross-department canon domains)
 
 ---

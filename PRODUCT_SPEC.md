@@ -1,6 +1,6 @@
 # MsgStack — Product Specification
 
-**Version:** 0.8.2  
+**Version:** 0.8.3  
 **Last Updated:** May 2026  
 **Status:** Active Development — Open Source (Apache 2.0)  
 **Repository:** https://github.com/abidc/msgstack-mcp  
@@ -90,7 +90,7 @@ MsgStack can ground AI generation, but it must also evaluate content that alread
 ### Gap 2 — Governance & Approval workflows
 Without gated generation, canon is suggestion, not authority. SMEs need structured workflows to move canon entries from draft to live grounding.
 - **Status lifecycle:** `Draft` | `In Review` | `Approved` | `Outdated` | `Locked`.
-- **Gated grounding:** The MCP grounding server and generator pipeline refuse to serve draft or outdated entries by default.
+- **Gated grounding (v0.8.3 — shipped):** The MCP grounding server and generator pipeline refuse to serve draft or outdated entries by default. All `search_canon`, `get_canon_domain`, and `compare_canon_domains` tools filter out non-approved entries unless `include_unapproved=True` is explicitly passed. The `get_entry_history` MCP tool exposes the full audit trail for any entry.
 - **Dependency Tracking:** When a Product PM updates a specification in the product canon, all downstream marketing canon domains and legal guidelines that depend on that specification are flagged as `Outdated`.
 
 ### Gap 3 — Self-Service Canon Portal
@@ -141,7 +141,21 @@ SMEs must know which canon entries are actively utilized vs which are "dead weig
 
 **Completeness Scoring:** Each domain is scored 0-100 against the spec. The score drives the "Missing Sections" UI and AI-fill prompts.
 
-**Grounding Types:** The `grounding_type` field (aliased as `document_type` for backward compatibility) defines the schema category: `message_house` (Product Marketing grounding type; default), `brand_guide`, `competitive_brief`, `corp_narrative`, `persona_library`. All types map to dynamic schema extensions in future versions.
+**Grounding Types:** The `grounding_type` field (aliased as `document_type` for backward compatibility) defines the schema category. Each type defines a department-specific field structure and retrieval contract.
+
+**Grounding Types Registry**
+
+| Type | Status | Department | Schema Focus |
+|------|--------|------------|--------------|
+| `message_house` | **ACTIVE** | Product Marketing | Brand pillars, proof points, personas, objection handlers |
+| `engineering_spec` | **PLANNED — v1.0** | Engineering | API constraints, system SLAs, versioning policy, deprecation notices |
+| `policy_shield` | **PLANNED — v1.0** | Legal & Compliance | Legal disclaimers, privacy rules, compliance assertions, approved responses |
+| `brand_guide` | BACKLOG | Brand / Design | Voice, tone, visual identity, approved terminology |
+| `competitive_brief` | BACKLOG | Product / GTM | Competitor claims, differentiators, battlecard entries |
+| `corp_narrative` | BACKLOG | Communications | Company story, executive messaging, investor-facing claims |
+| `persona_library` | BACKLOG | Research / Marketing | Buyer personas, pain points, buying triggers across segments |
+
+`message_house` is the default and the only fully implemented schema today. All others map to dynamic schema extensions in v1.0+.
 
 ### 4.2 Document Ingestion Pipeline
 
@@ -276,13 +290,38 @@ Exposed via FastMCP (SSE transport):
 
 **Category: Artifacts** — `generate_artifact`, `build_ui_artifact`, `list_skills`
 
-**Category: Admin** — `check_framework_completeness`, `get_framework_spec`, `list_mcp_tools`
+**Category: Admin** — `check_framework_completeness`, `get_framework_spec`, `get_entry_history`, `list_mcp_tools`
 
-*Backward compatibility:* Legacy tool names (`list_message_houses`, `search_messaging`, `set_active_house`, `get_message_house`, `compare_houses`) are preserved as deprecated aliases.
+*Backward compatibility:* Legacy tool names (`list_message_houses`, `search_messaging`, `set_active_house`, `get_message_house`, `compare_houses`, `get_message_history`) are preserved as deprecated aliases.
 
 ### 4.7 Admin UI
 
 Jinja2 template system serve SPA at `/`.
+
+### 4.8 Governance Lifecycle (v0.8.3)
+
+Each Canon Entry has a `status` field that determines whether it appears in grounding results:
+
+| Status | Visible by default? | Description |
+|--------|-------------------|-------------|
+| `Draft` | No | Initial state — entry being authored, not ready for consumption |
+| `In Review` | No | Awaiting SME approval |
+| `Approved` | Yes | Active, approved canon — included in all grounding queries |
+| `Locked` | Yes | Immutable anchor entry — visible and uneditable |
+| `Outdated` | No | Previously approved but superseded — hidden until replaced with new Approved version |
+
+**Gating behavior:**
+- All grounding tools (`search_canon`, `get_canon_domain`, `compare_canon_domains`) default to hiding entries with status `Draft`, `In Review`, or `Outdated`.
+- The `include_unapproved=True` parameter overrides the gate, returning all entries regardless of status.
+- `get_canon_entry` (single ID lookup) always returns the entry regardless of status — direct retrieval by ID is unfiltered.
+- Internal admin/store methods (snapshots, heatmap, coverage, indexing) always pass `include_unapproved=True` so operational views see the full picture.
+- Artifact generation (`generate_artifact`) uses the same filtered pipeline — generated outputs are grounded only in approved and locked entries.
+
+**Entry History:**
+The `get_entry_history(entry_id)` MCP tool exposes the full audit trail for a Canon Entry:
+- Status transitions with timestamps and previous/current values
+- Content changes across updates
+- Who or what triggered each change (when provenance is recorded)
 
 ---
 
@@ -312,7 +351,7 @@ Upload (file)
 MCP search_canon(query)
   → _embed(query)
   → index.query(...)
-  → _rerank(matches)
+  → _rerank(matches)                    [filters out non-APPROVED/LOCKED entries unless include_unapproved=True]
   → GroundingResponse
 
 MCP get_graph_connections(domain_id)

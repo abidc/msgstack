@@ -38,6 +38,14 @@ class AuthContext:
     scopes: set[str]
     name: str = "anonymous"
     is_admin: bool = False
+    allowed_departments: list[str] = None
+
+    def has_department_access(self, department: str) -> bool:
+        if self.is_admin:
+            return True
+        if not self.allowed_departments:
+            return True
+        return department in self.allowed_departments
 
 
 # Sentinel used when auth is disabled
@@ -47,6 +55,7 @@ _OPEN_AUTH = AuthContext(
     scopes=ALL_SCOPES,
     name="open",
     is_admin=True,
+    allowed_departments=[],
 )
 
 
@@ -102,12 +111,16 @@ async def get_auth_context(
     # Update last_used
     store.touch_api_key(record["id"])
 
+    scopes = set(record["scopes"])
+    allowed_departments = [s[5:] for s in scopes if s.startswith("dept:")]
+
     return AuthContext(
         key_id=record["id"],
         workspace_id=record["workspace_id"],
-        scopes=set(record["scopes"]),
+        scopes=scopes,
         name=record["name"],
         is_admin="admin" in record["scopes"],
+        allowed_departments=allowed_departments,
     )
 
 

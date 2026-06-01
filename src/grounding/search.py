@@ -432,7 +432,7 @@ class GroundingEngine:
         results: list[GroundingResult] = []
 
         for house in all_houses:
-            messages = self.store.get_key_messages(house.id)
+            messages = self.store.get_key_messages(house.id, include_unapproved=getattr(filters, "include_drafts", False))
             for msg in messages:
                 # Exclude outdated messages
                 status = getattr(msg, "status", "draft")
@@ -460,11 +460,11 @@ class GroundingEngine:
                 else:
                     status_boost = 1.0
 
-                score = (
+                score = min(1.0, (
                     0.9
                     if any(kw in msg.content.lower() for kw in query_lower.split()[:3])
                     else 0.5
-                ) * status_boost
+                ) * status_boost)
                 results.append(
                     GroundingResult(
                         chunk_id=str(msg.id),
@@ -503,7 +503,7 @@ class GroundingEngine:
         # Clear existing vectors to prevent duplicates
         self.delete_house_vectors(house_id)
 
-        messages = self.store.get_key_messages(house_id)
+        messages = self.store.get_key_messages(house_id, include_unapproved=True)
         vectors_to_add = []
         ids_to_add = []
 

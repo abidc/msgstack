@@ -29,6 +29,7 @@ def search_canon(
     retrieval_mode: Optional[str] = None,
     limit: Optional[int] = None,
     include_unapproved: bool = False,
+    department: Optional[str] = None,
 ) -> dict:
     """Search approved organizational canon entries for grounding content.
 
@@ -57,6 +58,7 @@ def search_canon(
         limit: Maximum number of results to return (default: no cap). Set to 5–10 to
                avoid flooding the context window.
         include_unapproved: If True, also return DRAFT and IN_REVIEW entries.
+        department: Filter to a specific department (optional).
 
     Returns:
         Matched canon entries with confidence scores and grounding context.
@@ -74,6 +76,23 @@ def search_canon(
         retrieval_mode=retrieval_mode or "hybrid",
         include_unapproved=include_unapproved,
     ).model_dump()
+
+    # Filter by department if provided
+    if department and "results" in result:
+        store = get_store()
+        filtered_results = []
+        for r in result["results"]:
+            domain_id = r.get("source", {}).get("canon_domain_id") or r.get("source", {}).get("message_house_id")
+            if domain_id:
+                from uuid import UUID
+                try:
+                    domain = store.get_canon_domain(UUID(str(domain_id)))
+                    if domain and domain.department.lower() == department.lower():
+                        filtered_results.append(r)
+                except Exception:
+                    pass
+        result["results"] = filtered_results
+
     if limit and "results" in result:
         result["results"] = result["results"][:limit]
     
@@ -218,7 +237,7 @@ def get_message_house(
 
 
 @mcp.tool()
-def list_canon_domains(query: Optional[str] = None, workspace_id: Optional[str] = None) -> dict:
+def list_canon_domains(query: Optional[str] = None, workspace_id: Optional[str] = None, department: Optional[str] = None) -> dict:
     """List all available canon domains with their IDs and summaries.
 
     Call this FIRST whenever the user mentions a brand, product, company, or policy
@@ -235,6 +254,7 @@ def list_canon_domains(query: Optional[str] = None, workspace_id: Optional[str] 
     Args:
         query: Optional text search across canon domain names and summaries.
         workspace_id: Filter to a specific workspace (optional).
+        department: Filter to a specific department (optional).
     """
     res = grounding_tools.list_message_houses(query, workspace_id)
     # Align terminology in output
@@ -245,8 +265,10 @@ def list_canon_domains(query: Optional[str] = None, workspace_id: Optional[str] 
                 "id": h.get("id"),
                 "name": h.get("name"),
                 "summary": h.get("summary"),
+                "department": h.get("department", "General"),
             }
             for h in res["houses"]
+            if not department or h.get("department", "General").lower() == department.lower()
         ]
     return res
 
@@ -909,6 +931,36 @@ def list_channels() -> dict:
     """
     store = get_store()
     return {"channels": store.get_channels()}
+
+
+@mcp.tool()
+def list_departments() -> dict:
+    """List all departments, their default primary grounding types, and domain counts.
+
+    Use this tool to see the departmental organization of the organizational canon.
+    """
+    store = get_store()
+    domains = store.list_canon_domains()
+    
+    from src.models import DEPARTMENT_PRIMARY_GROUNDING
+    
+    counts = {}
+    for d in domains:
+        counts[d.department] = counts.get(d.department, 0) + 1
+        
+    all_depts = set(DEPARTMENT_PRIMARY_GROUNDING.keys()) | set(counts.keys())
+    if "General" not in all_depts:
+        all_depts.add("General")
+        
+    result = []
+    for dept in sorted(all_depts):
+        g_type = DEPARTMENT_PRIMARY_GROUNDING.get(dept, "message_house")
+        result.append({
+            "department": dept,
+            "primary_grounding_type": str(g_type),
+            "domain_count": counts.get(dept, 0),
+        })
+    return {"departments": result}
 
 
 

@@ -40,11 +40,13 @@ List all available Canon Domains. Always call this first to orient yourself. Pas
 **`set_active_domain(domain_id)`**
 Pin a Canon Domain for the session. Do this before generating any content. All subsequent searches will scope to this domain automatically.
 
-**`get_canon_domain(domain_id?, domain_name?, include?)`**
-Retrieve a full Canon Domain. Use `include=["canon_entries", "personas"]` to get all content. Use this when you need to review everything before generating.
+**`get_canon_domain(domain_id?, domain_name?, include?, include_unapproved?)`**
+Retrieve a full Canon Domain. Use `include=["canon_entries", "personas"]` to get all content. By default only `Approved` and `Locked` entries are returned; set `include_unapproved=True` to include entries with other statuses.
 
-**`search_canon(query, section_types?, personas?, channels?, canon_domains?, min_priority?)`**
+**`search_canon(query, section_types?, personas?, channels?, canon_domains?, min_priority?, include_unapproved?)`**
 Semantic and keyword search for specific approved canon entries. Be specific in your query — mention the persona, destination channel, or statement type you need.
+
+By default, only `Approved` and `Locked` entries are returned. Set `include_unapproved=True` to also see `Draft`, `In Review`, and `Outdated` entries (useful for review and audit workflows).
 
 Examples:
 - `search_canon("proof points for CTOs on LinkedIn")`
@@ -91,6 +93,11 @@ Returns a shareable URL to a visual standalone artifact page. Share this link wh
 
 **`list_skills()`**
 See all available artifact skill templates and their parameters.
+
+**`get_entry_history(entry_id)`**
+Retrieve the full audit trail for a specific Canon Entry — status transitions, timestamps, and content changes. Use this when investigating how or when an entry changed.
+
+### Governance & Admin
 
 **`check_framework_completeness(domain_id?)`**
 Score a Canon Domain (0-100) and list missing sections. Use this to advise the user on domain gaps before generating content.
@@ -149,6 +156,10 @@ Return the full specification for what a complete Canon Domain requires.
 6. **Use the active domain's voice.** Check `brand_personality` (if defined for the domain) before generating. If the tone is "direct and confident," match that style.
 
 7. **Don't mix domains.** Don't blend facts from multiple Canon Domains unless the user explicitly asks for a cross-department/cross-product comparison.
+
+8. **Respect entry status.** By default, grounding tools only return `Approved` and `Locked` entries. Draft or outdated entries are hidden from AI agents. If you need to review non-approved entries for audit or editorial purposes, pass `include_unapproved=True`.
+
+9. **Use the audit trail.** If a user asks why a specific claim changed or when it was last updated, use `get_entry_history(entry_id)` to retrieve the full status transition log.
 
 ---
 

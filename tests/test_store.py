@@ -68,7 +68,7 @@ def test_key_messages(store):
     )
     store.upsert_key_message(msg)
 
-    messages = store.get_key_messages(house.id)
+    messages = store.get_key_messages(house.id, include_unapproved=True)
     assert len(messages) == 1
     assert messages[0].content == "Test headline content"
     assert messages[0].section_type == SectionType.HEADLINE
@@ -131,9 +131,9 @@ def test_delete_key_message(store):
     store.upsert_house(house)
     msg = KeyMessage(message_house_id=house.id, section_type=SectionType.BENEFIT, priority=1, content="Test msg")
     store.upsert_key_message(msg)
-    assert len(store.get_key_messages(house.id)) == 1
+    assert len(store.get_key_messages(house.id, include_unapproved=True)) == 1
     assert store.delete_key_message(msg.id) is True
-    assert len(store.get_key_messages(house.id)) == 0
+    assert len(store.get_key_messages(house.id, include_unapproved=True)) == 0
 
 
 def test_delete_persona(store):

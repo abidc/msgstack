@@ -228,6 +228,8 @@ def list_houses(query: Optional[str] = None, auth: AuthContext = Depends(get_aut
     result = []
     for row in rows:
         h = row["house"]
+        if not auth.has_department_access(h.department):
+            continue
         summary = h.summary or ""
         if query and query.lower() not in h.name.lower() and query.lower() not in summary.lower():
             continue
@@ -238,6 +240,7 @@ def list_houses(query: Optional[str] = None, auth: AuthContext = Depends(get_aut
             "name": h.name,
             "source": h.source,
             "status": h.status,
+            "department": h.department,
             "document_type": str(h.document_type) if h.document_type else "message_house",
             "grounding_type": str(h.grounding_type),
             "summary": summary[:150] + ("..." if len(summary) > 150 else ""),
@@ -267,7 +270,7 @@ def _completeness_score_fast(house, message_count, persona_count) -> int:
 
 @app.get("/api/canon-domains/{domain_id}")
 @app.get("/api/houses/{house_id}")
-def get_house(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+def get_house(house_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_read)):
     actual_id = domain_id or house_id
     try:
         house = store.get_canon_domain(UUID(actual_id))
@@ -275,6 +278,8 @@ def get_house(house_id: Optional[str] = None, domain_id: Optional[str] = None):
         raise HTTPException(404, "Invalid ID")
     if not house:
         raise HTTPException(404, "Canon domain not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to access the '{house.department}' department.")
     return _house_response(house)
 
 
@@ -300,7 +305,7 @@ def list_pillars(house_id: Optional[str] = None, domain_id: Optional[str] = None
 
 @app.post("/api/canon-domains/{domain_id}/pillars", status_code=201)
 @app.post("/api/houses/{house_id}/pillars", status_code=201)
-def create_pillar(data: PillarCreate, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+def create_pillar(data: PillarCreate, house_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     actual_id = domain_id or house_id
     try:
         house_uuid = UUID(actual_id)
@@ -309,13 +314,15 @@ def create_pillar(data: PillarCreate, house_id: Optional[str] = None, domain_id:
     house = store.get_canon_domain(house_uuid)
     if not house:
         raise HTTPException(404, "House not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     pillar_id = store.create_pillar(house_uuid, data.name, data.description, data.display_order)
     return {"id": pillar_id, "name": data.name, "description": data.description, "display_order": data.display_order}
 
 
 @app.patch("/api/canon-domains/{domain_id}/pillars/{pillar_id}")
 @app.patch("/api/houses/{house_id}/pillars/{pillar_id}")
-def update_pillar(pillar_id: int, data: PillarUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+def update_pillar(pillar_id: int, data: PillarUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     actual_id = domain_id or house_id
     try:
         house_uuid = UUID(actual_id)
@@ -324,6 +331,8 @@ def update_pillar(pillar_id: int, data: PillarUpdate, house_id: Optional[str] = 
     house = store.get_canon_domain(house_uuid)
     if not house:
         raise HTTPException(404, "House not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     # Build update dict
     update_dict = {}
     if data.name is not None:
@@ -347,7 +356,7 @@ def update_pillar(pillar_id: int, data: PillarUpdate, house_id: Optional[str] = 
 
 @app.delete("/api/canon-domains/{domain_id}/pillars/{pillar_id}", status_code=204)
 @app.delete("/api/houses/{house_id}/pillars/{pillar_id}", status_code=204)
-def delete_pillar(pillar_id: int, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+def delete_pillar(pillar_id: int, house_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     actual_id = domain_id or house_id
     try:
         house_uuid = UUID(actual_id)
@@ -356,6 +365,8 @@ def delete_pillar(pillar_id: int, house_id: Optional[str] = None, domain_id: Opt
     house = store.get_canon_domain(house_uuid)
     if not house:
         raise HTTPException(404, "House not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     success = store.delete_pillar(pillar_id)
     if not success:
         raise HTTPException(404, "Pillar not found")
@@ -367,11 +378,17 @@ class ChunkPillarAssign(BaseModel):
 
 
 @app.patch("/api/chunks/{chunk_id}/pillar")
-def assign_chunk_pillar(chunk_id: str, data: ChunkPillarAssign):
+def assign_chunk_pillar(chunk_id: str, data: ChunkPillarAssign, auth: AuthContext = Depends(require_write)):
     try:
         chunk_uuid = UUID(chunk_id)
     except Exception:
         raise HTTPException(404, "Invalid chunk ID")
+    msg = _find_message(chunk_id)
+    if not msg:
+        raise HTTPException(404, "Chunk not found")
+    house = store.get_house(msg.canon_domain_id)
+    if not house or not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     success = store.assign_chunk_to_pillar(chunk_uuid, data.pillar_id)
     if not success:
         raise HTTPException(404, "Chunk not found")
@@ -389,6 +406,7 @@ class HouseCreate(BaseModel):
     differentiation: str = ""
     source: str = "manual"
     status: str = "active"
+    department: str = "General"
     grounding_type: GroundingType = Field(default=GroundingType.MESSAGE_HOUSE, validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
 
     @property
@@ -413,7 +431,15 @@ class HouseCreate(BaseModel):
 
 @app.post("/api/canon-domains")
 @app.post("/api/houses")
-def create_house(data: HouseCreate):
+def create_house(data: HouseCreate, auth: AuthContext = Depends(require_write)):
+    if not auth.has_department_access(data.department):
+        raise HTTPException(403, f"You do not have permission to write to the '{data.department}' department.")
+    
+    from src.models import DEPARTMENT_PRIMARY_GROUNDING
+    g_type = data.grounding_type
+    if g_type == GroundingType.MESSAGE_HOUSE and data.department in DEPARTMENT_PRIMARY_GROUNDING:
+        g_type = DEPARTMENT_PRIMARY_GROUNDING[data.department]
+
     house = MessageHouse(
         name=data.name,
         source=data.source,
@@ -424,7 +450,8 @@ def create_house(data: HouseCreate):
         tagline=data.tagline,
         differentiation=data.differentiation,
         status=HouseStatus(data.status),
-        grounding_type=data.grounding_type,
+        grounding_type=g_type,
+        department=data.department,
         last_synced=_now(),
     )
     store.upsert_house(house)
@@ -441,6 +468,7 @@ class HouseUpdate(BaseModel):
     tagline: Optional[str] = None
     differentiation: Optional[str] = None
     status: Optional[str] = None
+    department: Optional[str] = None
     grounding_type: Optional[GroundingType] = Field(default=None, validation_alias=AliasChoices('grounding_type', 'document_type'), serialization_alias='grounding_type')
 
     @property
@@ -465,11 +493,16 @@ class HouseUpdate(BaseModel):
 
 @app.patch("/api/canon-domains/{domain_id}")
 @app.patch("/api/houses/{house_id}")
-def update_house(data: HouseUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+def update_house(data: HouseUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     actual_id = domain_id or house_id
     house = store.get_house(UUID(actual_id))
     if not house:
         raise HTTPException(404, "Canon domain not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to the '{house.department}' department.")
+    if data.department is not None and not auth.has_department_access(data.department):
+        raise HTTPException(403, f"You do not have permission to write to the target '{data.department}' department.")
+
     for k, v in data.model_dump(exclude_none=True).items():
         if k in ("document_type", "grounding_type"):
             setattr(house, "grounding_type", GroundingType(v))
@@ -481,14 +514,17 @@ def update_house(data: HouseUpdate, house_id: Optional[str] = None, domain_id: O
 
 @app.delete("/api/canon-domains/{domain_id}")
 @app.delete("/api/houses/{house_id}")
-def delete_house(house_id: Optional[str] = None, domain_id: Optional[str] = None):
+def delete_house(house_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     actual_id = domain_id or house_id
     try:
         uid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    if not store.get_house(uid):
+    house = store.get_house(uid)
+    if not house:
         raise HTTPException(404, "Canon domain not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to the '{house.department}' department.")
     # Delete vectors BEFORE DB deletion so key message IDs are still available
     try:
         from src.grounding.search import GroundingEngine
@@ -535,10 +571,19 @@ MessageCreate = EntryCreate
 
 @app.post("/api/entries")
 @app.post("/api/messages")
-def create_message(data: EntryCreate):
+def create_message(data: EntryCreate, auth: AuthContext = Depends(require_write)):
+    try:
+        domain_id = UUID(data.canon_domain_id)
+    except Exception:
+        raise HTTPException(400, "Invalid canon domain ID")
+    house = store.get_house(domain_id)
+    if not house:
+        raise HTTPException(404, "Canon domain not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
         msg = CanonEntry(
-            canon_domain_id=UUID(data.canon_domain_id),
+            canon_domain_id=domain_id,
             section_type=SectionType(data.section_type),
             priority=data.priority,
             content=data.content,
@@ -565,11 +610,14 @@ MessageUpdate = EntryUpdate
 
 @app.patch("/api/entries/{entry_id}")
 @app.patch("/api/messages/{msg_id}")
-def update_message(data: EntryUpdate, msg_id: Optional[str] = None, entry_id: Optional[str] = None):
+def update_message(data: EntryUpdate, msg_id: Optional[str] = None, entry_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     actual_id = entry_id or msg_id
     msg = _find_message(actual_id)
     if not msg:
         raise HTTPException(404, "Canon entry not found")
+    house = store.get_house(msg.canon_domain_id)
+    if not house or not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     if msg.status == EntryStatus.LOCKED:
         raise HTTPException(409, "Canon entry is locked and cannot be edited. Unlock it first via the status endpoint.")
     for k, v in data.model_dump(exclude_none=True).items():
@@ -585,11 +633,14 @@ def update_message(data: EntryUpdate, msg_id: Optional[str] = None, entry_id: Op
 
 @app.delete("/api/entries/{entry_id}")
 @app.delete("/api/messages/{msg_id}")
-def delete_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None):
+def delete_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     actual_id = entry_id or msg_id
     msg = _find_message(actual_id)
     if not msg:
         raise HTTPException(404, "Canon entry not found")
+    house = store.get_house(msg.canon_domain_id)
+    if not house or not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     if msg.status == EntryStatus.LOCKED:
         raise HTTPException(409, "Canon entry is locked and cannot be deleted. Unlock it first via the status endpoint.")
     if not store.delete_key_message(UUID(actual_id)):
@@ -609,12 +660,15 @@ MessageStatusUpdate = EntryStatusUpdate
 
 @app.patch("/api/entries/{entry_id}/status")
 @app.patch("/api/messages/{msg_id}/status")
-def update_message_status(data: EntryStatusUpdate, msg_id: Optional[str] = None, entry_id: Optional[str] = None):
+def update_message_status(data: EntryStatusUpdate, msg_id: Optional[str] = None, entry_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     """Update a canon entry's approval status."""
     actual_id = entry_id or msg_id
     msg = _find_message(actual_id)
     if not msg:
         raise HTTPException(404, "Canon entry not found")
+    house = store.get_house(msg.canon_domain_id)
+    if not house or not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
         msg.status = EntryStatus(data.status)
     except ValueError:
@@ -747,15 +801,18 @@ class BulkMessageImport(BaseModel):
 
 @app.post("/api/canon-domains/{domain_id}/entries/bulk-import")
 @app.post("/api/houses/{house_id}/messages/bulk-import")
-def bulk_import_messages(data: BulkMessageImport, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+def bulk_import_messages(data: BulkMessageImport, house_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     """Import multiple entries at once."""
     actual_id = domain_id or house_id
     try:
         house_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    if not store.get_house(house_uuid):
+    house = store.get_house(house_uuid)
+    if not house:
         raise HTTPException(404, "Canon domain not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
 
     if not data.rows:
         raise HTTPException(400, "No rows provided")
@@ -807,9 +864,18 @@ class PersonaCreate(BaseModel):
 
 
 @app.post("/api/personas")
-def create_persona(data: PersonaCreate):
+def create_persona(data: PersonaCreate, auth: AuthContext = Depends(require_write)):
+    try:
+        domain_id = UUID(data.message_house_id)
+    except Exception:
+        raise HTTPException(400, "Invalid canon domain ID")
+    house = store.get_house(domain_id)
+    if not house:
+        raise HTTPException(404, "Canon domain not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     persona = Persona(
-        message_house_id=UUID(data.message_house_id),
+        message_house_id=domain_id,
         name=data.name,
         description=data.description,
         pain_points=data.pain_points,
@@ -829,10 +895,13 @@ class PersonaUpdate(BaseModel):
 
 
 @app.patch("/api/personas/{persona_id}")
-def update_persona(persona_id: str, data: PersonaUpdate):
+def update_persona(persona_id: str, data: PersonaUpdate, auth: AuthContext = Depends(require_write)):
     persona = _find_persona(persona_id)
     if not persona:
         raise HTTPException(404, "Persona not found")
+    house = store.get_house(persona.canon_domain_id)
+    if not house or not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(persona, k, v)
     store.upsert_persona(persona)
@@ -840,7 +909,13 @@ def update_persona(persona_id: str, data: PersonaUpdate):
 
 
 @app.delete("/api/personas/{persona_id}")
-def delete_persona(persona_id: str):
+def delete_persona(persona_id: str, auth: AuthContext = Depends(require_write)):
+    persona = _find_persona(persona_id)
+    if not persona:
+        raise HTTPException(404, "Persona not found")
+    house = store.get_house(persona.canon_domain_id)
+    if not house or not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     if not store.delete_persona(UUID(persona_id)):
         raise HTTPException(404, "Persona not found")
     return {"ok": True, "deleted_id": persona_id}
@@ -855,11 +930,14 @@ class PersonaStatusUpdate(BaseModel):
 
 
 @app.patch("/api/personas/{persona_id}/status")
-def update_persona_status(persona_id: str, data: PersonaStatusUpdate):
+def update_persona_status(persona_id: str, data: PersonaStatusUpdate, auth: AuthContext = Depends(require_write)):
     """Update a persona's approval status."""
     persona = _find_persona(persona_id)
     if not persona:
         raise HTTPException(404, "Persona not found")
+    house = store.get_house(persona.canon_domain_id)
+    if not house or not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
         persona.status = MessageStatus(data.status)
     except ValueError:
@@ -911,6 +989,7 @@ async def extract_upload(
     file: UploadFile = File(...),
     source_name: str = Form(""),
     document_type: str = Form("message_house"),
+    department: str = Form("General"),
     _rl: None = Depends(extract_limiter),
     auth: AuthContext = Depends(require_write),
 ):
@@ -919,6 +998,9 @@ async def extract_upload(
     Returns structured error JSON on failure with which stage failed.
     """
     _check_token_budget(auth.workspace_id if settings.auth_enabled else "default")
+
+    if not auth.has_department_access(department):
+        raise HTTPException(403, f"You do not have permission to write to the '{department}' department.")
 
     file_path = UPLOAD_DIR / file.filename
     save_upload(file.file, file_path)
@@ -960,7 +1042,8 @@ async def extract_upload(
             structured,
             file.filename,
             document_type=document_type,
-            raw_markdown=text
+            raw_markdown=text,
+            department=department
         )
     except Exception as e:
         log.error("DB commit failed for %s: %s", file.filename, e)
@@ -989,6 +1072,7 @@ async def preview_structure(
     file: UploadFile = File(...),
     source_name: str = Form(""),
     document_type: str = Form("message_house"),
+    department: str = Form("General"),
     _rl: None = Depends(extract_limiter),
     auth: AuthContext = Depends(require_write),
 ):
@@ -997,6 +1081,9 @@ async def preview_structure(
     Returns the structured sections for user review. Call /api/confirm-structure
     with the returned preview_token to persist.
     """
+    if not auth.has_department_access(department):
+        raise HTTPException(403, f"You do not have permission to write to the '{department}' department.")
+
     file_path = UPLOAD_DIR / file.filename
     save_upload(file.file, file_path)
 
@@ -1034,7 +1121,7 @@ async def preview_structure(
 
     _evict_preview_cache()
     token = str(_uuid.uuid4())
-    _preview_cache[token] = (structured, source_name, str(file_path), time.time(), document_type)
+    _preview_cache[token] = (structured, source_name, str(file_path), time.time(), document_type, department)
 
     return {
         "status": "preview",
@@ -1057,7 +1144,7 @@ async def preview_structure(
 
 
 @app.post("/api/confirm-structure")
-async def confirm_structure(data: dict):
+async def confirm_structure(data: dict, auth: AuthContext = Depends(require_write)):
     """Persist a previewed structure to DB and index to Turbovec.
 
     Body: {"preview_token": "...", "edits": {optional field overrides}}
@@ -1069,6 +1156,7 @@ async def confirm_structure(data: dict):
     cache_entry = _preview_cache.pop(token)
     structured, source_name, file_path_str, timestamp = cache_entry[:4]
     document_type = cache_entry[4] if len(cache_entry) > 4 else "message_house"
+    department = cache_entry[5] if len(cache_entry) > 5 else "General"
 
     # Apply any user edits to top-level fields
     edits = data.get("edits", {})
@@ -1078,10 +1166,15 @@ async def confirm_structure(data: dict):
     
     if "document_type" in edits:
         document_type = edits["document_type"]
+    if "department" in edits:
+        department = edits["department"]
+
+    if not auth.has_department_access(department):
+        raise HTTPException(403, f"You do not have permission to write to the '{department}' department.")
 
     try:
         filename = Path(file_path_str).name
-        house, indexed, markdown = _commit_structured_house(structured, filename, document_type=document_type)
+        house, indexed, markdown = _commit_structured_house(structured, filename, document_type=document_type, department=department)
     except Exception as e:
         log.error("DB commit failed during confirm-structure: %s", e)
         return JSONResponse(status_code=500, content={
@@ -1107,17 +1200,23 @@ def _commit_structured_house(
     structured: StructuredHouse,
     filename: str,
     document_type: str = "message_house",
-    raw_markdown: Optional[str] = None
+    raw_markdown: Optional[str] = None,
+    department: str = "General"
 ) -> tuple:
     """Save a StructuredHouse to DB, write markdown, and index to Turbovec.
 
     Returns (house, indexed_bool, markdown_str).
     """
+    from src.models import DEPARTMENT_PRIMARY_GROUNDING
+    g_type = GroundingType(document_type)
+    if g_type == GroundingType.MESSAGE_HOUSE and department in DEPARTMENT_PRIMARY_GROUNDING:
+        g_type = DEPARTMENT_PRIMARY_GROUNDING[department]
+
     house = MessageHouse(
         name=structured.name,
         source="upload",
         source_id=filename,
-        grounding_type=GroundingType(document_type),
+        grounding_type=g_type,
         summary=structured.summary,
         audience=structured.audience,
         brand_personality=structured.brand_personality,
@@ -1125,6 +1224,7 @@ def _commit_structured_house(
         tagline=structured.tagline,
         differentiation=structured.differentiation,
         status=HouseStatus.ACTIVE,
+        department=department,
         last_synced=_now(),
     )
     store.upsert_house(house)
@@ -3717,8 +3817,18 @@ class BulkStatusUpdate(BaseModel):
 
 @app.patch("/api/canon-domains/{domain_id}/entries/bulk-status")
 @app.patch("/api/houses/{house_id}/messages/bulk-status")
-def bulk_update_message_status(data: BulkStatusUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None):
+def bulk_update_message_status(data: BulkStatusUpdate, house_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     """Bulk approve/lock/flag multiple entries at once."""
+    actual_id = domain_id or house_id
+    try:
+        house_uuid = UUID(actual_id)
+    except Exception:
+        raise HTTPException(400, "Invalid ID")
+    house = store.get_house(house_uuid)
+    if not house:
+        raise HTTPException(404, "Canon domain not found")
+    if not auth.has_department_access(house.department):
+        raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
         count = store.bulk_update_message_status(
             data.message_ids, data.status, data.approved_by or "admin"

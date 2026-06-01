@@ -4,14 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MsgStack{% endblock %}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
-    <script>(function(){var t=localStorage.getItem('msgstack-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');})()</script>
+    <script>(function(){var t=localStorage.getItem('msgstack-theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})()</script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
+            --bg: #edeae2;
+            --bg-1: #f0ece4;
+            --bg-2: #e4e0d8;
+            --bg-3: #d9d4cb;
+            --border: #c8c2b8;
+            --border-light: #d2cabb;
+            --text: #0f172a;
+            --text-2: #334155;
+            --text-3: #64748b;
+            --primary: #a82315;
+            --primary-dim: rgba(168,35,21,0.08);
+            --primary-hover: #c23020;
+            --accent-graph: #4f46e5;
+            --accent-purple: #7c3aed;
+            --success: #166534;
+            --success-dim: rgba(22,101,52,0.10);
+            --warn: #92400e;
+            --warn-dim: rgba(146,64,14,0.10);
+            --danger: #b91c1c;
+            --danger-dim: rgba(185,28,28,0.10);
+            --radius: 8px;
+            --radius-lg: 12px;
+        }
+        [data-theme="dark"] {
             --bg: #0B0F19;
             --bg-1: #1A2235;
             --bg-2: #2A3655;
@@ -24,40 +48,17 @@
             --primary: #00E5FF;
             --primary-dim: rgba(0,229,255,0.15);
             --primary-hover: #33eaff;
-            --accent-graph: #651FFF;
-            --accent-purple: #B388FF;
             --success: #34d399;
             --success-dim: rgba(52,211,153,0.12);
             --warn: #fbbf24;
             --warn-dim: rgba(251,191,36,0.12);
             --danger: #f87171;
             --danger-dim: rgba(248,113,113,0.12);
-            --radius: 8px;
-            --radius-lg: 12px;
-        }
-        [data-theme="light"] {
-            --bg: #f5f5f7;
-            --bg-1: #ffffff;
-            --bg-2: #f0f0f3;
-            --bg-3: #e5e5ea;
-            --border: #d1d1d6;
-            --border-light: #c7c7cc;
-            --text: #1c1c1e;
-            --text-2: #48484a;
-            --text-3: #8e8e93;
-            --primary: #6d5ce7;
-            --primary-dim: rgba(109,92,231,0.12);
-            --primary-hover: #8677f0;
-            --success: #25a244;
-            --success-dim: rgba(37,162,68,0.10);
-            --warn: #c47a00;
-            --warn-dim: rgba(196,122,0,0.10);
-            --danger: #d93025;
-            --danger-dim: rgba(217,48,37,0.10);
         }
         body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
-        h1, h2, h3, .page-title, .card-title, .logo, .stat-value { font-family: 'Outfit', sans-serif; }
-        code, pre, .monospace { font-family: 'JetBrains Mono', monospace; color: #38BDF8; }
+        h1, h2, h3, .page-title, .card-title, .logo, .stat-value { font-family: 'Lora', Georgia, serif; }
+        code, pre, .monospace { font-family: 'JetBrains Mono', monospace; color: var(--primary); }
+        [data-theme="dark"] code, [data-theme="dark"] pre, [data-theme="dark"] .monospace { color: #38BDF8; }
         .app { display: flex; height: 100vh; overflow: hidden; }
 
         /* ── Sidebar ── */
@@ -147,20 +148,32 @@
 
         /* ── Toasts ── */
         .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
-        .toast { padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; color: white; background: var(--bg-3); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3); transform: translateY(20px); opacity: 0; transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .toast { padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; color: var(--text); background: var(--bg-1); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.12); transform: translateY(20px); opacity: 0; transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        [data-theme="dark"] .toast { color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
         .toast.show { transform: translateY(0); opacity: 1; }
         .toast-success { border-left: 3px solid var(--success); }
         .toast-error { border-left: 3px solid var(--danger); }
 
         /* ── Utilities ── */
-        .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.15); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+        .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.12); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        [data-theme="light"] .spinner { border-color: rgba(0,0,0,0.12); border-top-color: var(--primary); }
-        [data-theme="light"] .toast { color: var(--text); }
+        [data-theme="dark"] .spinner { border-color: rgba(255,255,255,0.15); border-top-color: white; }
+
+        /* ── Background texture (matches marketing site) ── */
+        @keyframes gridPulse { 0%,100% { opacity:.10; } 50% { opacity:.28; } }
+        body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+            background-image: linear-gradient(to right,var(--border) 1px,transparent 1px),
+                              linear-gradient(to bottom,var(--border) 1px,transparent 1px);
+            background-size:48px 48px; animation:gridPulse 9s ease-in-out infinite; }
+        body::after { content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+            background:radial-gradient(ellipse 85% 55% at 50% 0%,rgba(168,35,21,0.06),transparent); }
+        [data-theme="dark"] body::before { opacity:0; animation:none; }
+        [data-theme="dark"] body::after  { opacity:0; }
+        .app { position:relative; z-index:1; }
 
         /* ── Document-type badges ── */
         .doc-type-badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; letter-spacing: 0.3px; margin-left: 8px; vertical-align: middle; }
-        .doc-type-canon_domain, .doc-type-message_house { background: rgba(124,106,247,0.15); color: var(--primary); }
+        .doc-type-canon_domain, .doc-type-message_house { background: var(--primary-dim); color: var(--primary); }
         .doc-type-brand_guide       { background: rgba(139,92,246,0.15);  color: #a78bfa; }
         .doc-type-competitive_brief { background: rgba(249,115,22,0.15);  color: #fb923c; }
         .doc-type-corp_narrative    { background: rgba(34,197,94,0.15);   color: #4ade80; }
@@ -200,8 +213,8 @@
             
             <div class="sidebar-footer">
                 <span>v0.8.2</span>
-                <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode">
-                    <span id="theme-icon">☀</span>
+                <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()" title="Toggle dark mode">
+                    <span id="theme-icon">☾</span>
                 </button>
             </div>
         </aside>
@@ -214,19 +227,19 @@
     {% block scripts %}{% endblock %}
     <script>
         function toggleTheme() {
-            var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-            if (isLight) {
+            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            if (isDark) {
                 document.documentElement.removeAttribute('data-theme');
                 localStorage.removeItem('msgstack-theme');
             } else {
-                document.documentElement.setAttribute('data-theme', 'light');
-                localStorage.setItem('msgstack-theme', 'light');
+                document.documentElement.setAttribute('data-theme', 'dark');
+                localStorage.setItem('msgstack-theme', 'dark');
             }
             _syncThemeIcon();
         }
         function _syncThemeIcon() {
             var icon = document.getElementById('theme-icon');
-            if (icon) icon.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☾' : '☀';
+            if (icon) icon.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀' : '☾';
         }
         document.addEventListener('DOMContentLoaded', _syncThemeIcon);
     </script>

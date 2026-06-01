@@ -160,6 +160,7 @@ class CanonDomainModel(Base):
     tagline: Mapped[str] = mapped_column(String(500), default="")
     differentiation: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="active")
+    department: Mapped[str] = mapped_column(String(100), nullable=False, default="General", server_default="General")
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_reviewed: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -641,6 +642,15 @@ class Store:
                 if "last_reviewed" not in mh_cols:
                     try:
                         conn.execute(text("ALTER TABLE canon_domains ADD COLUMN last_reviewed DATETIME"))
+                        conn.commit()
+                    except Exception:
+                        pass
+                if "department" not in mh_cols:
+                    try:
+                        conn.execute(text(
+                            "ALTER TABLE canon_domains ADD COLUMN department VARCHAR(100) "
+                            "NOT NULL DEFAULT 'General'"
+                        ))
                         conn.commit()
                     except Exception:
                         pass
@@ -1347,6 +1357,7 @@ class Store:
                 "tagline": domain.tagline,
                 "differentiation": domain.differentiation,
                 "status": str(domain.status),
+                "department": domain.department,
             },
             # Compatibility key:
             "house": {
@@ -1360,6 +1371,7 @@ class Store:
                 "tagline": domain.tagline,
                 "differentiation": domain.differentiation,
                 "status": str(domain.status),
+                "department": domain.department,
             },
             "entries": [
                 {
@@ -2688,6 +2700,7 @@ def _domain_from_row(row: CanonDomainModel) -> CanonDomain:
         tagline=row.tagline,
         differentiation=row.differentiation,
         status=DomainStatus(row.status),
+        department=row.department,
         last_synced=row.last_synced,
         last_reviewed=row.last_reviewed,
     )

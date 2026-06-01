@@ -10,6 +10,18 @@ MsgStack is the **canon layer** for the organization. Departments own their doma
 
 MsgStack begins with product marketing because that is the highest-value first wedge. However, the underlying model is designed as an organizational canon layer. This roadmap maps the path to full cross-department canon domains owned by SMEs in Product (including core spec, API, and technical document owners), Marketing, Legal, HR, Support, and Security.
 
+### Grounding Types — The Multi-Department Vision
+
+Each department gets a **Grounding Type**: a schema that defines how their knowledge is structured into queryable canon. The three priority schemas are:
+
+| Grounding Type | Department | Status |
+|----------------|------------|--------|
+| **Message House** | Product Marketing | ACTIVE — flagship schema, fully implemented |
+| **Engineering Spec** | Engineering | PLANNED — v1.0 |
+| **Policy Shield** | Legal & Compliance | PLANNED — v1.0 |
+
+Message House is the wedge. Engineering Spec and Policy Shield are the proof that this is an organizational canon layer, not a PMM tool. They are documented on the public website at [msgstack.ai/message-house](https://www.msgstack.ai/message-house) and are the primary v1.0 development targets.
+
 This roadmap reflects the current state and planned direction. Items are grouped by milestone, not calendar quarter — sequencing depends on community feedback and priority shifts. Items marked `[OSS]` are well-suited for community contribution.
 
 ---
@@ -338,9 +350,10 @@ The core governance capability. Evaluates any piece of content against the struc
 **Goal:** Expand MsgStack from a marketing-only message house repository to a cross-department canon layer. Product, Legal, HR, and Security teams can curate and connect their respective domains of truth.
 
 ### Cross-Department Canon Domains
-- [ ] **Dynamic Grounding Schemas:** Support dynamic Pydantic/JSON Schema validation per domain, allowing custom schemas by department (e.g., `BrandGuidelines`, `ApiSpecification`, `Soc2Compliance`) beyond just the default `MessageHouse` layout.
-- [ ] **Product Canon (Family of Domains):** Product managers and technical leads curate distinct specifications and guidelines for core features, API specifications, release/versioning facts, and developer policies.
-- [ ] **Legal & Compliance Canon:** Legal SMEs curate approved disclosures, privacy statements, trademark rules, and liability limits.
+- [ ] **Dynamic Grounding Schemas:** Support dynamic Pydantic/JSON Schema validation per domain, allowing custom schemas by department beyond just the default `message_house` layout.
+- [ ] **`engineering_spec` Grounding Type:** API constraints, system SLAs, versioning policy, deprecation notices, security requirements. Keeps developer copilots aligned with real specs — not hallucinated rate limits.
+- [ ] **`policy_shield` Grounding Type:** Legal disclaimers, privacy policy rules, compliance assertions (SOC2/GDPR), pre-approved compliance responses. AI tools retrieve legal language verbatim — no paraphrasing.
+- [ ] **Product Canon (Family of Domains):** Product managers curate core feature specs, release/versioning facts, and developer policies.
 - [ ] **HR & Culture Canon:** HR admins curate core values, workplace policies, onboarding guidelines, and benefits summaries.
 - [ ] **Security & IT Canon:** Security teams curate compliance status (SOC 2, ISO), data retention rules, and vendor security answers.
 - [ ] **Sales Enablement Canon:** Enablement teams curate sales playbooks, objection handlers, and pricing structures.
