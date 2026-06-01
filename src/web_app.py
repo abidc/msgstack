@@ -435,10 +435,10 @@ def create_house(data: HouseCreate, auth: AuthContext = Depends(require_write)):
     if not auth.has_department_access(data.department):
         raise HTTPException(403, f"You do not have permission to write to the '{data.department}' department.")
     
-    from src.models import DEPARTMENT_PRIMARY_GROUNDING
+    dept = store.get_department(data.department)
     g_type = data.grounding_type
-    if g_type == GroundingType.MESSAGE_HOUSE and data.department in DEPARTMENT_PRIMARY_GROUNDING:
-        g_type = DEPARTMENT_PRIMARY_GROUNDING[data.department]
+    if g_type == GroundingType.MESSAGE_HOUSE and dept:
+        g_type = GroundingType(dept["primary_grounding_type"])
 
     house = MessageHouse(
         name=data.name,
@@ -1207,10 +1207,10 @@ def _commit_structured_house(
 
     Returns (house, indexed_bool, markdown_str).
     """
-    from src.models import DEPARTMENT_PRIMARY_GROUNDING
+    dept = store.get_department(department)
     g_type = GroundingType(document_type)
-    if g_type == GroundingType.MESSAGE_HOUSE and department in DEPARTMENT_PRIMARY_GROUNDING:
-        g_type = DEPARTMENT_PRIMARY_GROUNDING[department]
+    if g_type == GroundingType.MESSAGE_HOUSE and dept:
+        g_type = GroundingType(dept["primary_grounding_type"])
 
     house = MessageHouse(
         name=structured.name,
@@ -1427,6 +1427,46 @@ def delete_channel(channel_id: str, auth: AuthContext = Depends(require_write)):
         raise HTTPException(400, str(e))
     if not deleted:
         raise HTTPException(404, "Channel not found")
+    return {"deleted": True}
+
+
+class DepartmentCreate(BaseModel):
+    name: str
+    primary_grounding_type: str = "message_house"
+    description: str = ""
+    workspace_id: str = "default"
+
+
+@app.get("/api/departments")
+def list_departments(auth: AuthContext = Depends(get_auth_context)):
+    wid = auth.workspace_id if settings.auth_enabled else "default"
+    return store.list_departments(workspace_id=wid)
+
+
+@app.post("/api/departments")
+def create_department(req: DepartmentCreate, auth: AuthContext = Depends(require_write)):
+    if not auth.is_admin:
+        raise HTTPException(403, "Only administrators can create departments.")
+    if not req.name:
+        raise HTTPException(400, "name is required")
+    from src.models import GroundingType
+    try:
+        GroundingType(req.primary_grounding_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid primary grounding type: {req.primary_grounding_type}")
+    return store.create_department(req.name, req.primary_grounding_type, req.description, req.workspace_id)
+
+
+@app.delete("/api/departments/{name}")
+def delete_department(name: str, auth: AuthContext = Depends(require_write)):
+    if not auth.is_admin:
+        raise HTTPException(403, "Only administrators can delete departments.")
+    try:
+        deleted = store.delete_department(name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not deleted:
+        raise HTTPException(404, "Department not found")
     return {"deleted": True}
 
 
@@ -2943,9 +2983,9 @@ class ApiKeyCreate(BaseModel):
 @app.post("/api/api-keys")
 def create_api_key(data: ApiKeyCreate, auth: AuthContext = Depends(require_write)):
     valid_scopes = {"read", "write", "admin"}
-    bad = set(data.scopes) - valid_scopes
+    bad = {s for s in data.scopes if s not in valid_scopes and not s.startswith("dept:")}
     if bad:
-        raise HTTPException(400, f"Invalid scopes: {bad}. Use: {valid_scopes}")
+        raise HTTPException(400, f"Invalid scopes: {bad}. Use: {valid_scopes} or dept:<name>")
     plaintext, key_hash = generate_api_key()
     record = store.create_api_key(
         key_hash=key_hash,

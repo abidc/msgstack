@@ -121,6 +121,15 @@ class ChannelModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class DepartmentModel(Base):
+    __tablename__ = "departments"
+
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+    primary_grounding_type: Mapped[str] = mapped_column(String(50), nullable=False, default="message_house")
+    description: Mapped[str] = mapped_column(String(500), default="")
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
+
+
 _DEFAULT_CHANNELS = [
     ("all", "All Channels", "Universal — applies to all channels", False),
     ("email", "Email", "Email campaigns and newsletters", False),
@@ -549,6 +558,7 @@ class Store:
         Base.metadata.create_all(self.engine)
         self._ensure_default_workspace()
         self._seed_default_channels()
+        self._seed_default_departments()
 
     def _migrate(self) -> None:
         """Apply table renames, column renames, and additive migrations for columns."""
@@ -842,6 +852,22 @@ class Store:
                 if not s.get(ChannelModel, ch_id):
                     s.add(ChannelModel(id=ch_id, name=name, description=description,
                                        is_custom=is_custom, created_at=_now()))
+            s.commit()
+
+    def _seed_default_departments(self) -> None:
+        from src.models import GroundingType
+        defaults = [
+            ("General", "message_house", "General grounding content"),
+            ("Product Marketing", "message_house", "Product messaging, positioning, value propositions, and personas"),
+            ("Company Marketing", "corp_narrative", "Corporate narrative, brand values, founding story, and company guidelines"),
+            ("Enablement", "persona_library", "Persona library, detailed guidelines, and customer facing assets"),
+            ("Product Management", "competitive_brief", "Competitive briefs, product roadmap alignment, strengths, and weaknesses"),
+        ]
+        with self.session() as s:
+            for name, g_type, desc in defaults:
+                exists = s.get(DepartmentModel, name)
+                if not exists:
+                    s.add(DepartmentModel(name=name, primary_grounding_type=g_type, description=desc, workspace_id="default"))
             s.commit()
 
     def _ensure_default_workspace(self) -> None:
@@ -2249,6 +2275,52 @@ class Store:
             row = s.get(ChannelModel, ch_id)
             return {"id": row.id, "name": row.name, "description": row.description,
                     "is_custom": row.is_custom, "created_at": row.created_at.isoformat()}
+
+    # --- Departments ---
+
+    def create_department(self, name: str, primary_grounding_type: str,
+                          description: str = "", workspace_id: str = "default") -> dict:
+        with self.session() as s:
+            existing = s.get(DepartmentModel, name)
+            if existing:
+                existing.primary_grounding_type = primary_grounding_type
+                existing.description = description
+                existing.workspace_id = workspace_id
+            else:
+                s.add(DepartmentModel(name=name, primary_grounding_type=primary_grounding_type,
+                                       description=description, workspace_id=workspace_id))
+            s.commit()
+            row = s.get(DepartmentModel, name)
+            return {"name": row.name, "primary_grounding_type": row.primary_grounding_type,
+                    "description": row.description, "workspace_id": row.workspace_id}
+
+    def list_departments(self, workspace_id: str | None = None) -> list[dict]:
+        with self.session() as s:
+            q = s.query(DepartmentModel)
+            if workspace_id and workspace_id != "all":
+                q = q.filter(DepartmentModel.workspace_id == workspace_id)
+            rows = q.order_by(DepartmentModel.name).all()
+            return [{"name": r.name, "primary_grounding_type": r.primary_grounding_type,
+                     "description": r.description, "workspace_id": r.workspace_id} for r in rows]
+
+    def get_department(self, name: str, workspace_id: str | None = None) -> dict | None:
+        with self.session() as s:
+            row = s.get(DepartmentModel, name)
+            if not row:
+                return None
+            return {"name": row.name, "primary_grounding_type": row.primary_grounding_type,
+                    "description": row.description, "workspace_id": row.workspace_id}
+
+    def delete_department(self, name: str, workspace_id: str | None = None) -> bool:
+        if name in ("General", "Product Marketing", "Company Marketing", "Enablement", "Product Management"):
+            raise ValueError("Cannot delete built-in departments")
+        with self.session() as s:
+            dept = s.get(DepartmentModel, name)
+            if not dept:
+                return False
+            s.delete(dept)
+            s.commit()
+            return True
 
     def get_channel_message_count(self, channel_id: str) -> int:
         """Count how many key messages are associated with a channel."""

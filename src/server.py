@@ -941,24 +941,20 @@ def list_departments() -> dict:
     """
     store = get_store()
     domains = store.list_canon_domains()
-    
-    from src.models import DEPARTMENT_PRIMARY_GROUNDING
+    depts = store.list_departments()
     
     counts = {}
     for d in domains:
         counts[d.department] = counts.get(d.department, 0) + 1
         
-    all_depts = set(DEPARTMENT_PRIMARY_GROUNDING.keys()) | set(counts.keys())
-    if "General" not in all_depts:
-        all_depts.add("General")
-        
     result = []
-    for dept in sorted(all_depts):
-        g_type = DEPARTMENT_PRIMARY_GROUNDING.get(dept, "message_house")
+    for dept in depts:
+        name = dept["name"]
         result.append({
-            "department": dept,
-            "primary_grounding_type": str(g_type),
-            "domain_count": counts.get(dept, 0),
+            "department": name,
+            "primary_grounding_type": dept["primary_grounding_type"],
+            "description": dept["description"],
+            "domain_count": counts.get(name, 0),
         })
     return {"departments": result}
 
