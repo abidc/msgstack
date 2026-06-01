@@ -35,6 +35,7 @@ class GeneratedArtifact(BaseModel):
     design_spec: Optional[dict] = None
     renderer_type: Optional[str] = None
     renderer_output: Optional[RenderOutput] = None
+    used_drafts_fallback: bool = False
 
 
 class ArtifactGenerator:
@@ -59,13 +60,25 @@ class ArtifactGenerator:
         if not house:
             raise ValueError(f"House {house_id} not found")
 
-        messages = self.store.get_key_messages(house.id)
+        messages = self.store.get_key_messages(house.id, include_unapproved=True)
         # Approval gating: skip non-Approved messages by default, unless include_drafts is true
         include_drafts = False
         if custom_context and (custom_context.get("include_drafts") in (True, "true", "1", 1)):
             include_drafts = True
-        if not include_drafts:
-            messages = [m for m in messages if m.status == "approved"]
+
+        approved_messages = [m for m in messages if m.status == "approved"]
+        used_drafts_fallback = False
+
+        if include_drafts:
+            messages_to_use = messages
+        elif approved_messages:
+            messages_to_use = approved_messages
+        else:
+            # Fallback to drafts/in_review if no approved messages exist
+            messages_to_use = [m for m in messages if m.status in ("draft", "in_review")]
+            used_drafts_fallback = len(messages_to_use) > 0
+
+        messages = messages_to_use
 
         personas = self.store.get_personas(house.id)
 
@@ -196,6 +209,7 @@ class ArtifactGenerator:
             design_spec=sections.get("design_spec"),
             renderer_type=renderer_type,
             renderer_output=render_output,
+            used_drafts_fallback=used_drafts_fallback,
         )
 
     def _get_template(self, artifact_type: str) -> Optional[dict]:

@@ -969,7 +969,15 @@ class Store:
 
     def get_canon_domain_by_name(self, name: str) -> CanonDomain | None:
         with self.session() as s:
+            # 1. Try exact match first
             row = s.query(CanonDomainModel).filter(CanonDomainModel.name == name).first()
+            # 2. Try case-insensitive exact match
+            if not row:
+                row = s.query(CanonDomainModel).filter(CanonDomainModel.name.ilike(name)).first()
+            # 3. Try partial substring match (case-insensitive)
+            if not row:
+                row = s.query(CanonDomainModel).filter(CanonDomainModel.name.ilike(f"%{name}%")).first()
+            
             if not row:
                 return None
             return _domain_from_row(row)
@@ -1004,14 +1012,17 @@ class Store:
 
     upsert_key_message = upsert_canon_entry  # Deprecated alias
 
-    def get_canon_entries(self, domain_id: UUID) -> list[CanonEntry]:
+    def get_canon_entries(self, domain_id: UUID, include_unapproved: bool = False) -> list[CanonEntry]:
         with self.session() as s:
-            rows = (
+            query = (
                 s.query(CanonEntryModel)
                 .filter(CanonEntryModel.canon_domain_id == str(domain_id))
-                .order_by(CanonEntryModel.priority)
-                .all()
             )
+            if not include_unapproved:
+                query = query.filter(
+                    CanonEntryModel.status.in_(["approved", "locked"])
+                )
+            rows = query.order_by(CanonEntryModel.priority).all()
             return [_entry_from_row(r) for r in rows]
 
     get_key_messages = get_canon_entries  # Deprecated alias
@@ -1184,6 +1195,32 @@ class Store:
                 for r in rows
             ]
 
+    def get_entry_review_trail(self, entry_id: str) -> list[dict]:
+        """Return all review log entries for a specific canon entry, newest first."""
+        with self.session() as s:
+            rows = (
+                s.query(ReviewLogModel)
+                .filter(ReviewLogModel.canon_entry_id == entry_id)
+                .order_by(ReviewLogModel.timestamp.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "domain_id": r.canon_domain_id,
+                    "house_id": r.canon_domain_id,
+                    "entry_id": r.canon_entry_id,
+                    "message_id": r.canon_entry_id,
+                    "action": r.action,
+                    "performed_by": r.performed_by,
+                    "timestamp": r.timestamp.isoformat(),
+                    "notes": r.notes,
+                }
+                for r in rows
+            ]
+
+    get_message_review_trail = get_entry_review_trail  # Deprecated alias
+
     def update_house_last_reviewed(self, domain_id: UUID) -> None:
         """Set last_reviewed=now on a domain."""
         with self.session() as s:
@@ -1296,7 +1333,7 @@ class Store:
         domain = self.get_canon_domain(domain_id)
         if not domain:
             raise ValueError(f"Domain {domain_id} not found")
-        entries = self.get_canon_entries(domain_id)
+        entries = self.get_canon_entries(domain_id, include_unapproved=True)
         personas = self.get_personas(domain_id)
         snapshot_data = {
             "domain": {
@@ -1432,7 +1469,7 @@ class Store:
         if not current_domain:
             raise ValueError("Domain no longer exists")
 
-        current_entries = self.get_canon_entries(domain_id)
+        current_entries = self.get_canon_entries(domain_id, include_unapproved=True)
         current_personas = self.get_personas(domain_id)
 
         field_changes = {}
@@ -1693,7 +1730,7 @@ class Store:
 
     def get_chunk_usage_heatmap(self, domain_id: UUID) -> dict:
         """Get usage heatmap: how many times each chunk was used, with which ratings."""
-        entries = self.get_canon_entries(domain_id)
+        entries = self.get_canon_entries(domain_id, include_unapproved=True)
         entry_id_to_entry = {str(e.id): e for e in entries}
 
         with self.session() as s:
@@ -1745,7 +1782,7 @@ class Store:
 
     def get_canon_domain_coverage(self, domain_id: UUID) -> dict:
         """Which parts of the canon domain are used most vs ignored."""
-        entries = self.get_canon_entries(domain_id)
+        entries = self.get_canon_entries(domain_id, include_unapproved=True)
         personas = self.get_personas(domain_id)
 
         with self.session() as s:

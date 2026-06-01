@@ -421,16 +421,19 @@ OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
   "zones": [
     {{ "id": "header", "type": "header", "text_content": "Product Name | Tagline" }},
-    {{ "id": "features", "type": "pillar_grid", "list_items": ["Feature 1", "Feature 2"] }},
-    {{ "id": "specs", "type": "message_list", "list_items": ["Spec 1", "Spec 2"] }}
+    {{ "id": "hero", "type": "hero", "text_content": "Positioning statement goes here..." }},
+    {{ "id": "benefits_grid", "type": "pillar_grid", "list_items": ["Benefit 1", "Benefit 2", "Benefit 3"] }},
+    {{ "id": "proof", "type": "proof_block", "text_content": "Proof point or key stat..." }},
+    {{ "id": "cta_footer", "type": "cta_footer", "text_content": "Contact / CTA details..." }}
   ]
 }}
 
 RULES:
 - header.text_content MUST include tagline
-- feature_grid shows top benefits (max 6)
-- spec_list shows technical specs from key messages
-- proof_block shows 3 proof points with stats""",
+- hero.text_content MUST contain the main positioning statement
+- benefits_grid shows top benefits (max 6)
+- proof.text_content shows a proof point with stats
+- cta_footer.text_content contains the call to action""",
         "prefab_template": "datasheet",
         "renderer": "fabric"
     },

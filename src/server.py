@@ -28,8 +28,13 @@ def search_canon(
     workspace_id: Optional[str] = None,
     retrieval_mode: Optional[str] = None,
     limit: Optional[int] = None,
+    include_unapproved: bool = False,
 ) -> dict:
     """Search approved organizational canon entries for grounding content.
+
+    By default only returns entries with status APPROVED or LOCKED.
+    Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
+    OUTDATED entries are always excluded.
 
     Provide a natural language query and optional filters to retrieve relevant
     canon entries from your organization's canon domains. Use this before
@@ -51,6 +56,7 @@ def search_canon(
                         vector approximation, returns exact approved content), or "keyword".
         limit: Maximum number of results to return (default: no cap). Set to 5–10 to
                avoid flooding the context window.
+        include_unapproved: If True, also return DRAFT and IN_REVIEW entries.
 
     Returns:
         Matched canon entries with confidence scores and grounding context.
@@ -66,6 +72,7 @@ def search_canon(
         min_confidence=min_confidence,
         workspace_id=workspace_id,
         retrieval_mode=retrieval_mode or "hybrid",
+        include_unapproved=include_unapproved,
     ).model_dump()
     if limit and "results" in result:
         result["results"] = result["results"][:limit]
@@ -98,6 +105,7 @@ def search_messaging(
     workspace_id: Optional[str] = None,
     retrieval_mode: Optional[str] = None,
     limit: Optional[int] = None,
+    include_unapproved: bool = False,
 ) -> dict:
     """[DEPRECATED] Search approved organizational canon entries for grounding content.
 
@@ -118,6 +126,7 @@ def search_messaging(
         workspace_id=workspace_id,
         retrieval_mode=retrieval_mode,
         limit=limit,
+        include_unapproved=include_unapproved,
     )
 
 
@@ -160,8 +169,13 @@ def set_active_house(house_id: str) -> dict:
 def get_canon_domain(
     domain_id: Optional[str] = None,
     domain_name: Optional[str] = None,
+    include_unapproved: bool = False,
 ) -> dict:
     """Retrieve full content of a canon domain for research.
+
+    By default only returns entries with status APPROVED or LOCKED.
+    Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
+    OUTDATED entries are always excluded.
 
     Use this tool to understand the positioning, target audience, and approved canon entries.
     
@@ -171,8 +185,9 @@ def get_canon_domain(
     Args:
         domain_id: UUID of the canon domain.
         domain_name: Name of the canon domain (alternative to domain_id).
+        include_unapproved: If True, also include DRAFT and IN_REVIEW entries.
     """
-    res = grounding_tools.get_message_house(domain_id, domain_name, ["all"])
+    res = grounding_tools.get_message_house(domain_id, domain_name, ["all"], include_unapproved=include_unapproved)
     # Align terminology in output keys
     if isinstance(res, dict):
         if "id" in res:
@@ -190,6 +205,7 @@ def get_canon_domain(
 def get_message_house(
     house_id: Optional[str] = None,
     house_name: Optional[str] = None,
+    include_unapproved: bool = False,
 ) -> dict:
     """[DEPRECATED] Retrieve full content of a canon domain for research.
 
@@ -198,7 +214,7 @@ def get_message_house(
     """
     import warnings
     warnings.warn("get_message_house is deprecated, use get_canon_domain instead", DeprecationWarning, stacklevel=2)
-    return get_canon_domain(domain_id=house_id, domain_name=house_name)
+    return get_canon_domain(domain_id=house_id, domain_name=house_name, include_unapproved=include_unapproved)
 
 
 @mcp.tool()
@@ -248,16 +264,23 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
 
 
 @mcp.tool()
-def compare_canon_domains(domain_ids: list[str]) -> dict:
+def compare_canon_domains(domain_ids: list[str], include_unapproved: bool = False) -> dict:
     """Compare two or more canon domains side by side.
 
+    By default only includes entries with status APPROVED or LOCKED.
+    Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
+
     Useful for comparing different departments or product lines.
+
+    Args:
+        domain_ids: UUIDs of the canon domains to compare.
+        include_unapproved: If True, also include DRAFT and IN_REVIEW entries.
     """
-    return grounding_tools.compare_houses(domain_ids)
+    return grounding_tools.compare_houses(domain_ids, include_unapproved=include_unapproved)
 
 
 @mcp.tool()
-def compare_houses(house_ids: list[str]) -> dict:
+def compare_houses(house_ids: list[str], include_unapproved: bool = False) -> dict:
     """[DEPRECATED] Compare two or more canon domains side by side.
 
     DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
@@ -265,7 +288,7 @@ def compare_houses(house_ids: list[str]) -> dict:
     """
     import warnings
     warnings.warn("compare_houses is deprecated, use compare_canon_domains instead", DeprecationWarning, stacklevel=2)
-    return compare_canon_domains(house_ids)
+    return compare_canon_domains(house_ids, include_unapproved=include_unapproved)
 
 
 @mcp.tool()
@@ -276,6 +299,34 @@ def get_grounding_context() -> dict:
     chunks have been used so far.
     """
     return grounding_tools.get_grounding_context().model_dump()
+
+
+@mcp.tool()
+def get_entry_history(entry_id: str) -> dict:
+    """Get the full approval/status-change audit trail for a specific canon entry.
+
+    Returns the complete history of status changes, reviews, and approvals
+    for the given entry, ordered newest-first. Mirrors the review-trail data shape.
+
+    Args:
+        entry_id: The UUID of the canon entry.
+
+    Returns:
+        dict with entry_id, current_status, trail (list of review log entries), and count.
+    """
+    return grounding_tools.get_entry_history(entry_id)
+
+
+@mcp.tool()
+def get_message_history(entry_id: str) -> dict:
+    """[DEPRECATED] Get the full approval/status-change audit trail for a specific canon entry.
+
+    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
+    Please use `get_entry_history` instead.
+    """
+    import warnings
+    warnings.warn("get_message_history is deprecated, use get_entry_history instead", DeprecationWarning, stacklevel=2)
+    return get_entry_history(entry_id)
 
 
 def _resolve_house(store, house_id: Optional[str], house_name: Optional[str] = None):
@@ -329,6 +380,7 @@ def generate_artifact(
     custom_context: Optional[dict] = None,
     house_id: Optional[str] = None,
     house_name: Optional[str] = None,
+    include_unapproved: bool = False,
 ) -> str:
     """Generate an output draft from a canon domain using a derived template skill.
 
@@ -352,6 +404,7 @@ def generate_artifact(
                         or {"stage": "decision"} for email_template.
         house_id: UUID of the canon domain (legacy alias for domain_id).
         house_name: Exact name of the canon domain (legacy alias for domain_name).
+        include_unapproved: If True, allow draft and in_review entries to ground the artifact.
     """
     from src.pipeline.generator import ArtifactGenerator
     from src.pipeline.skills import SkillManager
@@ -384,6 +437,8 @@ def generate_artifact(
     from src.pipeline.skills import SKILL_CONTEXT_INPUTS
     required_inputs = SKILL_CONTEXT_INPUTS.get(skill_id, [])
     provided = custom_context or {}
+    if include_unapproved:
+        provided["include_drafts"] = True
     missing = [inp for inp in required_inputs if inp.get("required") and inp["key"] not in provided]
     if missing:
         labels = " and ".join(f'"{inp["label"]}"' for inp in missing)
@@ -429,6 +484,12 @@ def generate_artifact(
     base_url = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
     
     content = artifact.raw_content
+    if getattr(artifact, "used_drafts_fallback", False):
+        content = (
+            "> [!WARNING]\n"
+            "> Grounded in draft (unapproved) canon entries because no approved entries exist for this domain.\n\n"
+            + content
+        )
     url = None
     
     if artifact_history_id:
@@ -559,6 +620,7 @@ def list_mcp_tools() -> dict:
         {"name": "get_framework_spec", "description": "See the requirements for a complete canon domain."},
         {"name": "export_to_penpot", "description": "Export a MsgStack artifact to Penpot design file and return the edit link."},
         {"name": "set_penpot_project", "description": "Link a Penpot project to a MsgStack workspace for design sync."},
+        {"name": "get_entry_history", "description": "Get the full approval/status-change audit trail for a specific canon entry."},
     ]
     return {"tools": tool_defs}
 
