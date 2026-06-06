@@ -113,7 +113,15 @@ class GraphEngine:
                        document_type=str(house.document_type),
                        tagline=getattr(house, "tagline", ""),
                        positioning=getattr(house, "positioning", ""),
-                       summary=house.summary)
+                       summary=house.summary,
+                       # Phase 2 additions:
+                       parent_domain_id=str(house.parent_domain_id) if house.parent_domain_id else None,
+                       inheritance_policy=str(house.inheritance_policy))
+
+            # Add relationship edge to parent if linked
+            if house.parent_domain_id:
+                parent_node = f"house:{house.parent_domain_id}"
+                g.add_edge(house_node, parent_node, rel="INHERITS_FROM")
 
             # Pillars — optional user-defined groupings (orthogonal to sections)
             pillars = store.list_pillars(house.id)

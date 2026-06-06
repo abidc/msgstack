@@ -13,7 +13,7 @@ from uuid import UUID
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, AliasChoices, ConfigDict, model_validator
@@ -32,7 +32,7 @@ from src.models import (
     CanonEntry, CanonDomain, Persona, SectionType,
     HouseStatus, KeyMessage, MessageHouse, MessageStatus  # Deprecated aliases
 )
-from src.store import init_store
+from src.store import init_store, get_store
 from src.pipeline.extract import ExtractionError, extract_text, chunk_text, save_upload
 from src.pipeline.structure import HouseStructurer, StructuredHouse
 from src.pipeline.skills import SkillManager
@@ -734,6 +734,34 @@ def check_house_staleness(house_id: Optional[str] = None, domain_id: Optional[st
             (datetime.now() - house.last_reviewed).days if house.last_reviewed else None
         ),
     }
+
+
+class DomainAlignmentScoreRequest(BaseModel):
+    text: str
+    export_format: Optional[str] = None  # "json" or "markdown"
+
+
+@app.post("/api/domains/{domain_id}/score_alignment")
+def api_score_alignment(domain_id: UUID, req: DomainAlignmentScoreRequest):
+    # Verify write scope
+    store = get_store()
+    domain = store.get_canon_domain(domain_id)
+    if not domain:
+        raise HTTPException(404, f"Domain {domain_id} not found")
+        
+    try:
+        from src.pipeline.alignment import score_alignment, export_report_to_markdown
+        report = score_alignment(req.text, domain_id, store)
+        
+        # Save score on last run (if keeping tracking history)
+        # We can update the last generated artifact score in DB if requested
+        
+        if req.export_format == "markdown":
+            return {"markdown": export_report_to_markdown(report)}
+            
+        return report
+    except Exception as e:
+        raise HTTPException(500, f"Alignment check failed: {e}")
 
 
 class AlignmentScoreRequest(BaseModel):
@@ -3948,6 +3976,34 @@ def get_house_usage_stats(house_id: Optional[str] = None, domain_id: Optional[st
     if not store.get_house(house_uuid):
         raise HTTPException(404, "Canon domain not found")
     return store.get_message_usage_stats(actual_id)
+
+
+# --- Canon Navigator Chat ---
+
+class ChatRequest(BaseModel):
+    query: str
+    workspace_id: str = "default"
+
+
+@app.post("/api/chat")
+def api_chat_stream(req: ChatRequest, auth: AuthContext = Depends(get_auth_context)):
+    """SSE streaming endpoint for the Canon Navigator conversational chat."""
+    try:
+        from src.pipeline.agents import CanonNavigator
+        from openai import OpenAI
+        import os as _os
+
+        client = OpenAI(api_key=_os.environ.get("OPENAI_API_KEY"))
+        navigator = CanonNavigator(client, store)
+
+        def event_generator():
+            for chunk in navigator.chat_stream(req.query, workspace_id=req.workspace_id):
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    except Exception as e:
+        raise HTTPException(500, f"Streaming connection failed: {e}")
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)

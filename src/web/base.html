@@ -179,6 +179,103 @@
         .doc-type-corp_narrative    { background: rgba(34,197,94,0.15);   color: #4ade80; }
         .doc-type-persona_library   { background: rgba(234,179,8,0.15);   color: #facc15; }
 
+        /* ── QoL UX Enhancements ── */
+
+        /* Typography Scaling */
+        body {
+            font-size: 15px !important;
+        }
+        .page-title {
+            font-size: 24px !important;
+            letter-spacing: -0.02em;
+        }
+        .page-subtitle {
+            font-size: 13.5px !important;
+        }
+        .card-title {
+            font-size: 16px !important;
+        }
+        .stat-value {
+            font-size: 36px !important;
+            letter-spacing: -0.03em;
+        }
+        .form-label {
+            font-size: 12px !important;
+        }
+        .form-input, .form-textarea, .form-select {
+            font-size: 14px !important;
+        }
+
+        /* Tab Transition Animation */
+        @keyframes sectionFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .section.active {
+            display: block !important;
+            animation: sectionFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Premium Card Hover Lift */
+        .card {
+            transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+                        box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+                        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .card:hover {
+            border-color: var(--border-light);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+        }
+        [data-theme="dark"] .card:hover {
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            border-color: rgba(0, 229, 255, 0.2);
+        }
+
+        /* Sidebar Nav Comfort */
+        .nav-item {
+            padding: 9px 12px !important;
+            font-size: 14px !important;
+            transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease !important;
+        }
+
+        /* Theme Toggle Button Spin */
+        #theme-toggle {
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        }
+        #theme-toggle:hover {
+            transform: scale(1.1);
+        }
+        #theme-toggle:active {
+            transform: rotate(360deg) scale(0.9);
+        }
+
+        /* Interactive Lists (interactive items in dashboard lists) */
+        .list-item-interactive {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            background: transparent;
+            transition: background-color 0.2s ease, transform 0.2s ease !important;
+        }
+        .list-item-interactive:hover {
+            background-color: var(--bg-2);
+            transform: translateX(6px);
+        }
+
+        /* Global Transition Smoothness */
+        .btn, .theme-btn, .form-input, .form-textarea, .form-select, .tab-item {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
         {% block extra_css %}{% endblock %}
     </style>
 </head>

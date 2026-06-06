@@ -28,6 +28,9 @@ class Settings:
         self.default_token_budget: int = _int("DEFAULT_TOKEN_BUDGET", 0)
         self.base_url: str = os.environ.get("MSGSTACK_BASE_URL", "http://localhost:8001")
         self.cors_origins: list[str] = os.environ.get("CORS_ORIGINS", "*").split(",")
+        self.basic_auth_enabled: bool = _bool("MSGSTACK_BASIC_AUTH_ENABLED", True)
+        self.basic_auth_user: str = os.environ.get("MSGSTACK_BASIC_USER", "")
+        self.basic_auth_pass: str = os.environ.get("MSGSTACK_BASIC_PASS", "")
         self.pricing: dict = {
             "gpt-4o-mini": {"input": 0.15, "output": 0.60},
             "gpt-4o": {"input": 5.00, "output": 15.00},

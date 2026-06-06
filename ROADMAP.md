@@ -323,18 +323,24 @@ The current canvas app renders basic zones. This stream rebuilds the renderer to
 The core governance capability. Evaluates any piece of content against the structured canon domains and returns a per-section alignment report. Possible only because the canon is machine-readable and semantically indexed.
 
 - [ ] **`score_alignment` API endpoint:** Accepts arbitrary text + domain_id; returns per-section scores (0–100) plus specific gaps, out-of-date facts, and contradictions against approved canon entries
+- [ ] **Distinguish Hard vs. Soft Conflicts:** Classify alignment gaps between factual/positioning contradictions (hard) and subjective/stylistic deviations (soft)
 - [ ] **`score_alignment` MCP tool:** AI assistants can score a draft before submitting it — "check this product release summary against the product spec canon domain before I publish"
 - [ ] **Alignment report UI:** Paste content into the admin UI → receive color-coded alignment breakdown with specific suggestions ("Missing: proof point about efficiency. Contradicts: positioning on AI autonomy.")
+- [ ] **Export to External Parties:** Ability to export annotated comments, highlights, and alignment scores back to external partners (e.g., PR agency drafts) for revisions
 - [ ] **Batch scoring:** Connect a CRM or Google Drive folder → score all assets against the active canon → report sorted by alignment score
 - [ ] **Drift report:** Weekly summary of all generated artifacts that have diverged from the canon domain since the source document was last updated
 - [ ] **Alignment score on artifact history:** Every saved artifact record shows its alignment score at time of generation; re-scored automatically when the parent canon is updated
 
-### Canon Approval Workflow
+### Canon Approval & Suggestion Workflows
 - [ ] **Canon entry status field:** `Draft` | `In Review` | `Approved` | `Outdated` | `Locked` on every canon entry, persona, and domain field
 - [ ] **Approval-gated grounding:** `generate_artifact` and grounding search skip non-`Approved` canon entries by default; optional `include_drafts` override for editing/staging sessions
+- [ ] **Element-Level RBAC:** Every atomic element has defined owners and collaborators, supporting 4 permission levels: *Owner*, *Collaborator*, *Suggester*, and *Viewer*
+- [ ] **Suggestion Flow Routing:** Users without edit authority can only make suggestions, which automatically route to designated owners for approval
+- [ ] **Conflict Review Sets:** Automated change notifications and conflict review packages sent to downstream owners when a parent element is edited (support accept, decline, suggest, or escalate options)
 - [ ] **Review request flow:** Domain author marks an entry as "Ready for Review" → domain owner receives notification → approves or comments → status updates → vector index refreshed
 - [ ] **Drift detection:** When a canon entry is updated, all artifact history records that used it are flagged as potentially outdated
 - [ ] **Locked canon:** "Core Canon" locked status prevents any edits without admin or designated SME override; graph retrieval always returns locked entries verbatim
+- [ ] **"Gold Standard" Content Designation:** Flag specific generated deliverables as the canonical reference version that all other related content should conform to
 
 ### Self-Service Canon Consumption Portal
 - [ ] **Portal URL per workspace:** Shareable link (no admin account required) scoped to specific approved canon domains
@@ -343,24 +349,27 @@ The core governance capability. Evaluates any piece of content against the struc
 - [ ] **Agency submission mode:** Generated drafts are held in a pending queue for SME approval.
 - [ ] **Portal analytics:** Log all field portal generation activity for audit and usage insight.
 
+### Temporary Message Layer
+- [ ] **Leadership Message Overlay:** Support injecting a high-priority "temporary layer" message above the canon for a defined timeframe (without permanently modifying database records)
+
 ---
 
 ## v1.0 — Cross-Department Canon & Dependency Graphs
 
 **Goal:** Expand MsgStack from a marketing-only message house repository to a cross-department canon layer. Product, Legal, HR, and Security teams can curate and connect their respective domains of truth.
 
-### Cross-Department Canon Domains
+### Cross-Department Canon Domains & Hierarchy
 - [ ] **Dynamic Grounding Schemas:** Support dynamic Pydantic/JSON Schema validation per domain, allowing custom schemas by department beyond just the default `message_house` layout.
 - [ ] **`engineering_spec` Grounding Type:** API constraints, system SLAs, versioning policy, deprecation notices, security requirements. Keeps developer copilots aligned with real specs — not hallucinated rate limits.
 - [ ] **`policy_shield` Grounding Type:** Legal disclaimers, privacy policy rules, compliance assertions (SOC2/GDPR), pre-approved compliance responses. AI tools retrieve legal language verbatim — no paraphrasing.
-- [ ] **Product Canon (Family of Domains):** Product managers curate core feature specs, release/versioning facts, and developer policies.
-- [ ] **HR & Culture Canon:** HR admins curate core values, workplace policies, onboarding guidelines, and benefits summaries.
-- [ ] **Security & IT Canon:** Security teams curate compliance status (SOC 2, ISO), data retention rules, and vendor security answers.
-- [ ] **Sales Enablement Canon:** Enablement teams curate sales playbooks, objection handlers, and pricing structures.
+- [ ] **Sub-Canons ("Canons within Canons"):** Nested canons representing divisions, product lines, or functions with configurable parent-child inheritance.
+- [ ] **Inheritance Relationship Types:** Codify 4 parent-child relationship types: *Full Inheritance*, *Selective Override*, *Autonomy with Vocabulary Constraints*, and *Complete Autonomy*.
+- [ ] **Canon Health Scoring:** Dashboard view exposing a proprietary metric showing where narrative coherence and graph connections are breaking down.
 
-### Canon Domain Ownership
+### Canon Domain Ownership & Live Bindings
 - [ ] **Department SME Owners:** Assign read/write permissions to specific department wrappers (e.g., HR Team owns HR Domain, Legal Team owns Legal Domain).
 - [ ] **Review Trails:** Changes to a domain must be signed off by designated owners, creating a secure compliance audit trail.
+- [ ] **Bindings Layer:** Implement a dynamic mapping system connecting specific organizational canon elements to specific downstream content outputs to enable live update propagation.
 
 ### Multi-Domain Dependency Graph
 - [ ] **`INFORMS` / `DEPENDS_ON` Edges:** Define explicit graph relationships between different canon domains (e.g., Product Specifications `INFORMS` Product Marketing Messaging, which `INFORMS` Sales Objection Handlers, which `INFORMS` Legal Disclosures).
@@ -368,10 +377,13 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ---
 
-## v1.1 — Competitive Intelligence & Battlecard Sharpening
+## v1.1 — Ingestion Expansion & Templates
 
-**Goal:** Integrate competitive market data directly into MsgStack to sharpen grounding and enable automated battlecard generation.
+**Goal:** Broaden ingestion capabilities, expand templates, and integrate competitive market data to sharpen grounding.
 
+- [ ] **Decks, Spreadsheets, & Rich Format Ingestion:** Ingestion adapters for PowerPoint (.pptx), Excel (.xlsx), audio transcripts, voice memos, and unstructured notes.
+- [ ] **Ingestion Conflict Detection:** Scan uploaded files and flag contradictions against existing canon elements before committing changes.
+- [ ] **50+ Pre-built Deliverable Templates:** Derive templates from real client work (CEO keynotes, sales decks, battlecards, press releases, investor updates, product messaging frameworks, etc.).
 - [ ] **Competitor document import:** Upload competitor docs → extraction pipeline extracts claims into a `competitive_brief` domain
 - [ ] **Competitive gap analysis:** Compare your canon domain to a competitor's extracted claims — identify where you are differentiated vs where they challenge you
 - [ ] **Battlecard auto-sharpen:** Automatically load the competitor's extracted claims and ensure each response directly counters their stated positioning using approved canon entries
@@ -391,9 +403,9 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ---
 
-## v1.3 — Activation & Built-In AI Interface
+## v1.3 — Agentic Ingestion & Custom Controls
 
-**Goal:** SME adopts MsgStack in under 5 minutes from landing on the product.
+**Goal:** Layer specialized AI agents and narrative controls over the ingestion and generation pipeline.
 
 ### Onboarding & Activation
 - [ ] **Hosted SaaS mode:** Cloud-hosted managed instance with database, vector index, and server
@@ -402,11 +414,17 @@ The core governance capability. Evaluates any piece of content against the struc
 - [ ] **Completeness coaching:** Admin UI actively prompts to fill gaps with value-add suggestions
 - [ ] **Sample domains:** Loads a pre-built demo domain to explore generation before ingestion
 
-### Built-In AI Chat Interface
-- [ ] **Chat panel in admin UI:** Embedded sandbox pre-instructed with `system_instructions` and active domain
-- [ ] **Conversation starters:** Common preset prompts like "Generate CHRO LinkedIn post"
-- [ ] **Shareable session links:** Pre-configured chat sessions shared with external writers or SDRs
-- [ ] **Multi-LLM support:** Bring-your-own-key setting per workspace for OpenAI, Anthropic, Gemini, etc.
+### Agentic Layer & Interface
+- [ ] **Specialized AI Agents:** Functional agents for Governance, Brand Voice, and Narrative Structure analysis.
+- [ ] **Canon Navigator:** Conversation-first dashboard super agent to query changes, review narrative drifts, and request summaries ("what changed recently and how does it affect my work?").
+- [ ] **Recommendation Routing:** Agent analyses of incoming material suggesting where it fits in the canon, what downstream deliverables are affected, and highlighting contradiction conflicts (supporting auto-accept or manual confirmation toggles).
+- [ ] **Proactive Human-in-the-Loop Governance:** Integration points prompting review at appropriate gates.
+
+### Custom Controls & Brief Builder
+- [ ] **Tonal Slider Controls:** Adjust tone register (e.g. formal IR presentation vs. conversational social post) while staying within brand voice boundaries.
+- [ ] **Controlled Vocabulary Filters:** Avoid competitor-associated phrasing, and flag or filter out banned terms in deliverables.
+- [ ] **Brief Builder Interface:** Build context inputs directly into deliverable creation wizard to guide LLM assembly.
+- [ ] **Source Annotations:** Automatically tag generated deliverables with source citations mapping directly back to specific grounded canon entries.
 
 ### Content Analytics
 - [ ] **Canon usage heatmap:** Which canon entries appear most in generated artifacts to prune dead content
@@ -466,7 +484,8 @@ The core governance capability. Evaluates any piece of content against the struc
 
 ### Advanced Search & Governance
 - [ ] **Cross-domain search** — "What do all our product teams say about security?"
-- [ ] **Audit Trail** — Comprehensive changelog of all domain modifications
+- [ ] **Audit Trail & Logging:** Detailed logging: what changed, when, who changed it, their authority/permission level, and which department wrapper they belong to.
+- [ ] **User Experience Dashboard:** Personalized dashboard per user showing narrative announcements, activities, pending suggestions, and permissions metrics.
 
 ---
 

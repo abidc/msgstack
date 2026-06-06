@@ -211,11 +211,11 @@ def test_mcp_list_departments(store_and_client):
         
         pmm_dept = next(d for d in depts if d["department"] == "Product Marketing")
         assert pmm_dept["domain_count"] == 1
-        assert pmm_dept["primary_grounding_type"] == str(GroundingType.MESSAGE_HOUSE)
+        assert pmm_dept["primary_grounding_type"] == GroundingType.MESSAGE_HOUSE.value
 
         corp_dept = next(d for d in depts if d["department"] == "Company Marketing")
         assert corp_dept["domain_count"] == 1
-        assert corp_dept["primary_grounding_type"] == str(GroundingType.CORP_NARRATIVE)
+        assert corp_dept["primary_grounding_type"] == GroundingType.CORP_NARRATIVE.value
 
         # Test list_canon_domains with department filter
         res_all = list_canon_domains()

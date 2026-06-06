@@ -14,7 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p data skills
+RUN mkdir -p data skills && \
+    useradd --create-home --shell /bin/bash msgstack && \
+    chown -R msgstack:msgstack /app
+
+USER msgstack
 
 EXPOSE 8001
 

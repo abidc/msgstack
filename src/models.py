@@ -87,6 +87,20 @@ class ArtifactStatus(str, Enum):
     APPROVED = "approved"
 
 
+class UserRole(str, Enum):
+    OWNER = "owner"
+    COLLABORATOR = "collaborator"
+    SUGGESTER = "suggester"
+    VIEWER = "viewer"
+
+
+class InheritancePolicy(str, Enum):
+    FULL = "full"
+    SELECTIVE_OVERRIDE = "selective_override"
+    VOCAB_CONSTRAINED = "vocab_constrained"
+    AUTONOMOUS = "autonomous"
+
+
 class CanonDomain(BaseModel):
     model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
 
@@ -105,6 +119,9 @@ class CanonDomain(BaseModel):
     department: str = "General"
     last_synced: datetime | None = None
     last_reviewed: datetime | None = None
+    # Phase 2 additions:
+    parent_domain_id: UUID | None = None
+    inheritance_policy: InheritancePolicy = InheritancePolicy.FULL
 
     @property
     def document_type(self) -> GroundingType:
@@ -483,3 +500,35 @@ class SearchFilters(BaseModel):
     @message_houses.setter
     def message_houses(self, value: list[str] | None) -> None:
         self.canon_domains = value
+
+
+class UserProfile(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    email: str
+    name: str
+    department: str
+    is_admin: bool = False
+
+
+class ElementPermission(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    target_id: UUID  # References CanonDomain or CanonEntry ID
+    role: UserRole
+
+
+class ArtifactEntryBinding(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    artifact_id: UUID
+    canon_entry_id: UUID
+    element_type: str  # e.g., "tagline", "proof_point"
+    bound_text: str
+
+
+class TemporaryCanonOverlay(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    workspace_id: UUID
+    content: str
+    priority: int = 1
+    created_by: str
+    expires_at: datetime

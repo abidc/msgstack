@@ -33,7 +33,9 @@ from sqlalchemy.orm import (
 from src.models import (
     BrandSettings, Channel, DocumentType, DomainStatus, EntryStatus,
     CanonDomain, CanonEntry, Persona, SectionType,
-    HouseStatus, KeyMessage, MessageHouse  # Deprecated aliases
+    HouseStatus, KeyMessage, MessageHouse,  # Deprecated aliases
+    UserRole, InheritancePolicy, UserProfile, ElementPermission,
+    ArtifactEntryBinding, TemporaryCanonOverlay
 )
 
 
@@ -72,6 +74,50 @@ def _to_db(data: dict) -> dict:
 
 class Base(DeclarativeBase):
     pass
+
+
+class UserModel(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    department: Mapped[str] = mapped_column(String(100), nullable=False, default="General")
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class ElementPermissionModel(Base):
+    __tablename__ = "element_permissions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(36), nullable=False)  # Domain or Entry UUID
+    role: Mapped[str] = mapped_column(String(30), nullable=False, default="viewer")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class ArtifactEntryBindingModel(Base):
+    __tablename__ = "artifact_entry_bindings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    artifact_id: Mapped[str] = mapped_column(String(36), ForeignKey("artifact_history.id", ondelete="CASCADE"), nullable=False)
+    canon_entry_id: Mapped[str] = mapped_column(String(36), ForeignKey("canon_entries.id", ondelete="CASCADE"), nullable=False)
+    element_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    bound_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TemporaryCanonOverlayModel(Base):
+    __tablename__ = "temporary_canon_overlays"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=1)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class WorkspaceModel(Base):
@@ -170,6 +216,8 @@ class CanonDomainModel(Base):
     differentiation: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="active")
     department: Mapped[str] = mapped_column(String(100), nullable=False, default="General", server_default="General")
+    parent_domain_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("canon_domains.id", ondelete="SET NULL"), nullable=True)
+    inheritance_policy: Mapped[str] = mapped_column(String(50), default="full")
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_reviewed: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -341,6 +389,7 @@ class ArtifactHistoryModel(Base):
     sections_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     raw_content: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="draft")
+    is_gold_standard: Mapped[bool] = mapped_column(Boolean, default=False)
     alignment_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
@@ -541,6 +590,11 @@ Index("ix_review_logs_timestamp", ReviewLogModel.timestamp)
 Index("ix_artifact_rating_artifact_id", ArtifactRatingModel.artifact_id)
 Index("ix_chunk_usage_chunk_id", ChunkUsageStatModel.chunk_id)
 Index("ix_vector_metadata_house_id", VectorMetadataModel.canon_domain_id)
+Index("ix_permission_user", ElementPermissionModel.user_id)
+Index("ix_permission_target", ElementPermissionModel.target_id)
+Index("ix_binding_artifact", ArtifactEntryBindingModel.artifact_id)
+Index("ix_binding_entry", ArtifactEntryBindingModel.canon_entry_id)
+Index("ix_overlay_workspace", TemporaryCanonOverlayModel.workspace_id)
 
 
 class Store:
@@ -664,6 +718,18 @@ class Store:
                         conn.commit()
                     except Exception:
                         pass
+                if "parent_domain_id" not in mh_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE canon_domains ADD COLUMN parent_domain_id VARCHAR(36) REFERENCES canon_domains(id) ON DELETE SET NULL"))
+                        conn.commit()
+                    except Exception:
+                        pass
+                if "inheritance_policy" not in mh_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE canon_domains ADD COLUMN inheritance_policy VARCHAR(50) DEFAULT 'full'"))
+                        conn.commit()
+                    except Exception:
+                        pass
 
             if "workspaces" in tables:
                 ws_cols = {c["name"] for c in insp.get_columns("workspaces")}
@@ -765,6 +831,64 @@ class Store:
                         conn.commit()
                     except Exception:
                         pass
+                if "is_gold_standard" not in ah_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE artifact_history ADD COLUMN is_gold_standard BOOLEAN DEFAULT 0"))
+                        conn.commit()
+                    except Exception:
+                        pass
+
+            if "users" not in tables:
+                conn.execute(text("""
+                    CREATE TABLE users (
+                        id VARCHAR(36) PRIMARY KEY,
+                        email VARCHAR(255) UNIQUE NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        department VARCHAR(100) NOT NULL DEFAULT 'General',
+                        is_admin BOOLEAN DEFAULT 0,
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            if "element_permissions" not in tables:
+                conn.execute(text("""
+                    CREATE TABLE element_permissions (
+                        id VARCHAR(36) PRIMARY KEY,
+                        user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        target_id VARCHAR(36) NOT NULL,
+                        role VARCHAR(30) NOT NULL DEFAULT 'viewer',
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            if "artifact_entry_bindings" not in tables:
+                conn.execute(text("""
+                    CREATE TABLE artifact_entry_bindings (
+                        id VARCHAR(36) PRIMARY KEY,
+                        artifact_id VARCHAR(36) NOT NULL REFERENCES artifact_history(id) ON DELETE CASCADE,
+                        canon_entry_id VARCHAR(36) NOT NULL REFERENCES canon_entries(id) ON DELETE CASCADE,
+                        element_type VARCHAR(50) NOT NULL,
+                        bound_text TEXT,
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            if "temporary_canon_overlays" not in tables:
+                conn.execute(text("""
+                    CREATE TABLE temporary_canon_overlays (
+                        id VARCHAR(36) PRIMARY KEY,
+                        workspace_id VARCHAR(36) NOT NULL DEFAULT 'default',
+                        content TEXT NOT NULL,
+                        priority INTEGER DEFAULT 1,
+                        created_by VARCHAR(255) NOT NULL,
+                        expires_at DATETIME NOT NULL,
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
 
             if "source_connections" not in tables:
                 conn.execute(text("""
@@ -1034,6 +1158,11 @@ class Store:
             data = _to_db(entry.model_dump())
             data.pop("channels", None)
 
+            # Check if content actually changed to avoid false triggers
+            content_changed = False
+            if existing and existing.content != entry.content:
+                content_changed = True
+
             if existing:
                 for k, v in data.items():
                     if k != "id":
@@ -1043,23 +1172,94 @@ class Store:
                 db_entry = CanonEntryModel(**data)
                 db_entry.channels = channel_models
                 s.add(db_entry)
+            
             s.commit()
+
+            # Active Binding Propagation Trigger
+            if content_changed:
+                bindings = s.query(ArtifactEntryBindingModel).filter(
+                    ArtifactEntryBindingModel.canon_entry_id == str(entry.id)
+                ).all()
+                for b in bindings:
+                    # Log review trace
+                    log_model = ReviewLogModel(
+                        id=str(uuid4()),
+                        canon_domain_id=str(entry.canon_domain_id),
+                        canon_entry_id=str(entry.id),
+                        action="propagation_drift",
+                        performed_by="system_bindings",
+                        timestamp=datetime.now(),
+                        notes=f"Deliverable {b.artifact_id} flags drift due to update in canon entry {entry.id}."
+                    )
+                    s.add(log_model)
+                    
+                    # Flag downstream artifact stale
+                    art = s.get(ArtifactHistoryModel, b.artifact_id)
+                    if art:
+                        art.status = "draft"  # Set to draft so it requires re-approval/review
+                s.commit()
+
         _invalidate_graph()
 
     upsert_key_message = upsert_canon_entry  # Deprecated alias
 
     def get_canon_entries(self, domain_id: UUID, include_unapproved: bool = False) -> list[CanonEntry]:
+        # 1. Fetch target child domain to check inheritance policy
+        domain = self.get_canon_domain(domain_id)
+        if not domain:
+            return []
+
+        policy = domain.inheritance_policy or "full"
+
+        # 2. Base query: fetch entries directly in this child domain
         with self.session() as s:
-            query = (
-                s.query(CanonEntryModel)
-                .filter(CanonEntryModel.canon_domain_id == str(domain_id))
-            )
+            query = s.query(CanonEntryModel).filter(CanonEntryModel.canon_domain_id == str(domain_id))
             if not include_unapproved:
-                query = query.filter(
-                    CanonEntryModel.status.in_(["approved", "locked"])
-                )
-            rows = query.order_by(CanonEntryModel.priority).all()
-            return [_entry_from_row(r) for r in rows]
+                query = query.filter(CanonEntryModel.status.in_(["approved", "locked"]))
+            child_rows = query.order_by(CanonEntryModel.priority).all()
+            child_entries = [_entry_from_row(r) for r in child_rows]
+
+        # If policy is autonomous, do not fetch parents
+        if policy == "autonomous" or not domain.parent_domain_id:
+            return child_entries
+
+        # 3. Recursively fetch parent entries
+        parent_entries = self.get_canon_entries(domain.parent_domain_id, include_unapproved=include_unapproved)
+
+        # 4. Merge based on policy type
+        if policy == "full":
+            # Direct union
+            return child_entries + parent_entries
+
+        elif policy == "selective_override":
+            # Child entries override parent entries of the exact same section type
+            child_section_types = {e.section_type for e in child_entries}
+            filtered_parents = [e for e in parent_entries if e.section_type not in child_section_types]
+            return child_entries + filtered_parents
+
+        elif policy == "vocab_constrained":
+            # Fetch parents and filter child entries by parent's word list constraints (if any)
+            # Find parent "word_list" entries representing banned terms or owned terms
+            banned_terms = []
+            for pe in parent_entries:
+                if pe.section_type == "word_list" and "banned" in pe.content.lower():
+                    # Parse out words
+                    banned_terms.extend([word.strip().lower() for word in pe.content.split(",") if word.strip()])
+
+            filtered_child = []
+            for ce in child_entries:
+                # Check for banned words in content
+                content_lower = ce.content.lower()
+                has_banned = any(term in content_lower for term in banned_terms)
+                if not has_banned:
+                    filtered_child.append(ce)
+                else:
+                    # Log or flag warning (for now we filter/skip)
+                    pass
+
+            return filtered_child + parent_entries
+
+        return child_entries
 
     get_key_messages = get_canon_entries  # Deprecated alias
 
@@ -1088,13 +1288,25 @@ class Store:
         _invalidate_graph()
 
     def get_personas(self, domain_id: UUID) -> list[Persona]:
+        domain = self.get_canon_domain(domain_id)
+        if not domain:
+            return []
+        
         with self.session() as s:
-            rows = (
-                s.query(PersonaModel)
-                .filter(PersonaModel.canon_domain_id == str(domain_id))
-                .all()
-            )
-            return [_persona_from_row(r) for r in rows]
+            rows = s.query(PersonaModel).filter(PersonaModel.canon_domain_id == str(domain_id)).all()
+            child_personas = [_persona_from_row(r) for r in rows]
+
+        if not domain.parent_domain_id or domain.inheritance_policy == "autonomous":
+            return child_personas
+
+        # Inherit parent personas
+        parent_personas = self.get_personas(domain.parent_domain_id)
+        
+        # Merge by persona name (child overrides parent of same name)
+        child_names = {p.name for p in child_personas}
+        filtered_parents = [p for p in parent_personas if p.name not in child_names]
+        
+        return child_personas + filtered_parents
 
     def get_persona_by_name(self, domain_id: UUID, name: str) -> Persona | None:
         with self.session() as s:
@@ -2700,6 +2912,188 @@ class Store:
 
     get_message_usage_stats = get_entry_usage_stats  # Deprecated alias
 
+    # ==========================================
+    # User Profile Helpers
+    # ==========================================
+    def create_user(self, email: str, name: str, department: str = "General", is_admin: bool = False) -> dict:
+        user_id = str(uuid4())
+        model = UserModel(
+            id=user_id,
+            email=email,
+            name=name,
+            department=department,
+            is_admin=is_admin,
+            created_at=_now()
+        )
+        with self.session_factory() as session:
+            session.add(model)
+            session.commit()
+        return {"id": user_id, "email": email, "name": name, "department": department, "is_admin": is_admin}
+
+    def get_user_by_email(self, email: str) -> Optional[dict]:
+        with self.session_factory() as session:
+            model = session.query(UserModel).filter(UserModel.email == email).first()
+            if not model:
+                return None
+            return {
+                "id": UUID(model.id),
+                "email": model.email,
+                "name": model.name,
+                "department": model.department,
+                "is_admin": model.is_admin
+            }
+
+    # ==========================================
+    # Element Permissions Helpers
+    # ==========================================
+    def add_element_permission(self, user_id: str | UUID, target_id: str | UUID, role: str) -> str:
+        perm_id = str(uuid4())
+        model = ElementPermissionModel(
+            id=perm_id,
+            user_id=str(user_id),
+            target_id=str(target_id),
+            role=role,
+            created_at=_now()
+        )
+        with self.session_factory() as session:
+            session.add(model)
+            session.commit()
+        return perm_id
+
+    def check_permission(self, user_id: str | UUID, target_id: str | UUID, required_role: str) -> bool:
+        # Hierarchy: owner > collaborator > suggester > viewer
+        role_hierarchy = {"owner": 4, "collaborator": 3, "suggester": 2, "viewer": 1}
+        with self.session_factory() as session:
+            # Check user role on targets
+            perm = session.query(ElementPermissionModel).filter(
+                ElementPermissionModel.user_id == str(user_id),
+                ElementPermissionModel.target_id == str(target_id)
+            ).first()
+            if not perm:
+                # Admins have full access
+                user = session.query(UserModel).filter(UserModel.id == str(user_id)).first()
+                return user.is_admin if user else False
+            
+            user_rank = role_hierarchy.get(perm.role, 0)
+            req_rank = role_hierarchy.get(required_role, 0)
+            return user_rank >= req_rank
+
+    # ==========================================
+    # Artifact Entry Bindings Helpers
+    # ==========================================
+    def bind_artifact_entry(self, artifact_id: str | UUID, entry_id: str | UUID, element_type: str, text: str) -> str:
+        binding_id = str(uuid4())
+        model = ArtifactEntryBindingModel(
+            id=binding_id,
+            artifact_id=str(artifact_id),
+            canon_entry_id=str(entry_id),
+            element_type=element_type,
+            bound_text=text,
+            created_at=_now()
+        )
+        with self.session_factory() as session:
+            session.add(model)
+            session.commit()
+        return binding_id
+
+    def get_bindings_for_artifact(self, artifact_id: str | UUID) -> list[dict]:
+        with self.session_factory() as session:
+            models = session.query(ArtifactEntryBindingModel).filter(
+                ArtifactEntryBindingModel.artifact_id == str(artifact_id)
+            ).all()
+            return [
+                {
+                    "id": UUID(m.id),
+                    "artifact_id": UUID(m.artifact_id),
+                    "canon_entry_id": UUID(m.canon_entry_id),
+                    "element_type": m.element_type,
+                    "bound_text": m.bound_text
+                }
+                for m in models
+            ]
+
+    # ==========================================
+    # Temporary Overlay Helpers
+    # ==========================================
+    def add_temporary_overlay(self, workspace_id: str, content: str, priority: int, expires_at: datetime, created_by: str) -> str:
+        overlay_id = str(uuid4())
+        model = TemporaryCanonOverlayModel(
+            id=overlay_id,
+            workspace_id=workspace_id,
+            content=content,
+            priority=priority,
+            created_by=created_by,
+            expires_at=expires_at,
+            created_at=_now()
+        )
+        with self.session_factory() as session:
+            session.add(model)
+            session.commit()
+        return overlay_id
+
+    def get_active_overlays(self, workspace_id: str) -> list[dict]:
+        now = datetime.now()
+        with self.session_factory() as session:
+            models = session.query(TemporaryCanonOverlayModel).filter(
+                TemporaryCanonOverlayModel.workspace_id == workspace_id,
+                TemporaryCanonOverlayModel.expires_at > now
+            ).order_by(TemporaryCanonOverlayModel.priority.desc()).all()
+            return [
+                {
+                    "id": UUID(m.id),
+                    "workspace_id": m.workspace_id,
+                    "content": m.content,
+                    "priority": m.priority,
+                    "created_by": m.created_by,
+                    "expires_at": m.expires_at
+                }
+                for m in models
+            ]
+
+    def check_framework_completeness(self, domain_id: UUID) -> dict:
+        domain = self.get_canon_domain(domain_id)
+        if not domain:
+            return {"score": 0, "missing_sections": [], "error": "Domain not found"}
+
+        entries = self.get_canon_entries(domain_id, include_unapproved=True)
+        present_sections = {str(e.section_type) for e in entries if e.section_type}
+        from src.models import SectionType
+        all_section_types = [st.value for st in SectionType
+                             if st not in (SectionType.SOURCE_MARKDOWN,)]
+
+        # Core fields that contribute to the score
+        core_fields = {
+            "name": bool(domain.name),
+            "summary": bool(domain.summary),
+            "audience": bool(domain.audience),
+            "brand_personality": bool(domain.brand_personality),
+            "positioning": bool(domain.positioning),
+            "tagline": bool(domain.tagline),
+            "differentiation": bool(domain.differentiation),
+        }
+        field_score = sum(10 for v in core_fields.values() if v)
+
+        entry_count = len(entries)
+        if entry_count >= 3:
+            field_score += 10
+        if entry_count >= 6:
+            field_score += 10
+
+        personas = self.get_personas(domain_id)
+        if len(personas) >= 1:
+            field_score += 5
+
+        missing_sections = [st for st in all_section_types if st not in present_sections]
+
+        return {
+            "score": min(field_score, 100),
+            "missing_sections": missing_sections,
+            "present_sections": sorted(present_sections),
+            "total_entries": entry_count,
+            "total_personas": len(personas),
+            "core_fields": core_fields,
+        }
+
 
 def _conn_to_dict(row: "SourceConnectionModel") -> dict:
     return {
@@ -2775,6 +3169,9 @@ def _domain_from_row(row: CanonDomainModel) -> CanonDomain:
         department=row.department,
         last_synced=row.last_synced,
         last_reviewed=row.last_reviewed,
+        # Phase 2 additions:
+        parent_domain_id=UUID(row.parent_domain_id) if row.parent_domain_id else None,
+        inheritance_policy=InheritancePolicy(row.inheritance_policy) if row.inheritance_policy else InheritancePolicy.FULL
     )
 
 

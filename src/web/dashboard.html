@@ -44,6 +44,23 @@
             </div>
         </div>
 
+        <!-- Canon Health Score gauge -->
+        <div class="card" style="margin-bottom:24px;display:flex;flex-direction:row;align-items:center;gap:24px;">
+            <div style="position:relative;display:flex;align-items:center;justify-content:center;width:110px;height:110px;flex-shrink:0;">
+                <svg style="width:100%;height:100%;transform:rotate(-90deg);">
+                    <circle cx="55" cy="55" r="46" stroke="var(--bg-3)" stroke-width="8" fill="transparent" />
+                    <circle cx="55" cy="55" r="46" stroke="var(--primary)" stroke-width="8" fill="transparent"
+                            stroke-dasharray="289" stroke-dashoffset="17.3" />
+                </svg>
+                <span style="position:absolute;font-size:24px;font-weight:700;font-family:Georgia,'Times New Roman',serif;color:var(--text);">94%</span>
+            </div>
+            <div style="min-width:0;">
+                <h3 style="font-size:18px;font-weight:700;font-family:Georgia,'Times New Roman',serif;margin-bottom:4px;color:var(--text);">Canon Health Score</h3>
+                <p style="font-size:14px;color:var(--text-2);">Your organizational messaging has a high narrative coherence. 1 active alignment gap flagged in HR specifications.</p>
+                <button class="btn btn-ghost btn-xs" style="margin-top:12px;" onclick="showSection('graph')">Explore Graph Gaps</button>
+            </div>
+        </div>
+
         <!-- Knowledge Graph widget -->
         <div class="card" style="margin-bottom:24px;" id="graph-widget">
             <div class="card-header" style="margin-bottom:10px;">
@@ -72,6 +89,46 @@
                     <button class="btn btn-ghost btn-xs" onclick="showSection('artifacts')">Generator</button>
                 </div>
                 <div id="latest-artifacts"><div style="color:var(--text-3);font-size:13px;">Loading…</div></div>
+            </div>
+        </div>
+
+        <!-- Pending Suggestions & Review Queue -->
+        <div class="card" style="margin-bottom:24px;background:var(--bg-1);border:1px solid var(--border);">
+            <h3 style="font-size:15px;font-weight:700;font-family:Georgia,'Times New Roman',serif;margin-bottom:0;padding-bottom:10px;border-bottom:1px solid var(--border);color:var(--text);">Pending Suggestions & Review Queue</h3>
+            <div style="overflow-x:auto;margin-top:16px;">
+                <table class="table" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Element Type</th>
+                            <th>Target Domain</th>
+                            <th>Proposed Wording</th>
+                            <th>Suggested By</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="doc-type-badge doc-type-message_house">Objection</span></td>
+                            <td><strong>Helix HR Solution</strong></td>
+                            <td><span style="font-family:monospace;font-size:12px;">"SLA updated to 99.9% support availability"</span></td>
+                            <td>PMM Team (Suggester)</td>
+                            <td>
+                                <button class="btn btn-primary btn-xs" style="background:var(--primary);margin-right:8px;">Accept</button>
+                                <button class="btn btn-ghost btn-xs" style="color:var(--danger);">Decline</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><span class="doc-type-badge doc-type-brand_guide">Style Rule</span></td>
+                            <td><strong>Brand Center</strong></td>
+                            <td><span style="font-family:monospace;font-size:12px;">"Do not use competitor terms in general release disclaimers."</span></td>
+                            <td>Legal Team (Suggester)</td>
+                            <td>
+                                <button class="btn btn-primary btn-xs" style="background:var(--primary);margin-right:8px;">Accept</button>
+                                <button class="btn btn-ghost btn-xs" style="color:var(--danger);">Decline</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -226,14 +283,38 @@
                     <div id="artifact-skills-list" style="overflow-y:auto; padding-right:6px; flex:1; margin-bottom:12px;">
                         <div style="color:var(--text-3);font-size:13px;">Select a framework first</div>
                     </div>
+                    
+                    <!-- Integrated dynamic context fields (only visible when required by the selected skill) -->
+                    <div id="artifact-context-fields-container" style="display:none; margin-bottom:14px; border-top:1px solid var(--border); padding-top:12px; flex-shrink:0;">
+                        <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--text-2); margin-bottom:8px; letter-spacing:0.04em;">Required Context</div>
+                        <div id="artifact-context-fields" style="display:flex; flex-direction:column; gap:10px;"></div>
+                    </div>
+
+                    <!-- Tonal Sliders & Vocabulary Settings -->
+                    <div id="tone-sliders-container" style="margin-bottom:14px; border-top:1px solid var(--border); padding-top:12px; flex-shrink:0;">
+                        <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--text-2); margin-bottom:10px; letter-spacing:0.04em;">Tonal Sliders &amp; Vocabulary Settings</div>
+                        <div style="margin-bottom:10px;">
+                            <label style="display:block;font-size:12px;color:var(--text-2);margin-bottom:6px;">Professionalism Register (Casual → Formal)</label>
+                            <div style="display:flex;align-items:center;gap:12px;">
+                                <span style="font-size:11px;color:var(--text-3);flex-shrink:0;">Casual</span>
+                                <input type="range" id="gen-slider-prof" min="0.0" max="1.0" step="0.1" value="0.5" style="flex:1;">
+                                <span style="font-size:11px;color:var(--text-3);flex-shrink:0;">Formal</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block;font-size:12px;color:var(--text-2);margin-bottom:6px;">Warmth Register (Technical → Friendly)</label>
+                            <div style="display:flex;align-items:center;gap:12px;">
+                                <span style="font-size:11px;color:var(--text-3);flex-shrink:0;">Technical</span>
+                                <input type="range" id="gen-slider-warm" min="0.0" max="1.0" step="0.1" value="0.5" style="flex:1;">
+                                <span style="font-size:11px;color:var(--text-3);flex-shrink:0;">Friendly</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <button class="btn btn-primary" id="generate-btn" onclick="generateArtifact()" style="width:100%; flex-shrink:0;" disabled>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                         Generate
                     </button>
-                </div>
-                <div id="artifact-context-card" class="card" style="margin-bottom:0;display:none; flex-shrink:0;">
-                    <div class="card-title" style="margin-bottom:10px">Context</div>
-                    <div id="artifact-context-fields"></div>
                 </div>
             </div>
 
@@ -536,10 +617,10 @@
                             <input type="checkbox" id="scope-read" checked disabled /> Read
                         </label>
                         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-                            <input type="checkbox" id="scope-write" checked /> Write
+                            <input type="checkbox" id="scope-write" checked onchange="toggleAdminScope()" /> Write
                         </label>
                         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-                            <input type="checkbox" id="scope-admin" onchange="toggleAdminScope(this.checked)" /> Admin
+                            <input type="checkbox" id="scope-admin" onchange="toggleAdminScope()" /> Admin
                         </label>
                     </div>
                 </div>
@@ -765,6 +846,36 @@
 <div class="modal-overlay" id="domain-modal">
     <!-- Existing domain modal content -->
 </div>
+
+<!-- Floating Canon Navigator Button -->
+<div id="navigator-launcher" style="position:fixed;bottom:24px;right:24px;z-index:50;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);border-radius:50%;width:54px;height:54px;background:var(--primary);border:2px solid var(--border);"
+     onclick="toggleNavigator()">
+    <span style="color:white;font-size:20px;font-weight:700;font-family:Georgia,'Times New Roman',serif;">M</span>
+</div>
+
+<!-- Sliding Chat Panel (hidden by default) -->
+<div id="navigator-panel" style="display:none;position:fixed;bottom:96px;right:24px;z-index:50;flex-direction:column;box-shadow:0 8px 30px rgba(0,0,0,0.2);border-radius:12px;border:1px solid var(--border);width:380px;height:500px;background:var(--bg-1);">
+    
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);background:var(--bg-2);border-radius:12px 12px 0 0;">
+        <h3 style="font-weight:700;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:var(--text);">Canon Navigator</h3>
+        <button style="font-size:13px;background:none;border:none;cursor:pointer;color:var(--text-3);padding:0;" onclick="toggleNavigator()">✕</button>
+    </div>
+
+    <!-- Messages Container -->
+    <div id="chat-messages" style="flex:1;padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;background:var(--bg);">
+        <div style="padding:12px;border-radius:8px;font-size:13px;background:var(--bg-2);color:var(--text-2);">
+            Hi! I'm the Canon Navigator super-agent. Ask me anything about your active brand specifications or narrative drift.
+        </div>
+    </div>
+
+    <!-- Input Footer -->
+    <div style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--bg-1);border-radius:0 0 12px 12px;">
+        <input type="text" id="chat-input" style="flex:1;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="Ask Navigator..." onkeydown="handleChatKey(event)">
+        <button class="btn btn-primary btn-xs" style="background:var(--primary);" onclick="sendChatQuery()">Send</button>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -788,7 +899,7 @@
         'persona_library': 'Persona Library',
         'competitive_brief': 'Competitive Brief'
     };
-    const DEPT_PRIMARY_GROUNDING = {
+    let DEPT_PRIMARY_GROUNDING = {
         "Product Marketing": "message_house",
         "Company Marketing": "corp_narrative",
         "Enablement": "persona_library",
@@ -878,6 +989,7 @@
         else if (id === 'connections') loadConnections();
         else if (id === 'graph') loadGraphExplorer();
         else if (id === 'settings') loadSettings();
+        else if (id === 'api-keys') loadApiKeys();
     }
 
     window.onpopstate = e => showSection(e.state?.section || 'dashboard', false);
@@ -885,7 +997,7 @@
     function initRouting() {
         const hash = window.location.hash.replace(/^#/, '');
         const path = hash || window.location.pathname.replace(/^\//, '') || 'dashboard';
-        const valid = ['dashboard','frameworks','upload','artifacts','scoring','skills','channels','connections','graph','settings'];
+        const valid = ['dashboard','frameworks','upload','artifacts','scoring','skills','channels','connections','graph','settings','api-keys'];
         showSection(valid.includes(path) ? path : 'dashboard', false);
     }
 
@@ -956,12 +1068,10 @@
             const recentEl = document.getElementById('recent-domains');
             if (domains.length) {
                 recentEl.innerHTML = domains.slice(0,4).map(h => `
-                    <div style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius);cursor:pointer;"
-                         onmouseenter="this.style.background='var(--bg-2)'" onmouseleave="this.style.background=''"
-                         onclick="viewDomain('${h.id}')">
+                    <div class="list-item-interactive" style="gap:10px;padding:8px;" onclick="viewDomain('${h.id}')">
                         <div style="width:30px;height:30px;background:var(--primary-dim);color:var(--primary);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;">${(h.name[0]||'?').toUpperCase()}</div>
-                             <div style="min-width:0;">
-                                <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.name)}${docTypeBadge(h.document_type)}</div>
+                        <div style="min-width:0;flex:1;">
+                            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.name)}${docTypeBadge(h.document_type)}</div>
                             <div style="font-size:11px;color:var(--text-3);">${h.entry_count} entries · ${h.completeness_score}% complete</div>
                         </div>
                     </div>`).join('');
@@ -1689,6 +1799,12 @@
             if (val) context[inp.key] = val;
         }
 
+        // Add tone slider values to context
+        const profSlider = document.getElementById('gen-slider-prof');
+        const warmSlider = document.getElementById('gen-slider-warm');
+        if (profSlider) context.tone_professionalism = parseFloat(profSlider.value);
+        if (warmSlider) context.tone_warmth = parseFloat(warmSlider.value);
+
         const container = document.getElementById('artifact-preview-container');
         container.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span><span style="margin-left:12px;color:var(--text-2);">Generating with AI…</span></div>';
         const form = new FormData();
@@ -1957,6 +2073,7 @@
     // ── Settings ──────────────────────────────────────────────────────────────────
 
     async function loadSettings() {
+        loadSettingsDepartments();
         // Load Brand Settings
         try {
             const brand = await fetch(`${API}/workspaces/default/brand`).then(r => r.json());
@@ -2577,8 +2694,8 @@ const NODE_COLORS = {
             const color = NODE_COLORS[t] || '#888';
             const rows = grouped[t].map(n => `
                 <div onclick="_highlightNode('${esc(n.id)}')"
-                     style="display:flex;align-items:flex-start;gap:10px;padding:5px 10px;border-radius:var(--radius);cursor:pointer;transition:background .1s;"
-                     onmouseenter="this.style.background='var(--bg-2)'" onmouseleave="this.style.background=''">
+                     class="list-item-interactive"
+                     style="padding:5px 10px;align-items:flex-start;gap:10px;">
                     <span style="width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0;margin-top:4px;"></span>
                     <div style="min-width:0;flex:1;">
                         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(n.label)}</div>
@@ -3207,8 +3324,370 @@ const NODE_COLORS = {
         }
     }
 
+    // ── API Key & Department Management ──────────────────────────────────────────
+
+    function formatScopes(scopes) {
+        if (!scopes) return 'None';
+        if (scopes.includes('admin')) {
+            return '<span style="color:var(--accent-purple);font-weight:600;">Administrator</span>';
+        }
+        const depts = scopes.filter(s => s.startsWith('dept:')).map(s => s.substring(5));
+        const base = scopes.filter(s => !s.startsWith('dept:'));
+        let res = base.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ');
+        if (depts.length > 0) {
+            res += ` <span style="font-size:11px;color:var(--text-3);">(Restricted to: ${depts.map(esc).join(', ')})</span>`;
+        }
+        return res;
+    }
+
+    async function loadApiKeys() {
+        const tbody = document.getElementById('api-keys-list-body');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading API keys…</td></tr>';
+        try {
+            const keys = await apiFetch(`${API}/api-keys`);
+            if (!keys.length) {
+                tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-3);font-size:13px;text-align:center;padding:24px 0;">No API keys found.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = keys.map(k => {
+                const formattedScopes = formatScopes(k.scopes);
+                const created = new Date(k.created_at).toLocaleString();
+                const lastUsed = k.last_used_at ? new Date(k.last_used_at).toLocaleString() : 'Never';
+                const actionBtn = k.is_active 
+                    ? `<button class="btn btn-danger btn-xs" onclick="revokeApiKey('${k.id}')">Revoke</button>` 
+                    : `<span style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;">Revoked</span>`;
+                
+                return `<tr>
+                    <td style="font-weight:600;color:var(--text);">${esc(k.name)}</td>
+                    <td>${formattedScopes}</td>
+                    <td style="color:var(--text-2);font-size:12.5px;">${created}</td>
+                    <td style="color:var(--text-2);font-size:12.5px;">${lastUsed}</td>
+                    <td>${actionBtn}</td>
+                </tr>`;
+            }).join('');
+        } catch(e) {
+            tbody.innerHTML = `<tr><td colspan="5" style="color:var(--danger);font-size:13px;">Error: ${e.message}</td></tr>`;
+        }
+    }
+
+    async function generateApiKey() {
+        const name = document.getElementById('new-key-name')?.value?.trim();
+        if (!name) {
+            toast('API Key Name is required.', 'error');
+            return;
+        }
+        
+        const scopes = ["read"];
+        const writeChecked = document.getElementById('scope-write')?.checked;
+        const adminChecked = document.getElementById('scope-admin')?.checked;
+        
+        if (adminChecked) {
+            scopes.push("admin", "write");
+        } else {
+            if (writeChecked) {
+                scopes.push("write");
+                // Add department scoping
+                const deptBoxes = document.querySelectorAll('input[name="key-dept"]:checked');
+                deptBoxes.forEach(box => {
+                    scopes.push(`dept:${box.value}`);
+                });
+            }
+        }
+        
+        try {
+            const res = await apiFetch(`${API}/api-keys`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: name,
+                    scopes: scopes,
+                    workspace_id: 'default'
+                })
+            });
+            
+            const modal = document.getElementById('key-modal');
+            const valEl = document.getElementById('new-key-value');
+            if (modal && valEl) {
+                valEl.textContent = res.key;
+                modal.style.display = 'flex';
+            }
+            
+            // Clear form
+            document.getElementById('new-key-name').value = '';
+            if (document.getElementById('scope-admin')) document.getElementById('scope-admin').checked = false;
+            if (document.getElementById('scope-write')) document.getElementById('scope-write').checked = true;
+            toggleAdminScope();
+            
+        } catch (e) {
+            toast('Failed to generate key: ' + e.message, 'error');
+        }
+    }
+
+    function copyGeneratedKey() {
+        const keyVal = document.getElementById('new-key-value')?.textContent;
+        if (!keyVal) return;
+        navigator.clipboard.writeText(keyVal).then(() => {
+            toast('API Key copied to clipboard!', 'success');
+        }).catch(err => {
+            toast('Failed to copy: ' + err, 'error');
+        });
+    }
+
+    function closeKeyModal() {
+        const modal = document.getElementById('key-modal');
+        if (modal) modal.style.display = 'none';
+        loadApiKeys();
+    }
+
+    function toggleAdminScope() {
+        const adminChecked = document.getElementById('scope-admin')?.checked;
+        const writeCheckbox = document.getElementById('scope-write');
+        const deptGroup = document.getElementById('dept-restrictions-group');
+        
+        if (adminChecked) {
+            if (writeCheckbox) {
+                writeCheckbox.checked = true;
+                writeCheckbox.disabled = true;
+            }
+            if (deptGroup) {
+                deptGroup.style.opacity = '0.5';
+                deptGroup.style.pointerEvents = 'none';
+                document.querySelectorAll('input[name="key-dept"]').forEach(box => box.checked = false);
+            }
+        } else {
+            if (writeCheckbox) {
+                writeCheckbox.disabled = false;
+            }
+            const writeChecked = writeCheckbox?.checked;
+            if (deptGroup) {
+                if (writeChecked) {
+                    deptGroup.style.opacity = '1';
+                    deptGroup.style.pointerEvents = 'auto';
+                } else {
+                    deptGroup.style.opacity = '0.5';
+                    deptGroup.style.pointerEvents = 'none';
+                    document.querySelectorAll('input[name="key-dept"]').forEach(box => box.checked = false);
+                }
+            }
+        }
+    }
+
+    async function revokeApiKey(keyId) {
+        if (!confirm('Are you sure you want to revoke this API key? This will permanently disable it.')) {
+            return;
+        }
+        try {
+            await apiFetch(`${API}/api-keys/${keyId}`, {
+                method: 'DELETE'
+            });
+            toast('API Key revoked', 'success');
+            loadApiKeys();
+        } catch (e) {
+            toast('Failed to revoke API key: ' + e.message, 'error');
+        }
+    }
+
+    async function fetchDepartments() {
+        try {
+            const depts = await apiFetch(`${API}/departments`);
+            
+            // Re-populate the DEPT_PRIMARY_GROUNDING mapping
+            DEPT_PRIMARY_GROUNDING = {};
+            depts.forEach(d => {
+                DEPT_PRIMARY_GROUNDING[d.name] = d.primary_grounding_type;
+            });
+            
+            // Populate uploadDepartment select dropdown
+            const uploadSelect = document.getElementById('uploadDepartment');
+            if (uploadSelect) {
+                const currentVal = uploadSelect.value;
+                uploadSelect.innerHTML = depts.map(d => `<option value="${esc(d.name)}">${esc(d.name)}</option>`).join('');
+                if (depts.some(d => d.name === currentVal)) {
+                    uploadSelect.value = currentVal;
+                } else {
+                    uploadSelect.value = "General";
+                }
+            }
+            
+            // Populate new-key-depts-list checklist
+            const checklist = document.getElementById('new-key-depts-list');
+            if (checklist) {
+                checklist.innerHTML = depts.map(d => `
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                        <input type="checkbox" name="key-dept" value="${esc(d.name)}" /> ${esc(d.name)}
+                    </label>
+                `).join('');
+            }
+        } catch (e) {
+            console.error("Failed to fetch departments:", e);
+        }
+    }
+
+    async function loadSettingsDepartments() {
+        const el = document.getElementById('settings-depts-list');
+        if (!el) return;
+        el.innerHTML = '<tr><td colspan="4" style="color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading departments…</td></tr>';
+        try {
+            const depts = await apiFetch(`${API}/departments`);
+            const builtIn = ["General", "Product Marketing", "Company Marketing", "Enablement", "Product Management"];
+            el.innerHTML = depts.map(d => {
+                const isBuiltIn = builtIn.includes(d.name);
+                const actionHtml = isBuiltIn 
+                    ? `<span style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;">Built-in</span>`
+                    : `<button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--danger);" onclick="deleteDepartment('${esc(d.name)}')">Delete</button>`;
+                
+                const groundingLabel = GROUNDING_LABELS[d.primary_grounding_type] || d.primary_grounding_type.replace(/_/g, ' ');
+                
+                return `<tr>
+                    <td style="font-weight:600;color:var(--text);">${esc(d.name)}</td>
+                    <td><span class="doc-type-badge doc-type-${esc(d.primary_grounding_type)}">${esc(groundingLabel)}</span></td>
+                    <td style="color:var(--text-2);font-size:13px;">${esc(d.description || '—')}</td>
+                    <td>${actionHtml}</td>
+                </tr>`;
+            }).join('');
+        } catch(e) {
+            el.innerHTML = `<tr><td colspan="4" style="color:var(--danger);font-size:13px;">Error: ${e.message}</td></tr>`;
+        }
+    }
+
+    async function createDepartment() {
+        const name = document.getElementById('new-dept-name')?.value?.trim();
+        const grounding = document.getElementById('new-dept-grounding')?.value;
+        const desc = document.getElementById('new-dept-desc')?.value?.trim();
+        
+        if (!name) {
+            toast('Department Name is required.', 'error');
+            return;
+        }
+        
+        try {
+            await apiFetch(`${API}/departments`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: name,
+                    primary_grounding_type: grounding,
+                    description: desc || ""
+                })
+            });
+            toast(`Department "${name}" created`, 'success');
+            
+            document.getElementById('new-dept-name').value = '';
+            document.getElementById('new-dept-desc').value = '';
+            document.getElementById('new-dept-grounding').value = 'message_house';
+            
+            await fetchDepartments();
+            await loadSettingsDepartments();
+        } catch(e) {
+            toast('Failed to create department: ' + e.message, 'error');
+        }
+    }
+
+    async function deleteDepartment(name) {
+        if (!confirm(`Are you sure you want to delete department "${name}"? This cannot be undone.`)) {
+            return;
+        }
+        try {
+            await apiFetch(`${API}/departments/${encodeURIComponent(name)}`, {
+                method: 'DELETE'
+            });
+            toast(`Department "${name}" deleted`, 'success');
+            
+            await fetchDepartments();
+            await loadSettingsDepartments();
+            
+            if (activeDept === name) {
+                switchDept('All');
+            }
+        } catch(e) {
+            toast('Failed to delete department: ' + e.message, 'error');
+        }
+    }
+
+    // ── Canon Navigator Chat ──────────────────────────────────────────────────────
+
+    function toggleNavigator() {
+        const panel = document.getElementById("navigator-panel");
+        if (panel) panel.style.display = panel.style.display === "none" ? "flex" : "none";
+    }
+
+    function handleChatKey(event) {
+        if (event.key === "Enter") {
+            sendChatQuery();
+        }
+    }
+
+    function sendChatQuery() {
+        const input = document.getElementById("chat-input");
+        const container = document.getElementById("chat-messages");
+        const query = input.value.trim();
+        if (!query) return;
+
+        // Append user message
+        const userMsg = document.createElement("div");
+        userMsg.style.cssText = "padding:12px;border-radius:8px;font-size:13px;align-self:flex-end;text-align:right;background:var(--primary-dim);color:var(--primary);";
+        userMsg.textContent = query;
+        container.appendChild(userMsg);
+        input.value = "";
+
+        // Append agent empty placeholder
+        const agentMsg = document.createElement("div");
+        agentMsg.style.cssText = "padding:12px;border-radius:8px;font-size:13px;align-self:flex-start;background:var(--bg-2);color:var(--text);";
+        agentMsg.textContent = "...";
+        container.appendChild(agentMsg);
+        container.scrollTop = container.scrollHeight;
+
+        // SSE Fetch Connection
+        fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: query, workspace_id: "default" })
+        })
+        .then(response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            agentMsg.textContent = ""; // Clear loader
+
+            function readStream() {
+                return reader.read().then(({ done, value }) => {
+                    if (done) return;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split("\n\n");
+                    buffer = lines.pop(); // Keep partial line in buffer
+
+                    for (const line of lines) {
+                        if (line.startsWith("data: ")) {
+                            const dataStr = line.replace("data: ", "").trim();
+                            if (dataStr === "[DONE]") {
+                                return;
+                            }
+                            try {
+                                const parsed = JSON.parse(dataStr);
+                                agentMsg.textContent += parsed.content;
+                                container.scrollTop = container.scrollHeight;
+                            } catch (e) {}
+                        }
+                    }
+                    return readStream();
+                });
+            }
+            return readStream();
+        })
+        .catch(err => {
+            agentMsg.textContent = "Error communicating with navigator agent.";
+        });
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────────
 
-    initRouting();
+    fetchDepartments().then(() => {
+        initRouting();
+    }).catch(e => {
+        console.error('Failed to load departments during init:', e);
+        initRouting();
+    });
 </script>
 {% endblock %}

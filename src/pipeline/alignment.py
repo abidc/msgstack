@@ -1,11 +1,18 @@
-import os
-import json
-from uuid import UUID
-from pydantic import BaseModel
-from typing import Optional
-from openai import OpenAI
+"""Continuous Alignment Scoring — evaluate external drafts against approved canon."""
 
+import os
+import logging
+import json
+from typing import Optional
+from uuid import UUID
+from openai import OpenAI
+from pydantic import BaseModel
 from src.store import Store
+from src.models import CanonEntry
+
+log = logging.getLogger(__name__)
+
+# --- Legacy / Backward Compatibility Models ---
 
 class AlignmentSection(BaseModel):
     name: str
@@ -41,30 +48,30 @@ class AlignmentEngine:
         context = []
         if house.tagline: context.append(f"TAGLINE: {house.tagline}")
         if house.positioning: context.append(f"POSITIONING: {house.positioning}")
-        if house.differentiation: context.append(f"DIFFERENTIATION: {house.differentiation}")
+        if house.differentiation: context.append(f"DIFFERENTIATION: {house.differentiation}")        
         if house.audience: context.append(f"TARGET AUDIENCE: {house.audience}")
-        
+
         if personas:
             context.append("APPROVED PERSONAS:")
             for p in personas:
                 context.append(f"- {p.name}: {p.pain_points}")
-            
+
         if messages:
             context.append("APPROVED KEY MESSAGES:")
             for m in messages:
                 stype = getattr(m, "section_type", "message")
                 context.append(f"- [{stype}] {m.content}")
 
-        # Compute dynamic semantic similarity matches using VectorMetadataModel via GroundingEngine
+        # Compute dynamic semantic similarity matches using VectorMetadataModel via GroundingEngine  
         from src.grounding.search import GroundingEngine
         from src.models import SearchFilters
-        
+
         sentences = [s.strip() for s in content.replace("\n", ". ").split(".") if len(s.strip()) > 15]
         vector_matches = []
         try:
             engine = GroundingEngine(self.store, openai_api_key=self.api_key)
             for sentence in sentences[:10]:  # Evaluate up to 10 sentences
-                search_filters = SearchFilters(message_houses=[str(house_id)], include_drafts=False)
+                search_filters = SearchFilters(message_houses=[str(house_id)], include_drafts=False) 
                 res = engine.search(query=sentence, filters=search_filters, top_k=1)
                 for r in res.results:
                     if r.confidence > 0.4:  # Only report relevant matches
@@ -84,15 +91,15 @@ class AlignmentEngine:
             for vm in vector_matches:
                 vector_alignment_ctx.append(
                     f"- Content fragment: '{vm['sentence']}' matches approved message: '{vm['matched_content']}' "
-                    f"({vm['section_type']}) with semantic confidence {vm['confidence']:.2f}."
+                    f"({vm['section_type']}) with semantic confidence {vm['confidence']:.2f}."       
                 )
             vector_alignment_str = "\n".join(vector_alignment_ctx)
 
         system_prompt = (
             "You are an expert Messaging Governance Evaluator. Your job is to analyze the provided CONTENT "
-            "against the official MESSAGE HOUSE and its semantic vector alignment matches.\n\n"
+            "against the official MESSAGE HOUSE and its semantic vector alignment matches.\n\n"      
             "MESSAGE HOUSE:\n" + "\n".join(context) + "\n\n"
-            "SEMANTIC VECTOR ALIGNMENT MATCHES (from Vector database):\n" + vector_alignment_str + "\n\n"
+            "MESSAGE VECTOR MATCHES (from Vector database):\n" + vector_alignment_str + "\n\n"
             "You must score the content on a scale of 0-100 based on how well it aligns with the official messaging. "
             "Consider both vector match confidences and direct conceptual alignment. "
             "Look for contradictions (where the content says something contrary to the positioning) and omissions "
@@ -122,3 +129,148 @@ class AlignmentEngine:
         raw = response.choices[0].message.content
         data = json.loads(raw)
         return AlignmentReport(**data)
+
+
+# --- New Phase 4 Continuous Alignment Scoring ---
+
+def score_alignment(
+    text: str,
+    domain_id: UUID,
+    store: Store,
+    openai_client: Optional[OpenAI] = None
+) -> dict:
+    """
+    Score a draft document against approved canon entries.
+    Splits draft text into sections, runs Turbovec lookups, and classifies matches.
+    """
+    client = openai_client or OpenAI()
+    
+    # 1. Fetch approved entries for reference
+    canon_entries = store.get_canon_entries(domain_id, include_unapproved=False)
+    if not canon_entries:
+        return {
+            "score": 100,
+            "hard_conflicts": [],
+            "soft_conflicts": [],
+            "aligned_sections": [],
+            "explanation": "No approved canon entries found to score against."
+        }
+
+    # 2. Extract context summary of active domain
+    domain = store.get_canon_domain(domain_id)
+    domain_positioning = domain.positioning if domain else ""
+
+    # 3. Split the incoming draft text into paragraphs or bullet sections
+    draft_paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    
+    score = 100
+    hard_conflicts = []
+    soft_conflicts = []
+    aligned_sections = []
+
+    # 4. Semantic comparison per paragraph
+    for i, para in enumerate(draft_paragraphs):
+        # Build prompt for LLM comparison
+        reference_context = "\n".join([f"- [{e.section_type}] {e.content}" for e in canon_entries])
+        prompt = (
+            f"You are an expert copy auditor. Compare the Draft Paragraph against the Approved Canon Claims.\n\n"
+            f"Approved Canon Claims:\n{reference_context}\n"
+            f"Core positioning: {domain_positioning}\n\n"
+            f"Draft Paragraph to Audit:\n\"{para}\"\n\n"
+            f"Identify if this paragraph is Aligned, has Hard Conflicts, or has Soft Conflicts.\n"
+            f"Return a JSON object:\n"
+            f'{{\n'
+            f'  "status": "aligned" / "hard_conflict" / "soft_conflict",\n'
+            f'  "matched_canon": "The canon entry text it relates to or contradicts (if any)",\n'
+            f'  "explanation": "Auditor notes and justification",\n'
+            f'  "deduction": 0-20\n'
+            f'}}\n'
+            f"Rules:\n"
+            f"- 'aligned': claim matches or supports canon details. Deduction: 0\n"
+            f"- 'hard_conflict': contradicts a factual claim (e.g., pricing, features, metrics). Deduction: 15-20\n"
+            f"- 'soft_conflict': uses unapproved words, deviates in brand tone, or has minor misalignment. Deduction: 5-10"
+        )
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                response_format={"type": "json_object"}
+            )
+            result = json.loads(response.choices[0].message.content)
+            status = result.get("status", "aligned")
+            deduction = int(result.get("deduction", 0))
+            explanation = result.get("explanation", "")
+            matched = result.get("matched_canon", "")
+
+            audit_item = {
+                "paragraph_index": i,
+                "paragraph_text": para,
+                "matched_canon": matched,
+                "explanation": explanation,
+                "deduction": deduction
+            }
+
+            if status == "hard_conflict":
+                hard_conflicts.append(audit_item)
+                score -= deduction
+            elif status == "soft_conflict":
+                soft_conflicts.append(audit_item)
+                score -= deduction
+            else:
+                aligned_sections.append(audit_item)
+
+        except Exception as e:
+            log.error(f"Failed to audit paragraph {i}: {e}")
+
+    # Clamp score
+    final_score = max(0, min(100, score))
+
+    return {
+        "score": final_score,
+        "hard_conflicts": hard_conflicts,
+        "soft_conflicts": soft_conflicts,
+        "aligned_sections": aligned_sections,
+        "summary": f"Alignment score is {final_score}%. Found {len(hard_conflicts)} hard conflicts and {len(soft_conflicts)} soft conflicts."
+    }
+
+
+def export_report_to_markdown(report: dict) -> str:
+    """Format the alignment report dictionary as a shareable Markdown report."""
+    lines = [
+        f"# MsgStack Alignment Score Audit Report",
+        f"**Overall Score:** {report['score']}%",
+        f"**Summary:** {report['summary']}\n",
+        "---",
+        "\n## 🚨 Hard Conflicts (Factual Contradictions)",
+    ]
+    if not report["hard_conflicts"]:
+        lines.append("No hard conflicts found.")
+    for h in report["hard_conflicts"]:
+        lines.append(
+            f"### Paragraph {h['paragraph_index'] + 1}\n"
+            f"- **Draft:** \"{h['paragraph_text']}\"\n"
+            f"- **Contradicts:** \"{h['matched_canon']}\"\n"
+            f"- **Reason:** {h['explanation']}\n"
+            f"- **Score Deduction:** -{h['deduction']}\n"
+        )
+
+    lines.append("\n## ⚠️ Soft Conflicts (Voice & Terminology Misalignments)")
+    if not report["soft_conflicts"]:
+        lines.append("No soft conflicts found.")
+    for s in report["soft_conflicts"]:
+        lines.append(
+            f"### Paragraph {s['paragraph_index'] + 1}\n"
+            f"- **Draft:** \"{s['paragraph_text']}\"\n"
+            f"- **Matched reference:** \"{s['matched_canon']}\"\n"
+            f"- **Reason:** {s['explanation']}\n"
+            f"- **Score Deduction:** -{s['deduction']}\n"
+        )
+
+    lines.append("\n## ✅ Aligned Sections")
+    if not report["aligned_sections"]:
+        lines.append("No aligned sections found.")
+    for a in report["aligned_sections"]:
+        lines.append(f"- \"{a['paragraph_text']}\" (Grounded in: *\"{a['matched_canon']}\"*)\n")
+
+    return "\n".join(lines)

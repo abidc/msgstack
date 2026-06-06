@@ -3,6 +3,25 @@ const { html } = require('satori-html');
 const fs = require('fs');
 const path = require('path');
 
+function findFont() {
+    const searchPaths = [
+        process.env.FONT_PATH,
+        'WorkSans-Regular.ttf',
+        path.join(__dirname, 'fonts', 'WorkSans-Regular.ttf'),
+        path.join(__dirname, '..', '..', 'fonts', 'WorkSans-Regular.ttf'),
+        '/app/fonts/WorkSans-Regular.ttf',
+        '/usr/share/fonts/truetype/WorkSans-Regular.ttf',
+    ].filter(Boolean);
+
+    for (const fp of searchPaths) {
+        try {
+            if (fs.existsSync(fp)) return fp;
+        } catch { }
+    }
+    console.error("Font not found. Set FONT_PATH env var or place WorkSans-Regular.ttf in ./fonts/");
+    process.exit(1);
+}
+
 async function main() {
     const inputHtml = process.argv[2];
     if (!inputHtml) {
@@ -10,8 +29,7 @@ async function main() {
         process.exit(1);
     }
 
-    // Hardcoded font for now
-    const fontPath = 'C:\\Users\\Abid\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\skills-plugin\\44662c0e-9dd9-4ef7-9fb6-babec25545e9\\827e3b85-698e-4c7d-ac00-e815d3d1f106\\skills\\canvas-design\\canvas-fonts\\WorkSans-Regular.ttf';
+    const fontPath = findFont();
     const fontData = fs.readFileSync(fontPath);
 
     const markup = html(inputHtml);

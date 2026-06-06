@@ -39,6 +39,10 @@ def extract_text(file_path: str | Path, mime_type: Optional[str] = None) -> str:
             "application/msword",
         ):
             text = _extract_docx(path)
+        elif inferred == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+            text = _extract_pptx(path)
+        elif inferred == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            text = _extract_xlsx(path)
         elif inferred == "text/plain":
             text = _extract_txt(path)
         else:
@@ -57,6 +61,10 @@ def _infer_type(path: Path) -> str:
         return "application/pdf"
     elif ext in (".docx", ".doc"):
         return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif ext in (".pptx", ".ppt"):
+        return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    elif ext in (".xlsx", ".xls"):
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     elif ext == ".txt":
         return "text/plain"
     elif ext in (".md", ".markdown"):
@@ -183,3 +191,53 @@ def save_upload(upload_file, destination: Path) -> Path:
     with open(destination, "wb") as f:
         f.write(upload_file.read())
     return destination
+
+
+def _extract_pptx(path: Path) -> str:
+    """Extract text from PowerPoint presentations page-by-page."""
+    try:
+        from pptx import Presentation
+    except ImportError:
+        raise ExtractionError("python-pptx is not installed. Run: pip install python-pptx")
+
+    prs = Presentation(str(path))
+    slides_text = []
+    for i, slide in enumerate(prs.slides):
+        slide_lines = [f"--- Slide {i+1} ---"]
+        for shape in slide.shapes:
+            if hasattr(shape, "text") and shape.text.strip():
+                slide_lines.append(shape.text.strip())
+        slides_text.append("\n".join(slide_lines))
+    return "\n\n".join(slides_text)
+
+
+def _extract_xlsx(path: Path) -> str:
+    """Extract text from Excel sheets, formatting tables as markdown grids."""
+    try:
+        import openpyxl
+    except ImportError:
+        raise ExtractionError("openpyxl is not installed. Run: pip install openpyxl")
+
+    wb = openpyxl.load_workbook(filename=str(path), read_only=True, data_only=True)
+    sheets_text = []
+    for sheet_name in wb.sheetnames:
+        sheet = wb[sheet_name]
+        sheets_text.append(f"### Sheet: {sheet_name}")
+        
+        # Read rows and filter empty ones
+        rows_data = []
+        for row in sheet.iter_rows(values_only=True):
+            row_vals = [str(v).strip() if v is not None else "" for v in row]
+            if any(row_vals):
+                rows_data.append(row_vals)
+        
+        # Convert to Markdown table format
+        if rows_data:
+            table_lines = []
+            for i, row in enumerate(rows_data):
+                table_lines.append("| " + " | ".join(row).replace("\n", " ") + " |")
+                if i == 0:
+                    table_lines.append("| " + " | ".join(["---"] * len(row)) + " |")
+            sheets_text.extend(table_lines)
+            sheets_text.append("")
+    return "\n".join(sheets_text)

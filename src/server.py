@@ -827,6 +827,34 @@ def check_framework_completeness(house_id: Optional[str] = None, house_name: Opt
 
 
 @mcp.tool()
+def score_content_alignment(text: str, domain_id: str) -> str:
+    """
+    Audit and score draft text against approved domain canon.
+    Returns a formatted markdown alignment report indicating hard and soft conflicts.
+    """
+    from uuid import UUID
+    from src.store import get_store
+    from src.pipeline.alignment import score_alignment, export_report_to_markdown
+
+    store = get_store()
+    try:
+        uid = UUID(domain_id)
+    except ValueError:
+        return "Error: Invalid domain_id UUID format."
+
+    domain = store.get_canon_domain(uid)
+    if not domain:
+        return f"Error: Canon domain with ID '{domain_id}' not found."
+
+    try:
+        report = score_alignment(text, uid, store)
+        markdown_report = export_report_to_markdown(report)
+        return markdown_report
+    except Exception as e:
+        return f"Error executing alignment score audit: {e}"
+
+
+@mcp.tool()
 def score_canon_alignment(
     domain_id: str,
     content: str,

@@ -3,6 +3,8 @@ from starlette.middleware.cors import CORSMiddleware
 import uvicorn
 from src.server import mcp
 from src.web_app import app as admin_app
+from src.basic_auth import BasicAuthMiddleware
+from src.config import settings
 
 # mcp_app serves at /mcp (default). PathRouter forwards /mcp* without
 # stripping the prefix, so mcp_app always sees the full path it expects.
@@ -60,7 +62,15 @@ class PathRouter:
         await self.admin(scope, receive, send)
 
 
-app = PathRouter(mcp_app, admin_app)
+_app = PathRouter(mcp_app, admin_app)
+
+app = BasicAuthMiddleware(
+    _app,
+    username=settings.basic_auth_user,
+    password=settings.basic_auth_pass,
+    enabled=settings.basic_auth_enabled,
+    realm="mcp.abidc.dev",
+)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -1,9 +1,8 @@
 """Artifact renderer abstraction — render generated content to different output formats."""
 
 from abc import ABC, abstractmethod
+from html import escape
 from typing import Optional
-from pathlib import Path
-import json
 
 
 class RenderOutput:
@@ -82,12 +81,14 @@ class HTMLRenderer(ArtifactRenderer):
         )
 
     def _build_html(self, sections: dict, house_name: str) -> str:
-        lines = [f"<html><head><title>{house_name}</title></head><body>"]
-        lines.append(f"<h1>{house_name}</h1>")
+        e = escape
+        lines = [f"<html><head><title>{e(house_name)}</title></head><body>"]
+        lines.append(f"<h1>{e(house_name)}</h1>")
         for key, value in sections.items():
             if value:
-                lines.append(f"<h2>{key.replace('_', ' ').title()}</h2>")
-                lines.append(f"<div>{value}</div>")
+                label = key.replace("_", " ").title()
+                lines.append(f"<h2>{e(label)}</h2>")
+                lines.append(f"<div>{e(str(value))}</div>")
         lines.append("</body></html>")
         return "\n".join(lines)
 
@@ -200,9 +201,9 @@ class RevealRenderer(ArtifactRenderer):
         )
 
     def _build_reveal_html(self, sections: dict, context: dict) -> str:
+        e = escape
         house_name = context.get("house_name", "Untitled")
         
-        # Load brand settings if available (these are usually passed via context or fetched client-side)
         brand = context.get("brand_settings", {})
         primary_color = brand.get("primary_color", "#1a56db")
         secondary_color = brand.get("secondary_color", "#7e3af2")
@@ -217,9 +218,9 @@ class RevealRenderer(ArtifactRenderer):
         if "slides" in design_spec:
             for slide in design_spec["slides"]:
                 slide_type = slide.get("type", "standard")
-                title = slide.get("title", "")
-                content = slide.get("content", "")
-                notes = slide.get("notes", "")
+                title = e(slide.get("title", ""))
+                content = e(slide.get("content", ""))
+                notes = e(slide.get("notes", ""))
                 
                 notes_html = f"<aside class='notes'>{notes}</aside>" if notes else ""
                 
@@ -231,8 +232,8 @@ class RevealRenderer(ArtifactRenderer):
                         f"{notes_html}</section>"
                     )
                 elif slide_type == "split":
-                    left = slide.get("left_content", "")
-                    right = slide.get("right_content", "")
+                    left = e(slide.get("left_content", ""))
+                    right = e(slide.get("right_content", ""))
                     slides.append(
                         f"<section>"
                         f"<h2>{title}</h2>"
@@ -249,19 +250,18 @@ class RevealRenderer(ArtifactRenderer):
                         f"{notes_html}</section>"
                     )
         else:
-            # Fallback for simple sections
-            slides.append(f"<section><h1>{house_name}</h1></section>")
+            slides.append(f"<section><h1>{e(house_name)}</h1></section>")
             for key, value in sections.items():
                 if key == "design_spec" or not value or not isinstance(value, str):
                     continue
                 label = key.replace("_", " ").title()
-                slides.append(f"<section><h2>{label}</h2><div style='text-align: left;'>{value}</div></section>")
+                slides.append(f"<section><h2>{e(label)}</h2><div style='text-align: left;'>{e(value)}</div></section>")
 
         html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>{house_name}</title>
+    <title>{e(house_name)}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reset.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/simple.css">

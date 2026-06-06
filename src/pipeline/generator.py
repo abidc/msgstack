@@ -88,6 +88,19 @@ class ArtifactGenerator:
 
         context = self._build_context(house, messages, personas, custom_context or {})
 
+        # Tonal sliders mapping:
+        tone_register = ""
+        if custom_context:
+            professionalism = custom_context.get("tone_professionalism", 0.5)
+            warmth = custom_context.get("tone_warmth", 0.5)
+            # Map float sliders to specific prompt instructions
+            tone_register = (
+                f"\nTONE & REGISTER BOUNDS:\n"
+                f"- Professionalism level: {professionalism} (1.0 = highly formal, 0.0 = highly casual)\n"
+                f"- Warmth level: {warmth} (1.0 = highly friendly, 0.0 = highly objective and technical)\n"
+                f"Adjust output register to match these bounds while respecting brand personality."
+            )
+
         # For visual artifacts, pre-fill template zones before LLM call
         visual_context = None
         template = None
@@ -122,7 +135,8 @@ class ArtifactGenerator:
                 "GROUNDING CONTEXT — every claim, headline, and proof point you write "
                 "MUST be drawn from the material below. Do not introduce capabilities, "
                 "statistics, or claims not present here.\n\n"
-                f"{context['context']}\n\n"
+                f"{context['context']}\n"
+                f"{tone_register}\n\n"
                 "---\n\n"
                 f"TASK:\n{skill_prompt}"
             )
@@ -151,7 +165,16 @@ class ArtifactGenerator:
         )
 
         raw = response.choices[0].message.content
-        sections = self._parse_sections(raw, skill)
+        
+        try:
+            from src.pipeline.vocabulary import apply_controlled_vocabulary
+            raw = apply_controlled_vocabulary(raw, house.id, self.store)
+            # Re-parse sections after sweeping
+            sections = self._parse_sections(raw, skill)
+        except Exception as e:
+            log.error(f"Vocabulary filtering failed: {e}")
+            sections = self._parse_sections(raw, skill)
+
         grounded = [m.content for m in messages]
 
         # For visual artifacts, validate and save design_spec
