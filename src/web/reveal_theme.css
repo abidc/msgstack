@@ -2,29 +2,29 @@
 /* Workspace-brandable via CSS variables */
 
 :root {
-  /* Brand colors — overridden per-workspace */
-  --brand-primary: #7c6af7;
-  --brand-primary-dim: rgba(124,106,247,.15);
-  --brand-secondary: #a89cf8;
-  --brand-accent: #0ea5e9;
+  /* Brand colors — ATLAS defaults, overridden per-workspace */
+  --brand-primary: #8A97C0;
+  --brand-primary-dim: rgba(138,151,192,.15);
+  --brand-secondary: #ADA89E;
+  --brand-accent: #8A97C0;
 
-  /* Backgrounds */
-  --bg-main: #0c0c10;
-  --bg-slide: #131318;
-  --bg-card: #1a1a21;
+  /* Backgrounds — ATLAS night chapter */
+  --bg-main: #191825;
+  --bg-slide: #232231;
+  --bg-card: #2C2B3D;
 
   /* Text */
-  --text-primary: #f0f0f5;
-  --text-secondary: #a0a0b5;
-  --text-muted: #606075;
+  --text-primary: #EFEBE0;
+  --text-secondary: #ADA89E;
+  --text-muted: #77738A;
 
   /* Borders */
-  --border: #2c2c3a;
+  --border: #383650;
 
-  /* Fonts — overridden per-workspace */
-  --font-heading: 'Inter', system-ui, sans-serif;
-  --font-body: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* Fonts — ATLAS defaults, overridden per-workspace */
+  --font-heading: 'Newsreader', Georgia, serif;
+  --font-body: 'Instrument Sans', -apple-system, sans-serif;
+  --font-mono: 'Martian Mono', Consolas, monospace;
 
   /* Logo — set via inline style or JS */
   --logo-url: none;
@@ -33,14 +33,17 @@
 /* Light mode */
 .reveal.light,
 .reveal[data-theme="light"] {
-  --bg-main: #ffffff;
-  --bg-slide: #f8fafc;
-  --bg-card: #e2e8f0;
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --border: #cbd5e1;
-  --brand-primary-dim: rgba(124,106,247,.1);
+  /* ATLAS paper */
+  --bg-main: #F6F3EA;
+  --bg-slide: #EFEADD;
+  --bg-card: #E5DECB;
+  --text-primary: #23201A;
+  --text-secondary: #5F594A;
+  --text-muted: #9C947F;
+  --border: #DAD2BE;
+  --brand-primary: #3E4E80;
+  --brand-primary-dim: rgba(62,78,128,.08);
+  --brand-accent: #3E4E80;
 }
 
 /* ── Reveal.js overrides ── */
@@ -65,8 +68,8 @@
   letter-spacing: -0.02em;
 }
 
-.reveal h1 { font-size: 2.8em; font-weight: 800; margin-bottom: 0.3em; }
-.reveal h2 { font-size: 2em; font-weight: 700; margin-bottom: 0.4em; }
+.reveal h1 { font-size: 2.8em; font-weight: 600; margin-bottom: 0.3em; }
+.reveal h2 { font-size: 2em; font-weight: 600; margin-bottom: 0.4em; }
 .reveal h3 { font-size: 1.4em; font-weight: 600; margin-bottom: 0.3em; }
 
 .reveal p, .reveal li {
@@ -93,8 +96,8 @@
 
 /* ── Title slide ── */
 .reveal .slides section.title-slide {
-  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #130b2e 100%);
-  border-color: #2d2060;
+  background: #191825;
+  border-color: #383650;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -103,12 +106,12 @@
 }
 
 .reveal .slides section.title-slide h1 {
-  color: #fff;
+  color: #EFEBE0;
   font-size: 3.2em;
 }
 
 .reveal .slides section.title-slide .tagline {
-  color: rgba(255,255,255,.6);
+  color: #ADA89E;
   font-size: 1.2em;
   margin-top: 0.5em;
 }
@@ -205,8 +208,9 @@
 }
 
 .reveal .metric-value {
+  font-family: var(--font-heading);
   font-size: 2em;
-  font-weight: 800;
+  font-weight: 600;
   color: var(--brand-primary);
   display: block;
 }
@@ -272,24 +276,24 @@
 
 /* ── Progress bar brand color ── */
 .reveal .progress {
-  background: rgba(124,106,247,.15);
+  background: rgba(138,151,192,.15);
   color: var(--brand-primary);
 }
 
 /* ── Print / PDF ── */
 @media print {
   .reveal .slides section {
-    background: #fff !important;
-    color: #0f172a !important;
-    border: 1px solid #e2e8f0 !important;
+    background: #F6F3EA !important;
+    color: #23201A !important;
+    border: 1px solid #DAD2BE !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .reveal h1, .reveal h2, .reveal h3 { color: #0f172a !important; }
-  .reveal p, .reveal li { color: #334155 !important; }
+  .reveal h1, .reveal h2, .reveal h3 { color: #23201A !important; }
+  .reveal p, .reveal li { color: #5F594A !important; }
   .reveal .slides section.title-slide {
-    background: #0f172a !important;
+    background: #191825 !important;
   }
-  .reveal .slides section.title-slide h1 { color: #fff !important; }
-  .reveal .slides section.title-slide .tagline { color: rgba(255,255,255,.6) !important; }
+  .reveal .slides section.title-slide h1 { color: #EFEBE0 !important; }
+  .reveal .slides section.title-slide .tagline { color: #ADA89E !important; }
 }

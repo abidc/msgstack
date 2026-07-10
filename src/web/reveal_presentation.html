@@ -10,15 +10,19 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme-link">
 
+  <!-- ATLAS fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Instrument+Sans:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+
   <!-- Brand theme -->
   <link rel="stylesheet" href="{{ url_for('static', filename='reveal_theme.css') if not workspace_theme else workspace_theme_url }}">
   <style>
     :root {
-      --brand-primary: {{ brand.primary_color or '#7c6af7' }};
-      --brand-secondary: {{ brand.secondary_color or '#a89cf8' }};
-      --bg-main: {{ brand.bg_color or '#0c0c10' }};
-      --font-heading: {{ brand.heading_font or "'Inter', system-ui, sans-serif" }};
-      --font-body: {{ brand.body_font or "'Inter', system-ui, sans-serif" }};
+      /* ATLAS defaults — overridden per-workspace */
+      --brand-primary: {{ brand.primary_color or '#8A97C0' }};
+      --brand-secondary: {{ brand.secondary_color or '#ADA89E' }};
+      --bg-main: {{ brand.bg_color or '#191825' }};
+      --font-heading: {{ brand.heading_font or "'Newsreader', Georgia, serif" }};
+      --font-body: {{ brand.body_font or "'Instrument Sans', -apple-system, sans-serif" }};
     }
     {% if workspace_logo %}
     .reveal .logo img { content: url('{{ workspace_logo }}'); }

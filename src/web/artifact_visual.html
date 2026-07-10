@@ -4,23 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ domain.name }} — {{ artifact_type_label }}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Instrument+Sans:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg:      #0c0c10;
-      --bg-1:    #131318;
-      --bg-2:    #1a1a21;
-      --bg-3:    #222230;
-      --border:  #2c2c3a;
-      --text:    #f0f0f5;
-      --text-2:  #a0a0b5;
-      --text-3:  #606075;
-      --primary: #7c6af7;
-      --primary-dim: rgba(124,106,247,.15);
+      /* ATLAS night chapter */
+      --bg:      #191825;
+      --bg-1:    #232231;
+      --bg-2:    #2C2B3D;
+      --bg-3:    #383650;
+      --border:  #383650;
+      --text:    #EFEBE0;
+      --text-2:  #ADA89E;
+      --text-3:  #77738A;
+      --primary: #8A97C0;
+      --primary-dim: rgba(138,151,192,.15);
+      --ember:   #E8763A;
+      --font-display: 'Newsreader', Georgia, serif;
+      --font-sans: 'Instrument Sans', -apple-system, sans-serif;
+      --font-mono: 'Martian Mono', Consolas, monospace;
     }
     body {
-      font-family: 'Inter', system-ui, sans-serif;
+      font-family: var(--font-sans);
       background: var(--bg);
       color: var(--text);
       -webkit-font-smoothing: antialiased;
@@ -48,35 +53,30 @@
 
     /* ── Hero ── */
     .hero {
-      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #130b2e 100%);
-      border-radius: 18px; padding: 52px 48px; margin-bottom: 22px;
-      border: 1px solid #2d2060; position: relative; overflow: hidden;
-    }
-    .hero::before {
-      content: ''; position: absolute; inset: 0;
-      background: radial-gradient(ellipse at 72% 50%, rgba(124,106,247,.22) 0%, transparent 60%);
-      pointer-events: none;
+      background: var(--bg-1);
+      border-radius: 14px; padding: 52px 48px; margin-bottom: 22px;
+      border: 1px solid var(--border); position: relative; overflow: hidden;
     }
     .hero-label {
       display: inline-flex; align-items: center; gap: 6px;
-      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
-      color: rgba(255,255,255,.55); font-size: 10px; font-weight: 700;
-      letter-spacing: .12em; text-transform: uppercase;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-3); font-family: var(--font-mono); font-size: 10px; font-weight: 400;
+      letter-spacing: .14em; text-transform: uppercase;
       padding: 4px 12px; border-radius: 100px; margin-bottom: 20px;
     }
     .hero h1 {
-      font-size: 42px; font-weight: 800; color: #fff;
-      line-height: 1.08; letter-spacing: -.03em;
+      font-family: var(--font-display); font-size: 44px; font-weight: 600; color: var(--text);
+      line-height: 1.08; letter-spacing: -.02em;
       margin-bottom: 12px; position: relative;
     }
     .hero-tagline {
-      font-size: 17px; color: rgba(255,255,255,.6); font-weight: 400;
+      font-size: 17px; color: var(--text-2); font-weight: 400;
       line-height: 1.55; margin-bottom: 22px; position: relative; max-width: 560px;
     }
     .hero-pills { display: flex; gap: 8px; flex-wrap: wrap; position: relative; }
     .hero-pill {
-      background: rgba(124,106,247,.18); border: 1px solid rgba(124,106,247,.32);
-      color: #a89cf8; font-size: 12px; font-weight: 500;
+      background: var(--primary-dim); border: 1px solid rgba(138,151,192,.35);
+      color: var(--primary); font-size: 12px; font-weight: 500;
       padding: 5px 14px; border-radius: 100px;
     }
 
@@ -86,7 +86,7 @@
       border-radius: 14px; padding: 28px; margin-bottom: 18px;
     }
     .card-label {
-      font-size: 10px; font-weight: 700; letter-spacing: .1em;
+      font-family: var(--font-mono); font-size: 9.5px; font-weight: 400; letter-spacing: .14em;
       text-transform: uppercase; color: var(--text-3);
       margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
     }
@@ -103,7 +103,7 @@
     @media (max-width: 640px) { .msg-grid { grid-template-columns: 1fr; } }
     .section-block { border-radius: 10px; padding: 16px 18px; }
     .section-title {
-      font-size: 10px; font-weight: 700; letter-spacing: .1em;
+      font-family: var(--font-mono); font-size: 9.5px; font-weight: 400; letter-spacing: .14em;
       text-transform: uppercase; margin-bottom: 12px;
       display: flex; align-items: center; gap: 6px;
     }
@@ -128,14 +128,14 @@
     }
     .persona-avatar {
       width: 36px; height: 36px; border-radius: 10px;
-      background: linear-gradient(135deg, #7c6af7, #a89cf8);
+      background: #3E4E80;
       display: flex; align-items: center; justify-content: center;
       color: #fff; font-weight: 800; font-size: 13px; margin-bottom: 10px;
     }
     .persona-name { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
     .persona-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; margin-bottom: 10px; }
     .pain-tag {
-      display: inline-block; background: rgba(248,113,113,.12); color: #f87171;
+      display: inline-block; background: rgba(201,123,108,.14); color: #C97B6C;
       font-size: 10px; font-weight: 500; padding: 2px 7px;
       border-radius: 4px; margin: 2px 2px 0 0;
     }
@@ -153,19 +153,19 @@
     /* ── Print ── */
     @media print {
       .controls { display: none; }
-      body { background: #fff; color: #0f172a; padding: 0; }
+      body { background: #F6F3EA; color: #23201A; padding: 0; }
       .hero {
-        background: #0f172a !important;
+        background: #191825 !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
         border-radius: 0; margin-bottom: 0;
         border: none;
       }
-      .card { background: #fff; border-color: #e2e8f0; page-break-inside: avoid; }
-      .prose { color: #334155; }
-      .msg-text { color: #334155; }
-      .persona-card { background: #f8fafc; border-color: #e2e8f0; }
-      .pain-tag { background: #fef2f2; color: #dc2626; }
+      .card { background: #EFEADD; border-color: #DAD2BE; page-break-inside: avoid; }
+      .prose { color: #5F594A; }
+      .msg-text { color: #5F594A; }
+      .persona-card { background: #EFEADD; border-color: #DAD2BE; }
+      .pain-tag { background: rgba(158,59,46,.10); color: #9E3B2E; }
     }
   </style>
 </head>
@@ -180,7 +180,7 @@
 
   <!-- Hero -->
   <div class="hero">
-    <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; {{ artifact_type_label }}</div>
+    <div class="hero-label">✦ MsgStack &nbsp;·&nbsp; {{ artifact_type_label }}</div>
     <h1>{{ domain.name }}</h1>
     {% if domain.tagline %}
     <p class="hero-tagline">{{ domain.tagline }}</p>
@@ -264,7 +264,7 @@
   {% endif %}
 
   <div class="footer">
-    <span class="footer-badge">⬡ MsgStack MCP &nbsp;·&nbsp; {{ synced_date }}</span>
+    <span class="footer-badge">✦ MsgStack MCP &nbsp;·&nbsp; {{ synced_date }}</span>
   </div>
 
 </div>

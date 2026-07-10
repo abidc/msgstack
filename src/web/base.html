@@ -4,68 +4,84 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MsgStack{% endblock %}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@700&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Instrument+Sans:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
     <script>(function(){var t=localStorage.getItem('msgstack-theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})()</script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        /* ── MsgStack Design System v5 "ATLAS" — ink on paper ──
+           Paper canvas, warm ink, one printed-ink blue accent.
+           Ember orange marks LOCKED/verified ONLY. Dark theme = night chapter.
+           No gradients on UI surfaces, no glassmorphism, no glow, no purple. */
         :root {
-            --bg: #edeae2;
-            --bg-1: #f0ece4;
-            --bg-2: #e4e0d8;
-            --bg-3: #d9d4cb;
-            --border: #c8c2b8;
-            --border-light: #d2cabb;
-            --text: #0f172a;
-            --text-2: #334155;
-            --text-3: #64748b;
-            --primary: #a82315;
-            --primary-dim: rgba(168,35,21,0.08);
-            --primary-hover: #c23020;
-            --accent-graph: #4f46e5;
-            --accent-purple: #7c3aed;
-            --success: #166534;
-            --success-dim: rgba(22,101,52,0.10);
-            --warn: #92400e;
-            --warn-dim: rgba(146,64,14,0.10);
-            --danger: #b91c1c;
-            --danger-dim: rgba(185,28,28,0.10);
+            --bg: #F6F3EA;            /* paper */
+            --bg-1: #EFEADD;          /* paper-2 — raised surface / plates */
+            --bg-2: #E5DECB;          /* paper-3 — pressed */
+            --bg-3: #DAD2BE;
+            --border: #DAD2BE;        /* hairline */
+            --border-light: #CFC6B0;
+            --text: #23201A;          /* warm ink */
+            --text-2: #5F594A;
+            --text-3: #9C947F;
+            --primary: #3E4E80;       /* atlas — printed-ink blue */
+            --primary-dim: rgba(62,78,128,0.08);
+            --primary-hover: #2F3D68; /* atlas-deep */
+            --ember: #C05A1E;         /* LOCKED / verified only */
+            --ember-dim: rgba(232,118,58,0.12);
+            --accent-graph: #3E4E80;
+            --accent-purple: #3E4E80; /* purple is banned — alias to atlas */
+            --success: #56673F;
+            --success-dim: rgba(86,103,63,0.12);
+            --warn: #8A6A1F;
+            --warn-dim: rgba(138,106,31,0.12);
+            --warning: #8A6A1F;
+            --danger: #9E3B2E;
+            --danger-dim: rgba(158,59,46,0.10);
             --radius: 8px;
-            --radius-lg: 12px;
+            --radius-lg: 14px;
+            --font-logo: 'Lora', Georgia, serif;
+            --font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+            --font-sans: 'Instrument Sans', -apple-system, sans-serif;
+            --font-mono: 'Martian Mono', Consolas, monospace;
+            --ease-drift: cubic-bezier(0.25, 0.8, 0.25, 1);
         }
         [data-theme="dark"] {
-            --bg: #0B0F19;
-            --bg-1: #1A2235;
-            --bg-2: #2A3655;
-            --bg-3: #38466b;
-            --border: #2A3655;
-            --border-light: #38466b;
-            --text: #F8FAFC;
-            --text-2: #94A3B8;
-            --text-3: #64748b;
-            --primary: #00E5FF;
-            --primary-dim: rgba(0,229,255,0.15);
-            --primary-hover: #33eaff;
-            --success: #34d399;
-            --success-dim: rgba(52,211,153,0.12);
-            --warn: #fbbf24;
-            --warn-dim: rgba(251,191,36,0.12);
-            --danger: #f87171;
-            --danger-dim: rgba(248,113,113,0.12);
+            --bg: #191825;            /* night */
+            --bg-1: #232231;          /* night-2 */
+            --bg-2: #2C2B3D;          /* night-3 */
+            --bg-3: #383650;
+            --border: #383650;        /* hairline-n */
+            --border-light: #45425E;
+            --text: #EFEBE0;          /* moon — warm paper-white */
+            --text-2: #ADA89E;
+            --text-3: #7B7790;
+            --primary: #8A97C0;       /* atlas-soft — constellation lines */
+            --primary-dim: rgba(138,151,192,0.12);
+            --primary-hover: #A3AFD4;
+            --ember: #E8763A;
+            --ember-dim: rgba(232,118,58,0.14);
+            --success: #8FA379;
+            --success-dim: rgba(143,163,121,0.14);
+            --warn: #C2A75A;
+            --warn-dim: rgba(194,167,90,0.14);
+            --warning: #C2A75A;
+            --danger: #C97B6C;
+            --danger-dim: rgba(201,123,108,0.14);
         }
-        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
-        h1, h2, h3, .page-title, .card-title, .logo, .stat-value { font-family: 'Lora', Georgia, serif; }
-        code, pre, .monospace { font-family: 'JetBrains Mono', monospace; color: var(--primary); }
-        [data-theme="dark"] code, [data-theme="dark"] pre, [data-theme="dark"] .monospace { color: #38BDF8; }
+        body { font-family: var(--font-sans); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+        h1, h2, .page-title, .stat-value { font-family: var(--font-display); font-weight: 600; }
+        h3, .card-title { font-family: var(--font-sans); font-weight: 600; }
+        .logo { font-family: var(--font-logo); }
+        code, pre, .monospace { font-family: var(--font-mono); color: var(--primary); font-size: 0.92em; }
         .app { display: flex; height: 100vh; overflow: hidden; }
 
         /* ── Sidebar ── */
         .sidebar { width: 216px; background: var(--bg-1); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; flex-shrink: 0; }
-        .logo { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 24px; padding: 0 8px; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
-        .logo-icon { width: 26px; height: 26px; background: var(--primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; }
-        .nav-section { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); padding: 0 8px; margin: 16px 0 6px; }
+        .logo { font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 24px; padding: 0 8px; display: flex; align-items: center; gap: 7px; letter-spacing: -0.01em; }
+        .logo-icon { color: var(--primary); font-size: 15px; line-height: 1; font-family: var(--font-sans); }
+        .nav-section { font-family: var(--font-mono); font-size: 9.5px; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); padding: 0 8px; margin: 18px 0 6px; }
         .nav-item { padding: 7px 8px; border-radius: var(--radius); cursor: pointer; color: var(--text-2); transition: all 0.12s; margin-bottom: 1px; display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 500; }
         .nav-item:hover { background: var(--bg-2); color: var(--text); }
         .nav-item.active { background: var(--primary-dim); color: var(--primary); }
@@ -83,11 +99,13 @@
         .page-subtitle { font-size: 13px; color: var(--text-2); margin-top: 3px; }
 
         /* ── Buttons ── */
-        .btn { padding: 7px 13px; border-radius: var(--radius); font-weight: 500; cursor: pointer; border: none; transition: all 0.12s; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-family: inherit; white-space: nowrap; }
-        .btn-primary { background: var(--primary); color: white; }
+        .btn { padding: 7px 14px; border-radius: var(--radius); font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: all 0.16s; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-family: inherit; white-space: nowrap; }
+        .btn-primary { background: var(--primary); color: #fff; }
         .btn-primary:hover { background: var(--primary-hover); }
-        .btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
-        .btn-ghost:hover { background: var(--bg-2); color: var(--text); border-color: var(--border-light); }
+        [data-theme="dark"] .btn-primary { color: #191825; }
+        [data-theme="dark"] .btn-primary:hover { background: var(--primary-hover); }
+        .btn-ghost { background: transparent; color: var(--text-2); border-color: var(--border-light); }
+        .btn-ghost:hover { background: transparent; color: var(--primary); border-color: var(--primary); }
         .btn-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(248,113,113,0.25); }
         .btn-danger:hover { background: rgba(248,113,113,0.2); }
         .btn-success { background: var(--success-dim); color: var(--success); border: 1px solid rgba(52,211,153,0.25); }
@@ -114,7 +132,7 @@
 
         /* ── Table ── */
         .table { width: 100%; border-collapse: collapse; }
-        .table th { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text-3); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .table th { text-align: left; padding: 9px 12px; border-bottom: 1.5px solid var(--text); color: var(--text-3); font-family: var(--font-mono); font-weight: 400; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.14em; }
         .table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
         .table tr:last-child td { border-bottom: none; }
         .table tbody tr { cursor: pointer; transition: background 0.1s; }
@@ -124,7 +142,7 @@
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         .form-group { margin-bottom: 14px; }
         .form-group:last-child { margin-bottom: 0; }
-        .form-label { display: block; margin-bottom: 5px; font-size: 11px; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+        .form-label { display: block; margin-bottom: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--text-2); font-weight: 400; text-transform: uppercase; letter-spacing: 0.14em; }
         .form-input, .form-textarea, .form-select { width: 100%; padding: 8px 11px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 13.5px; font-family: inherit; transition: border-color 0.12s; }
         .form-input:focus, .form-textarea:focus, .form-select:focus { outline: none; border-color: var(--primary); }
         .form-textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
@@ -159,25 +177,23 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         [data-theme="dark"] .spinner { border-color: rgba(255,255,255,0.15); border-top-color: white; }
 
-        /* ── Background texture (matches marketing site) ── */
-        @keyframes gridPulse { 0%,100% { opacity:.10; } 50% { opacity:.28; } }
-        body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
-            background-image: linear-gradient(to right,var(--border) 1px,transparent 1px),
-                              linear-gradient(to bottom,var(--border) 1px,transparent 1px);
-            background-size:48px 48px; animation:gridPulse 9s ease-in-out infinite; }
-        body::after { content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
-            background:radial-gradient(ellipse 85% 55% at 50% 0%,rgba(168,35,21,0.06),transparent); }
-        [data-theme="dark"] body::before { opacity:0; animation:none; }
-        [data-theme="dark"] body::after  { opacity:0; }
+        /* ── ATLAS: the UI is a printed page — no texture, no glow ── */
         .app { position:relative; z-index:1; }
 
-        /* ── Document-type badges ── */
-        .doc-type-badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; letter-spacing: 0.3px; margin-left: 8px; vertical-align: middle; }
-        .doc-type-canon_domain, .doc-type-message_house { background: var(--primary-dim); color: var(--primary); }
-        .doc-type-brand_guide       { background: rgba(139,92,246,0.15);  color: #a78bfa; }
-        .doc-type-competitive_brief { background: rgba(249,115,22,0.15);  color: #fb923c; }
-        .doc-type-corp_narrative    { background: rgba(34,197,94,0.15);   color: #4ade80; }
-        .doc-type-persona_library   { background: rgba(234,179,8,0.15);   color: #facc15; }
+        /* ── Atlas stamp & badge grammar ── */
+        .stamp { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); }
+        .badge-locked { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid rgba(232,118,58,0.45); color: var(--ember); background: var(--ember-dim); }
+        .badge-active { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid rgba(62,78,128,0.35); color: var(--primary); background: var(--primary-dim); }
+        .badge-draft  { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-3); background: rgba(156,148,127,0.10); }
+
+        /* ── Document-type badges (muted, inky — no neon, no purple) ── */
+        .doc-type-badge { display: inline-block; font-family: var(--font-mono); font-size: 9px; padding: 2px 8px; border-radius: 6px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 8px; vertical-align: middle; border: 1px solid transparent; }
+        .doc-type-canon_domain, .doc-type-message_house { background: var(--primary-dim); color: var(--primary); border-color: rgba(62,78,128,0.30); }
+        .doc-type-brand_guide       { background: rgba(95,89,74,0.10);   color: var(--text-2); border-color: var(--border); }
+        .doc-type-competitive_brief { background: rgba(138,106,31,0.10); color: var(--warn); border-color: rgba(138,106,31,0.30); }
+        .doc-type-corp_narrative    { background: rgba(86,103,63,0.10);  color: var(--success); border-color: rgba(86,103,63,0.30); }
+        .doc-type-persona_library   { background: rgba(78,110,106,0.10); color: #4E6E6A; border-color: rgba(78,110,106,0.30); }
+        [data-theme="dark"] .doc-type-persona_library { color: #7FA39E; }
 
         /* ── QoL UX Enhancements ── */
 
@@ -219,7 +235,7 @@
         }
         .section.active {
             display: block !important;
-            animation: sectionFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation: sectionFadeIn 0.32s var(--ease-drift) forwards;
         }
 
         /* Premium Card Hover Lift */
@@ -230,11 +246,11 @@
         }
         .card:hover {
             border-color: var(--border-light);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+            box-shadow: 0 4px 14px rgba(35, 32, 26, 0.05);
         }
         [data-theme="dark"] .card:hover {
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-            border-color: rgba(0, 229, 255, 0.2);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+            border-color: var(--border-light);
         }
 
         /* Sidebar Nav Comfort */
@@ -283,8 +299,8 @@
     <div class="app">
         <aside class="sidebar">
             <div class="logo" onclick="showSection('dashboard')" style="cursor:pointer;">
-                <div class="logo-icon">M</div>
                 <span>MsgStack</span>
+                <div class="logo-icon">✦</div>
             </div>
             
             <div class="nav-section">Management</div>
@@ -314,7 +330,7 @@
             <div class="nav-item" onclick="showSection('settings')">Settings</div>
             
             <div class="sidebar-footer">
-                <span>v0.8.2</span>
+                <span class="stamp" style="font-size:9px;">v0.9 ✦</span>
                 <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()" title="Toggle dark mode">
                     <span id="theme-icon">☾</span>
                 </button>

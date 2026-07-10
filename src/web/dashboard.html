@@ -52,10 +52,10 @@
                     <circle cx="55" cy="55" r="46" stroke="var(--primary)" stroke-width="8" fill="transparent"
                             stroke-dasharray="289" stroke-dashoffset="17.3" />
                 </svg>
-                <span style="position:absolute;font-size:24px;font-weight:700;font-family:Georgia,'Times New Roman',serif;color:var(--text);">94%</span>
+                <span style="position:absolute;font-size:24px;font-weight:700;font-family:var(--font-display);color:var(--text);">94%</span>
             </div>
             <div style="min-width:0;">
-                <h3 style="font-size:18px;font-weight:700;font-family:Georgia,'Times New Roman',serif;margin-bottom:4px;color:var(--text);">Canon Health Score</h3>
+                <h3 style="font-size:18px;font-weight:700;font-family:var(--font-display);margin-bottom:4px;color:var(--text);">Canon Health Score</h3>
                 <p style="font-size:14px;color:var(--text-2);">Your organizational messaging has a high narrative coherence. 1 active alignment gap flagged in HR specifications.</p>
                 <button class="btn btn-ghost btn-xs" style="margin-top:12px;" onclick="showSection('graph')">Explore Graph Gaps</button>
             </div>
@@ -94,7 +94,7 @@
 
         <!-- Pending Suggestions & Review Queue -->
         <div class="card" style="margin-bottom:24px;background:var(--bg-1);border:1px solid var(--border);">
-            <h3 style="font-size:15px;font-weight:700;font-family:Georgia,'Times New Roman',serif;margin-bottom:0;padding-bottom:10px;border-bottom:1px solid var(--border);color:var(--text);">Pending Suggestions & Review Queue</h3>
+            <h3 style="font-size:15px;font-weight:700;font-family:var(--font-display);margin-bottom:0;padding-bottom:10px;border-bottom:1px solid var(--border);color:var(--text);">Pending Suggestions & Review Queue</h3>
             <div style="overflow-x:auto;margin-top:16px;">
                 <table class="table" style="width:100%;">
                     <thead>
@@ -551,7 +551,7 @@
             position: fixed !important;
             inset: 0 !important;
             z-index: 9999 !important;
-            background: #060609 !important;
+            background: #191825 !important;
             padding: 24px !important;
             display: flex !important;
             flex-direction: column !important;
@@ -595,7 +595,7 @@
                             </button>
                         </div>
                     </div>
-                    <div id="cy" style="width:100%;height:calc(100vh - 280px);min-height:420px;background:#0c0c10;flex:1;"></div>
+                    <div id="cy" style="width:100%;height:calc(100vh - 280px);min-height:420px;background:#191825;flex:1;"></div>
                 </div>
                 <div class="card" id="graph-node-detail" style="margin-bottom:0;">
                     <div style="color:var(--text-3);font-size:12px;padding-top:8px;">Click a node to inspect its attributes.</div>
@@ -733,14 +733,14 @@
                         <label class="form-label">Primary Color</label>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input type="color" id="brand-color-primary" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-primary').value = this.value" />
-                            <input type="text" id="brand-text-primary" class="form-input" value="#1e293b" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-primary').value = this.value" />
+                            <input type="text" id="brand-text-primary" class="form-input" value="#3E4E80" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-primary').value = this.value" />
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Secondary Color</label>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input type="color" id="brand-color-secondary" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-secondary').value = this.value" />
-                            <input type="text" id="brand-text-secondary" class="form-input" value="#3b82f6" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-secondary').value = this.value" />
+                            <input type="text" id="brand-text-secondary" class="form-input" value="#EFEADD" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-secondary').value = this.value" />
                         </div>
                     </div>
                 </div>
@@ -750,14 +750,14 @@
                         <label class="form-label">Accent Color</label>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input type="color" id="brand-color-accent" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-accent').value = this.value" />
-                            <input type="text" id="brand-text-accent" class="form-input" value="#f59e0b" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-accent').value = this.value" />
+                            <input type="text" id="brand-text-accent" class="form-input" value="#C05A1E" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-accent').value = this.value" />
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Background Color</label>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input type="color" id="brand-color-bg" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-bg').value = this.value" />
-                            <input type="text" id="brand-text-bg" class="form-input" value="#ffffff" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-bg').value = this.value" />
+                            <input type="text" id="brand-text-bg" class="form-input" value="#F6F3EA" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-bg').value = this.value" />
                         </div>
                     </div>
                 </div>
@@ -766,7 +766,7 @@
                     <label class="form-label">Text Color</label>
                     <div style="display:flex;gap:8px;align-items:center;">
                         <input type="color" id="brand-color-text" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-text').value = this.value" />
-                        <input type="text" id="brand-text-text" class="form-input" value="#1e293b" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-text').value = this.value" />
+                        <input type="text" id="brand-text-text" class="form-input" value="#23201A" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-text').value = this.value" />
                     </div>
                 </div>
 
@@ -774,19 +774,20 @@
                     <div class="form-group">
                         <label class="form-label">Heading Font</label>
                         <select id="brand-font-heading" class="form-select" style="font-size:13px;">
+                            <option value="Newsreader">Newsreader</option>
+                            <option value="Lora">Lora</option>
+                            <option value="Instrument Sans">Instrument Sans</option>
                             <option value="Inter">Inter</option>
-                            <option value="Outfit">Outfit</option>
-                            <option value="Roboto">Roboto</option>
                             <option value="Georgia">Georgia</option>
-                            <option value="JetBrains Mono">JetBrains Mono</option>
+                            <option value="Martian Mono">Martian Mono</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Body Font</label>
                         <select id="brand-font-body" class="form-select" style="font-size:13px;">
+                            <option value="Instrument Sans">Instrument Sans</option>
                             <option value="Inter">Inter</option>
-                            <option value="Outfit">Outfit</option>
-                            <option value="Roboto">Roboto</option>
+                            <option value="Newsreader">Newsreader</option>
                             <option value="Georgia">Georgia</option>
                             <option value="Arial">Arial</option>
                         </select>
@@ -899,7 +900,7 @@
 <!-- Floating Canon Navigator Button -->
 <div id="navigator-launcher" style="position:fixed;bottom:24px;right:24px;z-index:50;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);border-radius:50%;width:54px;height:54px;background:var(--primary);border:2px solid var(--border);"
      onclick="toggleNavigator()">
-    <span style="color:white;font-size:20px;font-weight:700;font-family:Georgia,'Times New Roman',serif;">M</span>
+    <span style="color:#fff;font-size:22px;line-height:1;">✦</span>
 </div>
 
 <!-- Sliding Chat Panel (hidden by default) -->
@@ -907,7 +908,7 @@
     
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);background:var(--bg-2);border-radius:12px 12px 0 0;">
-        <h3 style="font-weight:700;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:var(--text);">Canon Navigator</h3>
+        <h3 style="font-weight:700;font-family:var(--font-display);font-size:14px;color:var(--text);">Canon Navigator</h3>
         <button style="font-size:13px;background:none;border:none;cursor:pointer;color:var(--text-3);padding:0;" onclick="toggleNavigator()">✕</button>
     </div>
 
@@ -1220,7 +1221,7 @@
                             <div style="font-size:11px;color:var(--text-3);">
                                 ${esc(a.domain_name)} · ${new Date(a.created_at).toLocaleDateString()}
                                 ${a.alignment_score !== undefined && a.alignment_score !== null ? 
-                                  `<span style="margin-left:6px;padding:1px 5px;border-radius:4px;background:${a.alignment_score >= 80 ? 'var(--success-dim)' : a.alignment_score >= 60 ? 'rgba(245,158,11,.15)' : 'rgba(239,68,68,.15)'};color:${a.alignment_score >= 80 ? 'var(--success)' : a.alignment_score >= 60 ? 'var(--warning)' : 'var(--danger)'};">Align: ${a.alignment_score}</span>` : ''}
+                                  `<span style="margin-left:6px;padding:1px 5px;border-radius:4px;background:${a.alignment_score >= 80 ? 'var(--success-dim)' : a.alignment_score >= 60 ? 'var(--warn-dim)' : 'var(--danger-dim)'};color:${a.alignment_score >= 80 ? 'var(--success)' : a.alignment_score >= 60 ? 'var(--warning)' : 'var(--danger)'};">Align: ${a.alignment_score}</span>` : ''}
                             </div>
                         </div>
                     </div>`).join('');
@@ -1264,15 +1265,16 @@
 
     // ── Domain detail ─────────────────────────────────────────────────────────────
 
+    // ATLAS palette — muted, inky hues only (no neon, no purple)
     const SECTION_META = {
-        headline:     { label:'Headline',     color:'#6366f1', bg:'rgba(99,102,241,.12)' },
-        subhead:      { label:'Subhead',      color:'#8b5cf6', bg:'rgba(139,92,246,.12)' },
-        benefit:      { label:'Benefit',      color:'#10b981', bg:'rgba(16,185,129,.12)' },
-        use_case:     { label:'Use Case',     color:'#06b6d4', bg:'rgba(6,182,212,.12)' },
-        proof_point:  { label:'Proof Point',  color:'#3b82f6', bg:'rgba(59,130,246,.12)' },
-        objection:    { label:'Objection',    color:'#ef4444', bg:'rgba(239,68,68,.12)' },
-        social_proof: { label:'Social Proof', color:'#f59e0b', bg:'rgba(245,158,11,.12)' },
-        positioning:  { label:'Positioning',  color:'#64748b', bg:'rgba(100,116,139,.12)' },
+        headline:     { label:'Headline',     color:'#3E4E80', bg:'rgba(62,78,128,.10)' },
+        subhead:      { label:'Subhead',      color:'#5E6E8A', bg:'rgba(94,110,138,.10)' },
+        benefit:      { label:'Benefit',      color:'#56673F', bg:'rgba(86,103,63,.10)' },
+        use_case:     { label:'Use Case',     color:'#4E6E6A', bg:'rgba(78,110,106,.10)' },
+        proof_point:  { label:'Proof Point',  color:'#2F3D68', bg:'rgba(47,61,104,.10)' },
+        objection:    { label:'Objection',    color:'#9E3B2E', bg:'rgba(158,59,46,.10)' },
+        social_proof: { label:'Social Proof', color:'#8A6A1F', bg:'rgba(138,106,31,.10)' },
+        positioning:  { label:'Positioning',  color:'#9C947F', bg:'rgba(156,148,127,.10)' },
     };
     const SECTION_ORDER = ['headline','subhead','benefit','use_case','proof_point','objection','social_proof','positioning'];
 
@@ -1414,7 +1416,7 @@
             .concat(Object.keys(grouped).filter(s=>!SECTION_ORDER.includes(s)&&grouped[s]?.length));
         if (!sections.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No entries yet. Add one above or use Bulk Import.</div>';
         return sections.map(st => {
-            const meta = SECTION_META[st]||{label:st.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),color:'#64748b',bg:'rgba(100,116,139,.1)'};
+            const meta = SECTION_META[st]||{label:st.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),color:'#9C947F',bg:'rgba(156,148,127,.10)'};
             const msgs = grouped[st]||[];
             return `<div class="card" style="margin-bottom:12px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
@@ -1439,7 +1441,7 @@
         if (!entries.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No entries yet. Add one above or use Bulk Import.</div>';
         return entries.map(([pid, p]) => {
             const msgs = p.entries || [];
-            const color = pid === 'ungrouped' ? '#94a3b8' : 'var(--primary)';
+            const color = pid === 'ungrouped' ? 'var(--text-3)' : 'var(--primary)';
             return `<div class="card" style="margin-bottom:12px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
                     <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;"></span>
@@ -1814,8 +1816,8 @@
             const badge = document.getElementById('scoring-overall-badge');
             badge.textContent = `Score: ${data.overall_score}/100`;
             if (data.overall_score >= 80) { badge.style.background = 'var(--success-dim)'; badge.style.color = 'var(--success)'; }
-            else if (data.overall_score >= 60) { badge.style.background = 'rgba(245,158,11,.15)'; badge.style.color = 'var(--warning)'; }
-            else { badge.style.background = 'rgba(239,68,68,.15)'; badge.style.color = 'var(--danger)'; }
+            else if (data.overall_score >= 60) { badge.style.background = 'var(--warn-dim)'; badge.style.color = 'var(--warning)'; }
+            else { badge.style.background = 'var(--danger-dim)'; badge.style.color = 'var(--danger)'; }
             
             document.getElementById('scoring-summary').textContent = data.summary;
             
@@ -1989,7 +1991,7 @@
             statusBadgeText = 'Draft';
             transitionButtons = `<button class="btn btn-ghost btn-sm" onclick="updateArtifactStatus('${artId}', 'internal_review')">Submit for Review</button>`;
         } else if (currentStatus === 'internal_review') {
-            statusBadgeColor = 'rgba(245,158,11,.15)';
+            statusBadgeColor = 'var(--warn-dim)';
             statusBadgeText = 'Internal Review';
             transitionButtons = `
                 <button class="btn btn-ghost btn-sm" style="color:var(--success);border-color:var(--success);margin-right:4px;" onclick="updateArtifactStatus('${artId}', 'approved')">✓ Approve</button>
@@ -2010,7 +2012,7 @@
                         ${[1,2,3,4,5].map(star => `
                             <button onclick="rateArtifact('${artId}', ${star}, this)" 
                                     style="background:none;border:none;color:var(--text-3);font-size:18px;cursor:pointer;padding:0;transition:color .1s;"
-                                    onmouseenter="this.style.color='#f59e0b'" onmouseleave="this.style.color=''">★</button>
+                                    onmouseenter="this.style.color='var(--warn)'" onmouseleave="this.style.color=''">★</button>
                         `).join('')}
                     </div>
                 </div>
@@ -2053,7 +2055,7 @@
             const parent = btn.parentNode;
             const buttons = Array.from(parent.children);
             buttons.forEach((b, idx) => {
-                b.style.color = idx < stars ? '#f59e0b' : 'var(--text-3)';
+                b.style.color = idx < stars ? 'var(--warn)' : 'var(--text-3)';
             });
         } catch(e) {
             toast('Failed to rate: ' + e.message, 'error');
@@ -2448,7 +2450,7 @@
         }
         const sections = SECTION_ORDER.filter(s=>grouped[s]?.length).concat(Object.keys(grouped).filter(s=>!SECTION_ORDER.includes(s)&&grouped[s]?.length));
         sectionsEl.innerHTML = sections.map(st => {
-            const meta = SECTION_META[st]||{label:st,color:'#64748b',bg:'rgba(100,116,139,.1)'};
+            const meta = SECTION_META[st]||{label:st,color:'#9C947F',bg:'rgba(156,148,127,.10)'};
             const items = (grouped[st]||[]).map(m=>`<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px;color:var(--text-2);line-height:1.5;">${esc(m.content)}</div>`).join('');
             return `<div style="margin-bottom:12px;padding:12px;background:${meta.bg};border-radius:var(--radius);">
                 <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:8px;">${meta.label} (${(grouped[st]||[]).length})</div>
@@ -2655,14 +2657,15 @@
     });
 
 const NODE_COLORS = {
-        GroundingDocument: '#7c6af7',
-        MessagingPillar:   '#f97316',
-        GroundingChunk:    '#34d399',
-        Persona:           '#60a5fa',
-        Channel:           '#f472b6',
-        PainPoint:         '#ef4444',
-        BuyingTrigger:     '#22c55e',
-        Objection:         '#fb923c',
+        // ATLAS constellation palette — muted atlas-family inks
+        GroundingDocument: '#3E4E80',
+        MessagingPillar:   '#8A6A1F',
+        GroundingChunk:    '#56673F',
+        Persona:           '#5E6E8A',
+        Channel:           '#4E6E6A',
+        PainPoint:         '#9E3B2E',
+        BuyingTrigger:     '#6B7F4F',
+        Objection:         '#B07A3E',
     };
     const NODE_SIZES = {
         GroundingDocument: 42,
@@ -2675,10 +2678,10 @@ const NODE_COLORS = {
         Objection:         14,
     };
     const REL_COLORS = {
-        CONTAINS:   '#555577',
-        TARGETS:    '#7c6af7',
-        ADDRESSES:  '#06b6d4',
-        APPLIES_TO: '#34d399',
+        CONTAINS:   '#9C947F',
+        TARGETS:    '#3E4E80',
+        ADDRESSES:  '#4E6E6A',
+        APPLIES_TO: '#56673F',
     };
 
     async function loadGraphExplorer() {
@@ -3067,27 +3070,28 @@ const NODE_COLORS = {
     // ── v0.7: Entry Status ─────────────────────────────────────────────────────────
 
     const MSG_STATUS_META = {
-        draft:      { label: 'Draft',       color: 'var(--text-3)',   bg: 'var(--bg-3)' },
-        in_review:  { label: 'In Review',   color: '#f59e0b',         bg: 'rgba(245,158,11,.12)' },
-        approved:   { label: 'Approved',    color: 'var(--success)',  bg: 'var(--success-dim)' },
-        locked:     { label: 'Locked',      color: '#6366f1',         bg: 'rgba(99,102,241,.12)' },
-        outdated:   { label: 'Outdated',    color: 'var(--danger)',   bg: 'rgba(239,68,68,.12)' },
+        draft:      { label: 'DRAFT',       color: 'var(--text-3)',   bg: 'rgba(156,148,127,.10)', border: 'var(--border)' },
+        in_review:  { label: 'IN REVIEW',   color: 'var(--warn)',     bg: 'var(--warn-dim)',       border: 'rgba(138,106,31,.35)' },
+        approved:   { label: 'APPROVED',    color: 'var(--success)',  bg: 'var(--success-dim)',    border: 'rgba(86,103,63,.35)' },
+        locked:     { label: 'LOCKED ✦',    color: 'var(--ember)',    bg: 'var(--ember-dim)',      border: 'rgba(232,118,58,.45)' },
+        outdated:   { label: 'OUTDATED',    color: 'var(--danger)',   bg: 'var(--danger-dim)',     border: 'rgba(158,59,46,.35)' },
     };
 
     function msgStatusBadge(status) {
         const m = MSG_STATUS_META[status] || MSG_STATUS_META.draft;
-        return `<span style="font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:20px;background:${m.bg};color:${m.color};">${m.label}</span>`;
+        return `<span style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:6px;border:1px solid ${m.border};background:${m.bg};color:${m.color};">${m.label}</span>`;
     }
 
     function tierBadge(tier) {
+        // ATLAS stamp grammar — ember marks LOCKED only; atlas blue for structured; draft-gray for grounded
         const tiers = {
-            'tier_1_locked':    {label:'T1 Locked',    color:'#7c3aed', bg:'rgba(124,58,237,.12)'},
-            'tier_2_structured':{label:'T2 Structured', color:'#2563eb', bg:'rgba(37,99,235,.12)'},
-            'tier_3_grounded':  {label:'T3 Grounded',  color:'#059669', bg:'rgba(5,150,105,.12)'},
+            'tier_1_locked':    {label:'T1 LOCKED ✦',    cls:'badge-locked'},
+            'tier_2_structured':{label:'T2 STRUCTURED',  cls:'badge-active'},
+            'tier_3_grounded':  {label:'T3 GROUNDED',    cls:'badge-draft'},
         };
         const m = tiers[tier];
         if (!m) return '';
-        return `<span style="font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:20px;background:${m.bg};color:${m.color};">${m.label}</span>`;
+        return `<span class="${m.cls}">${m.label}</span>`;
     }
 
     function tierSelect(value) {
@@ -3210,9 +3214,9 @@ const NODE_COLORS = {
 
     function _heatColor(times) {
         if (times === 0) return 'var(--text-3)';
-        if (times < 3)  return '#f59e0b';
-        if (times < 8)  return '#10b981';
-        return '#6366f1';
+        if (times < 3)  return '#8A6A1F';
+        if (times < 8)  return '#56673F';
+        return '#3E4E80';
     }
 
     // Override _renderGrouped to add status badges + heatmap
@@ -3241,7 +3245,7 @@ const NODE_COLORS = {
         </div>`;
 
         const msgCards = sections.map(st => {
-            const meta = SECTION_META[st] || { label: st.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), color:'#64748b', bg:'rgba(100,116,139,.1)' };
+            const meta = SECTION_META[st] || { label: st.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), color:'#9C947F', bg:'rgba(156,148,127,.10)' };
             const msgs = grouped[st] || [];
             return `<div class="card msg-section" data-section="${st}" style="margin-bottom:12px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
@@ -3277,7 +3281,7 @@ const NODE_COLORS = {
                                 : ''}
                             ${status === 'approved'
                                 ? `<button onclick="setMsgStatus('${m.id}','locked',this)" title="Lock"
-                                    style="padding:2px 8px;background:rgba(99,102,241,.12);color:#6366f1;border:none;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;">🔒</button>`
+                                    style="padding:2px 8px;background:var(--ember-dim);color:var(--ember);border:none;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;">🔒</button>`
                                 : ''}
                             ${status === 'locked'
                                 ? `<button onclick="setMsgStatus('${m.id}','approved',this)" title="Unlock"
@@ -3337,11 +3341,11 @@ const NODE_COLORS = {
 
     function stalenessBadge(domain) {
         if (!domain.last_reviewed) {
-            return `<span title="Never reviewed" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b;">⚠ Needs Review</span>`;
+            return `<span title="Never reviewed" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--warn-dim);color:var(--warn);">⚠ Needs Review</span>`;
         }
         const days = Math.floor((Date.now() - new Date(domain.last_reviewed).getTime()) / 86400000);
         if (days > 90) {
-            return `<span title="Last reviewed ${days} days ago" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b;">⚠ ${days}d old</span>`;
+            return `<span title="Last reviewed ${days} days ago" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--warn-dim);color:var(--warn);">⚠ ${days}d old</span>`;
         }
         return `<span title="Reviewed ${days} days ago" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--success-dim);color:var(--success);">✓ Reviewed</span>`;
     }
@@ -3438,7 +3442,7 @@ const NODE_COLORS = {
                         <span>${h.entry_count} Entries</span>
                         <span>${h.persona_count} Personas</span>
                         <span style="margin-left:auto;color:${h.completeness_score>=75?'var(--success)':h.completeness_score>=50?'var(--warn)':'var(--text-3)'};">${h.completeness_score}%</span>
-                        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:#f59e0b;" onclick="markDomainReviewed('${h.id}',event)">Mark Reviewed</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--warn);" onclick="markDomainReviewed('${h.id}',event)">Mark Reviewed</button>
                         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--danger);" onclick="event.stopPropagation();deleteDomain('${h.id}')">Delete</button>
                     </div>
                 </div>`;
@@ -3475,7 +3479,7 @@ const NODE_COLORS = {
                         <td style="padding:7px 10px;color:var(--text-2);">${esc(ch.description || '—')}</td>
                         <td style="padding:7px 10px;color:var(--text-3);">${ch.entry_count ?? '—'}</td>
                         <td style="padding:7px 10px;">
-                            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${ch.is_custom?'rgba(99,102,241,.12)':'var(--bg-3)'};color:${ch.is_custom?'#6366f1':'var(--text-3)'};">
+                            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${ch.is_custom?'var(--primary-dim)':'var(--bg-3)'};color:${ch.is_custom?'var(--primary)':'var(--text-3)'};">
                                 ${ch.is_custom ? 'Custom' : 'Built-in'}
                             </span>
                         </td>

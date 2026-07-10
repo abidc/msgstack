@@ -448,14 +448,15 @@ class ChunkUsageStat(BaseModel):
 
 
 class BrandSettings(BaseModel):
+    # Defaults follow the ATLAS design system (ink on paper, atlas-blue accent)
     workspace_id: str
-    primary_color: str = "#1e293b"
-    secondary_color: str = "#3b82f6"
-    accent_color: str = "#f59e0b"
-    background_color: str = "#ffffff"
-    text_color: str = "#1e293b"
-    font_heading: str = "Inter"
-    font_body: str = "Inter"
+    primary_color: str = "#3E4E80"
+    secondary_color: str = "#EFEADD"
+    accent_color: str = "#C05A1E"
+    background_color: str = "#F6F3EA"
+    text_color: str = "#23201A"
+    font_heading: str = "Newsreader"
+    font_body: str = "Instrument Sans"
     logo_path: str | None = None
 
 
