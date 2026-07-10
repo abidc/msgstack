@@ -14,7 +14,7 @@ MsgStack MCP is a dual-protocol server: it exposes an **MCP (Model Context Proto
 │                                                                         │
 │   PathRouter (ASGI)                                                     │
 │   ├── /mcp*  ──────────────────────► FastMCP Server (server.py)        │
-│   │                                   15 tools over streamable-HTTP     │
+│   │                                   30 tools over streamable-HTTP     │
 │   │                                   (Grounded in Canon Domains)       │
 │   └── /*     ──────────────────────► FastAPI App (web_app.py)          │
 │                                        REST API + Jinja2 frontend       │
@@ -41,7 +41,7 @@ Both apps share the same OS process and Python interpreter, so they share the mo
 
 ### 2. MCP Server — `src/server.py`
 
-Built on **FastMCP 3.x** using the `streamable-http` transport. Exposes 15 tools to any MCP-capable AI client (Claude Desktop, Claude Code, custom agents).
+Built on **FastMCP 3.x** using the `streamable-http` transport. Exposes 30 tools (20 canonical + 10 deprecated aliases) to any MCP-capable AI client (Claude Desktop, Claude Code, custom agents).
 
 **Tools by category:**
 
@@ -603,7 +603,7 @@ graph TB
 
     subgraph PROCESS["Process: run_server.py · port 8001"]
         ROUTER["PathRouter\n(ASGI middleware)"]
-        FASTMCP["FastMCP Server\n/mcp — 15 tools"]
+        FASTMCP["FastMCP Server\n/mcp — 30 tools"]
         FASTAPI["FastAPI App\n/api/* — REST + SPA"]
         RATELIMIT["Rate Limiter\n(sliding window)"]
         AUTH["Auth\n(API key · scopes)"]
@@ -674,7 +674,7 @@ One box: "Cloudflare Tunnel · mcp.abidc.dev" with an orange cloud icon.
 
 LAYER 3 — SERVER PROCESS (white background with dark border, labeled "run_server.py · port 8001"):
 PathRouter box on the left splitting into two branches:
-- Left branch: "FastMCP Server" box labeled "/mcp · 15 tools" with a purple accent
+- Left branch: "FastMCP Server" box labeled "/mcp · 30 tools" with an atlas-blue accent
 - Right branch: "FastAPI App" box labeled "/api/* REST + SPA" with a teal accent
 Below both, three small boxes: "Rate Limiter", "Auth (API Keys)", "Metrics"
 
