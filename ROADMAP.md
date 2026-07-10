@@ -352,6 +352,39 @@ The core governance capability. Evaluates any piece of content against the struc
 ### Temporary Message Layer
 - [ ] **Leadership Message Overlay:** Support injecting a high-priority "temporary layer" message above the canon for a defined timeframe (without permanently modifying database records)
 
+### Content Tiering (Generation Contract)
+Lifecycle status says whether an entry is ready; tier says how an LLM may use it. Orthogonal to `Draft`/`Approved`/`Locked` — the per-entry contract that makes "verbatim means verbatim" enforceable.
+
+- [ ] **`tier` field on Canon Entries:** `tier_1_locked` (verbatim, no paraphrase) | `tier_2_structured` (substance preserved, phrasing adaptable) | `tier_3_grounded` (spirit and tone, full latitude)
+- [ ] **Tier enforcement in generation:** `generate_artifact` grounding block carries per-entry tier directives; Tier 1 entries injected with an explicit reproduce-verbatim instruction and validated post-generation
+- [ ] **Tier-aware retrieval routing:** Tier 1 always served via graph traversal (deterministic), never vector nearest-neighbor; Tier 2 hybrid; Tier 3 vector
+- [ ] **Tier tagging gate:** entries cannot transition to `Approved` without a tier assignment (validated at promotion)
+- [ ] **Alignment integration:** a paraphrased Tier 1 entry classifies as a hard conflict in alignment scoring
+- [ ] **Tier tagging UI:** tier selector on entry editor + bulk tier assignment; tier badge in entry lists and grounding results
+
+### Content SLA & Freshness Triggers
+Replaces the static 90-day staleness flag with a per-domain operational contract for freshness.
+
+- [ ] **Per-domain review cadence config:** each domain declares its own review interval (quarterly positioning, per-release competitive claims, etc.)
+- [ ] **Trigger events API:** register events (product release, competitive move, market shift) via API/webhook that open an SLA review window on affected domains regardless of cadence
+- [ ] **SLA-breach notifications:** review window closes without a review → domain owner and DRIs notified, domain flagged `needs_review`
+- [ ] **SLA dashboard:** admin view of every domain's SLA state (in-window / due / breached) with last-reviewed dates and open trigger events
+
+### DRI Ownership
+- [ ] **`dri` field on Canon Entries and Domains:** the named person accountable for a claim — distinct from `approved_by`
+- [ ] **Ownership transfer flow:** reassign DRI on team changes with a logged transfer event
+- [ ] **Accountability view:** dashboard of entries/domains per DRI, surfacing unowned entries and SLA state per owner
+
+### Dual Output — Citation-Marked Review Copy
+- [ ] **Two renditions per generated artifact:** a review copy with inline chunk-level citations (source entry, source doc, tier, DRI, last-reviewed date) and a clean deliverable with no citation clutter
+- [ ] **Linked citations:** each citation in the review copy links to the canon entry in the admin UI
+- [ ] **Reviewer workflow:** review copy is the artifact reviewers validate before the clean deliverable ships
+
+### Query Audit Log
+- [ ] **Retrieval-side audit:** log every grounding query (MCP + web) — caller identity, query text, entry IDs returned, confidence scores, timestamp
+- [ ] **Admin audit view:** filterable log with export
+- [ ] **Downstream feeds:** audit log powers acceptance-signal analytics (v1.3) and identity-scoped retrieval auditing (v1.0)
+
 ---
 
 ## v1.0 — Cross-Department Canon & Dependency Graphs
@@ -375,6 +408,29 @@ The core governance capability. Evaluates any piece of content against the struc
 - [ ] **`INFORMS` / `DEPENDS_ON` Edges:** Define explicit graph relationships between different canon domains (e.g., Product Specifications `INFORMS` Product Marketing Messaging, which `INFORMS` Sales Objection Handlers, which `INFORMS` Legal Disclosures).
 - [ ] **Cascade Drift Detection:** When a parent canon entry is updated, all downstream messaging and generated battlecards are automatically flagged as "Outdated" and trigger alerts to respective owners.
 
+### Content CI/CD Promotion Pipeline
+Treat canon promotion like a code merge. Wires the existing approval workflow, completeness scoring, index refresh, and review trail into one gated pipeline.
+
+- [ ] **Stage 1 — Validate:** automated checks on Draft→Approved promotion: schema compliance, tier tagging present, required metadata (DRI, section type, personas) complete. Failed validation blocks promotion and returns a structured error to the owner.
+- [ ] **Stage 2 — Test:** golden query dataset runs against the updated content; retrieval precision/recall measured against baseline; below-threshold scores block promotion
+- [ ] **Stage 3 — Merge:** content passes → status transitions, vector + graph index update within the sync window
+- [ ] **Stage 4 — Propagate:** downstream propagation signal to all bindings, artifacts, and dependent domains referencing the updated content
+- [ ] **Stage 5 — Audit:** promotion event logged — owner, timestamp, entry, validation results, alignment score delta, downstream consumers notified
+
+### Golden Query Dataset & Retrieval Benchmarking
+- [ ] **Per-domain golden query set:** curated benchmark queries with expected results (target 100+ per major domain)
+- [ ] **Baseline measurement:** precision/recall snapshot per domain; re-run on every index update
+- [ ] **Corpus health monitoring:** aggregate score trends per domain; degrading scores trigger a domain owner review
+- [ ] **CI/CD integration:** the golden set is the test stage of the promotion pipeline
+
+### Identity-Scoped Retrieval (pulled forward from v1.6)
+Embargoed or pre-announcement content must never surface outside its authorized audience — workspace API keys are not enough for cross-department canon.
+
+- [ ] **SSO / OIDC login:** SAML/OIDC (Google, Okta, Azure AD) — moved up from v1.6 Auth & Identity
+- [ ] **Per-user retrieval scoping:** grounding queries filter results by the caller's `ElementPermission` grants (role, department, segment)
+- [ ] **Embargo scoping:** entries/domains flaggable as restricted-audience; excluded from retrieval, search, and generation for unauthorized users
+- [ ] **Scoped MCP identity:** MCP sessions carry user identity so per-user scoping applies to AI-client queries, not just the web UI
+
 ---
 
 ## v1.1 — Ingestion Expansion & Templates
@@ -382,6 +438,10 @@ The core governance capability. Evaluates any piece of content against the struc
 **Goal:** Broaden ingestion capabilities, expand templates, and integrate competitive market data to sharpen grounding.
 
 - [ ] **Decks, Spreadsheets, & Rich Format Ingestion:** Ingestion adapters for PowerPoint (.pptx), Excel (.xlsx), audio transcripts, voice memos, and unstructured notes.
+- [ ] **Render-Mode Tagging:** Ingested assets (slides, quotes, compliance-approved blocks) tagged `render_whole` (insert verbatim exactly as authored) or `read_as_content` (parse as structured input for generation). Complements Tier 1 for legally-reviewed visual assets.
+- [ ] **Industry/Segment Variant Dimension:** `industry` tag on canon entries and personas as a first-class variant axis (persona × channel × industry); retrieval filters and variant selection honor it.
+- [ ] **Deck Indexing & Presentation Assembly:** Index existing approved decks (not just generate new ones); surface relevant slides on query; presentation assembly skill structures a new deck outline from approved slides + canon entries.
+- [ ] **Audio/Video Indexing:** Segment classification at ingest (keynote, demo, testimonial); timestamped moment retrieval so queries surface the relevant clip, not the whole transcript.
 - [ ] **Ingestion Conflict Detection:** Scan uploaded files and flag contradictions against existing canon elements before committing changes.
 - [ ] **50+ Pre-built Deliverable Templates:** Derive templates from real client work (CEO keynotes, sales decks, battlecards, press releases, investor updates, product messaging frameworks, etc.).
 - [ ] **Competitor document import:** Upload competitor docs → extraction pipeline extracts claims into a `competitive_brief` domain
@@ -419,16 +479,20 @@ The core governance capability. Evaluates any piece of content against the struc
 - [ ] **Canon Navigator:** Conversation-first dashboard super agent to query changes, review narrative drifts, and request summaries ("what changed recently and how does it affect my work?").
 - [ ] **Recommendation Routing:** Agent analyses of incoming material suggesting where it fits in the canon, what downstream deliverables are affected, and highlighting contradiction conflicts (supporting auto-accept or manual confirmation toggles).
 - [ ] **Proactive Human-in-the-Loop Governance:** Integration points prompting review at appropriate gates.
+- [ ] **Intent-Based Routing & Model Selection:** Classify query intent and route to the appropriate model tier (cheap model for simple retrieval, strong model for synthesis/generation) and the right skill or skill chain — removes model and skill selection burden from the user. Pairs with the multi-LLM backlog item.
 
 ### Custom Controls & Brief Builder
 - [ ] **Tonal Slider Controls:** Adjust tone register (e.g. formal IR presentation vs. conversational social post) while staying within brand voice boundaries.
 - [ ] **Controlled Vocabulary Filters:** Avoid competitor-associated phrasing, and flag or filter out banned terms in deliverables.
 - [ ] **Brief Builder Interface:** Build context inputs directly into deliverable creation wizard to guide LLM assembly.
 - [ ] **Source Annotations:** Automatically tag generated deliverables with source citations mapping directly back to specific grounded canon entries.
+- [ ] **Localization Skill:** Adapt generated output for regional markets — tone, cultural references, market context — with the brand voice check running as a QA gate on the localized output.
 
 ### Content Analytics
 - [ ] **Canon usage heatmap:** Which canon entries appear most in generated artifacts to prune dead content
 - [ ] **Artifact engagement:** Views, downloads, and shares of hosted links
+- [ ] **Acceptance Signals:** Capture saved / exported / published events per generated artifact as explicit acceptance telemetry
+- [ ] **Value Reporting:** Periodic report from acceptance telemetry + query audit log — executions per skill, acceptance rate, estimated hours saved (hours saved × executions × acceptance rate × blended rate)
 
 ---
 
@@ -480,7 +544,7 @@ The core governance capability. Evaluates any piece of content against the struc
 - [ ] **Confluence connector** — Watch a Confluence space for source documents
 
 ### Auth & Identity
-- [ ] **SSO integration** — SAML/OIDC (Google, Okta, Azure AD)
+- ~~**SSO integration** — SAML/OIDC (Google, Okta, Azure AD)~~ → **Moved to v1.0** (Identity-Scoped Retrieval)
 
 ### Advanced Search & Governance
 - [ ] **Cross-domain search** — "What do all our product teams say about security?"

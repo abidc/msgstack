@@ -53,6 +53,12 @@ To establish a clear, structured framework for enterprise AI grounding, the plat
 - **Alignment Score:** A quantitative metric (0–100%) computed by the alignment engine to evaluate how closely a given block of text (or external draft) maps to approved Canon Entries, highlighting contradictions or missing proof points.
 - **Provenance:** The verifiable metadata trace mapping any derived output or generated snippet directly back to the specific Canon Entries and source documents that grounded it.
 - **Status & Review Trail:** The complete audit logs and lifecycle states (`Draft` | `In Review` | `Approved` | `Outdated` | `Locked`) that document the governance history of every entry and domain.
+- **Content Tier:** A per-entry generation contract, orthogonal to lifecycle status, defining how much latitude an LLM has with the entry: *Tier 1 — Locked* (used verbatim, no paraphrasing; served via deterministic graph retrieval), *Tier 2 — Structured* (substance and positioning preserved, phrasing adaptable), *Tier 3 — Grounded* (direction and tone consistent with canon, full phrasing latitude).
+- **DRI (Directly Responsible Individual):** The named person accountable for a specific canon entry or domain — distinct from the approver. Every claim, proof point, and positioning statement has a DRI; ownership is trackable and transferable when team structures change.
+- **Content SLA:** The per-domain operational contract for freshness: a defined review cadence plus trigger events (product release, competitive move, market shift) that open a review window. Missing the window fires a breach notification to the domain owner.
+- **Golden Query Dataset:** A curated per-domain set of benchmark queries with expected results, used to measure retrieval precision/recall over time, catch corpus drift, and gate content promotion in the CI/CD pipeline.
+- **Content CI/CD Pipeline:** Treats canon promotion like a code merge — automated validation (schema, tier tagging, metadata completeness) → retrieval regression test against the golden dataset → index update → downstream propagation signal → audit entry. Failed validation blocks promotion.
+- **Acceptance Signal:** A telemetry event capturing that a generated output was saved, exported, or published — the input to value reporting (hours saved × executions × acceptance rate).
 
 ---
 
@@ -341,6 +347,41 @@ The `get_entry_history(entry_id)` MCP tool exposes the full audit trail for a Ca
 - Content changes across updates
 - Who or what triggered each change (when provenance is recorded)
 
+### 4.9 Content Tiering (Planned — v0.9)
+
+Lifecycle status answers "is this entry ready?" — tier answers "how may an LLM use it?" The two are orthogonal: an `Approved` entry can be any tier.
+
+| Tier | Label | Generation Contract | Retrieval Path |
+|------|-------|--------------------|----------------|
+| Tier 1 | Locked / Verbatim | Returned and used exactly as written. No paraphrasing, no approximation. | Graph traversal only — deterministic, never nearest-neighbor |
+| Tier 2 | Structured / Guided | Substance and positioning preserved; phrasing adaptable to context. | Hybrid (vector + graph) |
+| Tier 3 | Grounded / Flexible | Direction and tone consistent with the canon; full phrasing latitude. | Vector |
+
+**Enforcement points:**
+- `tier` field on every Canon Entry; tier tagging required before an entry can transition to `Approved` (validated at promotion).
+- `generate_artifact` grounding block carries per-entry tier instructions — Tier 1 entries are injected with an explicit "reproduce verbatim" directive and validated post-generation.
+- Tier 1 retrieval always routes through the knowledge graph, bypassing vector approximation entirely.
+- Alignment scoring treats a paraphrased Tier 1 entry as a hard conflict.
+
+### 4.10 Content SLA & Freshness Triggers (Planned — v0.9)
+
+Replaces the static 90-day staleness flag with a per-domain operational contract:
+
+- **Review cadence:** Each domain declares its own review interval (e.g., quarterly for positioning, per-release for competitive claims).
+- **Trigger events:** An API/webhook registers events — product release, competitive move, market shift — that open an SLA review window on affected domains regardless of cadence.
+- **Breach notifications:** When a window closes without review, the domain owner and DRIs are notified and the domain is flagged `needs_review`.
+- **SLA dashboard:** Admin view of every domain's SLA state — in-window, due, breached — with last-reviewed dates and open trigger events.
+
+### 4.11 Dual Output — Citation-Marked Review Copy (Planned — v0.9)
+
+Every generated artifact is produced in two renditions:
+- **Review copy:** Inline chunk-level citations — source canon entry, source document, tier, DRI, last-reviewed date — linked back to the entry in the admin UI. This is what a reviewer validates before publishing.
+- **Clean deliverable:** The same content with no citation clutter, ready to ship.
+
+### 4.12 Query Audit Log (Planned — v0.9)
+
+Complements the per-entry review trail with retrieval-side accountability: every grounding query (MCP and web) is logged with the caller identity, query text, content returned (entry IDs), confidence scores, and timestamp. Admin-accessible view with filtering and export. This log also feeds acceptance-signal analytics and identity-scoped retrieval auditing.
+
 ---
 
 ## 5. Integration Points
@@ -424,6 +465,11 @@ A generated artifact is considered "grounded" if:
 - Deliverable custom inputs: brand voice tonal sliders and controlled vocabulary checks.
 - Temporary priority messaging layer.
 - "Gold Standard" content designation.
+- Content Tiering: Tier 1 Locked / Tier 2 Structured / Tier 3 Grounded generation contract per entry, enforced in generation and retrieval routing (see §4.9).
+- Content SLA: per-domain review cadence, trigger-event review windows, breach notifications, SLA dashboard (see §4.10).
+- DRI Ownership: named accountable individual per entry and domain, with transfer flow and accountability view.
+- Dual Output: citation-marked review copy + clean deliverable on every generated artifact (see §4.11).
+- Query Audit Log: who queried, what was returned, when — admin-accessible with export (see §4.12).
 
 ### v1.0 — Cross-Department Canon & Dependency Graphs
 - Nested sub-canons with 4 inheritance relationship types.
@@ -431,8 +477,18 @@ A generated artifact is considered "grounded" if:
 - Product Canon: core specs, API rules, compliance schemas.
 - Domain Dependencies: Graph dependency tracking (`INFORMS` / `DEPENDS_ON`) and cascade drift updates.
 - Canon Health view for administrators.
+- Content CI/CD Pipeline: gated Draft→Approved promotion — validate → test (golden dataset) → merge → propagate → audit; failed validation blocks promotion.
+- Golden Query Dataset & Retrieval Benchmarking: per-domain benchmark queries, precision/recall baselines, corpus-health monitoring.
+- Identity-Scoped Retrieval: OIDC/SSO login with per-user retrieval scoping (pulled forward from v1.6) — embargoed/pre-announcement content never surfaces outside its authorized audience.
 
 ### v1.1 — Agentic Canon Navigation
 - Specialized functional agents (governance, brand voice, narrative structure).
 - Canon Navigator natural language dashboard assistant.
 - Ingestion upgrades: decks, spreadsheets, transcripts, voice memos, unstructured notes with placement recommendations.
+- Render-mode tagging on ingested assets: `render_whole` (insert verbatim as authored) vs `read_as_content` (parse as structured input).
+- Industry/segment as a first-class variant dimension on canon entries and personas (persona × channel × industry).
+- Deck indexing & presentation assembly: index existing approved decks, surface relevant slides on query, assemble new deck outlines from approved content.
+- Audio/video indexing: transcript segment classification at ingest, timestamped moment retrieval.
+- Intent-based routing & model selection: classify query intent, route to the appropriate model tier and skill (or skill chain) automatically.
+- Localization skill: adapt tone, cultural references, and market context for regional output, with brand-voice QA gate.
+- Value telemetry: acceptance signals (saved/exported/published) per artifact and value reporting (hours saved × executions × acceptance rate).
