@@ -8,7 +8,6 @@ os.environ.setdefault("PINECONE_API_KEY", "test-key")
 import pytest
 from src.models import CanonDomain, CanonEntry, SectionType, EntryStatus, DomainStatus, SearchFilters
 from src.store import Store
-from src.grounding.search import GroundingEngine
 
 
 @pytest.fixture
@@ -129,6 +128,7 @@ class TestFallbackSearch:
 
     @pytest.fixture
     def engine_with_entries(self, tmp_path, store, seeded_domain):
+        from src.grounding.search import GroundingEngine
         _create_entry(store, seeded_domain, "Approved headline", EntryStatus.APPROVED)
         _create_entry(store, seeded_domain, "Draft headline", EntryStatus.DRAFT, priority=2)
         _create_entry(store, seeded_domain, "Locked headline", EntryStatus.LOCKED, priority=3)
@@ -165,6 +165,7 @@ class TestRerank:
 
     @pytest.fixture
     def engine(self, tmp_path, store):
+        from src.grounding.search import GroundingEngine
         with patch("src.grounding.search.OpenAI"):
             engine = GroundingEngine.__new__(GroundingEngine)
             engine.store = store
@@ -200,16 +201,18 @@ class TestGetEntryHistory:
         from src.grounding.tools import get_entry_history
 
         entry = _create_entry(store, domain, "Test msg", EntryStatus.DRAFT)
+        store.update_entry_tier(str(entry.id), "tier_2_structured")
         store.update_entry_status(str(entry.id), "in_review", approved_by="reviewer")
         store.update_entry_status(str(entry.id), "approved", approved_by="approver")
 
         result = get_entry_history(str(entry.id))
         assert result["entry_id"] == str(entry.id)
         assert result["current_status"] == "approved"
-        assert result["count"] == 2
+        assert result["count"] == 3
         actions = [t["action"] for t in result["trail"]]
         assert "approved" in actions
         assert "in_review" in actions
+        assert "tier_update" in actions
 
     def test_get_entry_history_not_found(self, mcp_test_setup):
         from src.grounding.tools import get_entry_history
@@ -281,6 +284,7 @@ def mcp_test_setup(tmp_path):
         priority=1,
         content="Approved benefit",
         status=EntryStatus.APPROVED,
+        content_tier="tier_2_structured",
     )
     store.upsert_canon_entry(entry)
 

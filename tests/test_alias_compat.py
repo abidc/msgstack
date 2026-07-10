@@ -42,6 +42,7 @@ def test_setup(tmp_path):
         priority=1,
         content="Seed entry content",
         status=EntryStatus.APPROVED,
+        content_tier="tier_2_structured",
     )
     store.upsert_key_message(entry)
 
@@ -118,6 +119,12 @@ def test_canon_entries_endpoints_aliases(test_setup):
 
     resp_update_legacy = client.patch(f"/api/messages/{legacy_id}", json={"content": "Updated legacy content"})
     assert resp_update_legacy.status_code == 200
+
+    # Set tiers before approving (promotion gate requires content_tier)
+    resp_tier_canon = client.patch(f"/api/entries/{canon_id}/tier", json={"content_tier": "tier_2_structured"})
+    assert resp_tier_canon.status_code == 200
+    resp_tier_legacy = client.patch(f"/api/messages/{legacy_id}/tier", json={"content_tier": "tier_3_grounded"})
+    assert resp_tier_legacy.status_code == 200
 
     # Test PATCH status
     resp_status_canon = client.patch(f"/api/entries/{canon_id}/status", json={"status": "approved", "approved_by": "tester"})
