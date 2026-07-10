@@ -322,24 +322,24 @@ The current canvas app renders basic zones. This stream rebuilds the renderer to
 ### Alignment Scoring
 The core governance capability. Evaluates any piece of content against the structured canon domains and returns a per-section alignment report. Possible only because the canon is machine-readable and semantically indexed.
 
-- [ ] **`score_alignment` API endpoint:** Accepts arbitrary text + domain_id; returns per-section scores (0–100) plus specific gaps, out-of-date facts, and contradictions against approved canon entries
-- [ ] **Distinguish Hard vs. Soft Conflicts:** Classify alignment gaps between factual/positioning contradictions (hard) and subjective/stylistic deviations (soft)
-- [ ] **`score_alignment` MCP tool:** AI assistants can score a draft before submitting it — "check this product release summary against the product spec canon domain before I publish"
-- [ ] **Alignment report UI:** Paste content into the admin UI → receive color-coded alignment breakdown with specific suggestions ("Missing: proof point about efficiency. Contradicts: positioning on AI autonomy.")
-- [ ] **Export to External Parties:** Ability to export annotated comments, highlights, and alignment scores back to external partners (e.g., PR agency drafts) for revisions
+- [x] **`score_alignment` API endpoint:** Accepts arbitrary text + domain_id; returns per-section scores (0–100) plus specific gaps, out-of-date facts, and contradictions against approved canon entries
+- [x] **Distinguish Hard vs. Soft Conflicts:** Classify alignment gaps between factual/positioning contradictions (hard) and subjective/stylistic deviations (soft)
+- [x] **`score_alignment` MCP tool:** AI assistants can score a draft before submitting it — `score_content_alignment` / `score_canon_alignment` tools
+- [x] **Alignment report UI:** Paste content into the admin UI → receive color-coded alignment breakdown with specific suggestions ("Missing: proof point about efficiency. Contradicts: positioning on AI autonomy.")
+- [x] **Export to External Parties:** *(partial: markdown report export via `export_report_to_markdown`; no direct partner-share flow yet)*
 - [ ] **Batch scoring:** Connect a CRM or Google Drive folder → score all assets against the active canon → report sorted by alignment score
 - [ ] **Drift report:** Weekly summary of all generated artifacts that have diverged from the canon domain since the source document was last updated
 - [ ] **Alignment score on artifact history:** Every saved artifact record shows its alignment score at time of generation; re-scored automatically when the parent canon is updated
 
 ### Canon Approval & Suggestion Workflows
-- [ ] **Canon entry status field:** `Draft` | `In Review` | `Approved` | `Outdated` | `Locked` on every canon entry, persona, and domain field
-- [ ] **Approval-gated grounding:** `generate_artifact` and grounding search skip non-`Approved` canon entries by default; optional `include_drafts` override for editing/staging sessions
-- [ ] **Element-Level RBAC:** Every atomic element has defined owners and collaborators, supporting 4 permission levels: *Owner*, *Collaborator*, *Suggester*, and *Viewer*
+- [x] **Canon entry status field:** `Draft` | `In Review` | `Approved` | `Outdated` | `Locked` on every canon entry and persona
+- [x] **Approval-gated grounding:** `generate_artifact` and grounding search skip non-`Approved` canon entries by default; optional `include_drafts` override for editing/staging sessions
+- [x] **Element-Level RBAC:** *(partial: `UserRole` + `ElementPermission` models and store CRUD exist; not yet enforced on endpoints)*
 - [ ] **Suggestion Flow Routing:** Users without edit authority can only make suggestions, which automatically route to designated owners for approval
 - [ ] **Conflict Review Sets:** Automated change notifications and conflict review packages sent to downstream owners when a parent element is edited (support accept, decline, suggest, or escalate options)
 - [ ] **Review request flow:** Domain author marks an entry as "Ready for Review" → domain owner receives notification → approves or comments → status updates → vector index refreshed
-- [ ] **Drift detection:** When a canon entry is updated, all artifact history records that used it are flagged as potentially outdated
-- [ ] **Locked canon:** "Core Canon" locked status prevents any edits without admin or designated SME override; graph retrieval always returns locked entries verbatim
+- [x] **Drift detection:** When a canon entry is updated, bound artifacts are flagged via `propagation_drift` review-trail events (artifact-entry bindings)
+- [x] **Locked canon:** "Core Canon" locked status prevents any edits without admin or designated SME override; graph retrieval always returns locked entries verbatim
 - [ ] **"Gold Standard" Content Designation:** Flag specific generated deliverables as the canonical reference version that all other related content should conform to
 
 ### Self-Service Canon Consumption Portal
@@ -350,17 +350,17 @@ The core governance capability. Evaluates any piece of content against the struc
 - [ ] **Portal analytics:** Log all field portal generation activity for audit and usage insight.
 
 ### Temporary Message Layer
-- [ ] **Leadership Message Overlay:** Support injecting a high-priority "temporary layer" message above the canon for a defined timeframe (without permanently modifying database records)
+- [x] **Leadership Message Overlay:** Support injecting a high-priority "temporary layer" message above the canon for a defined timeframe (without permanently modifying database records)
 
 ### Content Tiering (Generation Contract)
 Lifecycle status says whether an entry is ready; tier says how an LLM may use it. Orthogonal to `Draft`/`Approved`/`Locked` — the per-entry contract that makes "verbatim means verbatim" enforceable.
 
-- [ ] **`tier` field on Canon Entries:** `tier_1_locked` (verbatim, no paraphrase) | `tier_2_structured` (substance preserved, phrasing adaptable) | `tier_3_grounded` (spirit and tone, full latitude)
-- [ ] **Tier enforcement in generation:** `generate_artifact` grounding block carries per-entry tier directives; Tier 1 entries injected with an explicit reproduce-verbatim instruction and validated post-generation
-- [ ] **Tier-aware retrieval routing:** Tier 1 always served via graph traversal (deterministic), never vector nearest-neighbor; Tier 2 hybrid; Tier 3 vector
-- [ ] **Tier tagging gate:** entries cannot transition to `Approved` without a tier assignment (validated at promotion)
-- [ ] **Alignment integration:** a paraphrased Tier 1 entry classifies as a hard conflict in alignment scoring
-- [ ] **Tier tagging UI:** tier selector on entry editor + bulk tier assignment; tier badge in entry lists and grounding results
+- [x] **`tier` field on Canon Entries:** `tier_1_locked` (verbatim, no paraphrase) | `tier_2_structured` (substance preserved, phrasing adaptable) | `tier_3_grounded` (spirit and tone, full latitude)
+- [x] **Tier enforcement in generation:** `generate_artifact` grounding block carries per-entry tier directives; Tier 1 entries injected with an explicit reproduce-verbatim instruction and validated post-generation (`tier_violations` on the artifact)
+- [ ] **Tier-aware retrieval routing:** Tier 1 always served via graph traversal (deterministic), never vector nearest-neighbor; Tier 2 hybrid; Tier 3 vector *(tier metadata flows through search results; routing not yet enforced)*
+- [x] **Tier tagging gate:** entries cannot transition to `Approved` without a tier assignment (validated at promotion)
+- [x] **Alignment integration:** a paraphrased Tier 1 entry classifies as a hard conflict in alignment scoring
+- [x] **Tier tagging UI:** *(partial: tier selector + badges on entry cards; bulk tier assignment not yet built)*
 
 ### Content SLA & Freshness Triggers
 Replaces the static 90-day staleness flag with a per-domain operational contract for freshness.
@@ -371,9 +371,9 @@ Replaces the static 90-day staleness flag with a per-domain operational contract
 - [ ] **SLA dashboard:** admin view of every domain's SLA state (in-window / due / breached) with last-reviewed dates and open trigger events
 
 ### DRI Ownership
-- [ ] **`dri` field on Canon Entries and Domains:** the named person accountable for a claim — distinct from `approved_by`
-- [ ] **Ownership transfer flow:** reassign DRI on team changes with a logged transfer event
-- [ ] **Accountability view:** dashboard of entries/domains per DRI, surfacing unowned entries and SLA state per owner
+- [x] **`dri` field on Canon Entries and Domains:** the named person accountable for a claim — distinct from `approved_by`; entry falls back to domain DRI
+- [x] **Ownership transfer flow:** reassign DRI via PATCH endpoints with a logged `dri_transfer` review-trail event (old value, new value, who)
+- [x] **Accountability view:** Governance section — domains grouped by DRI, unowned items first, staleness state per domain (`GET /api/dri/summary`)
 
 ### Dual Output — Citation-Marked Review Copy
 - [ ] **Two renditions per generated artifact:** a review copy with inline chunk-level citations (source entry, source doc, tier, DRI, last-reviewed date) and a clean deliverable with no citation clutter
@@ -381,8 +381,8 @@ Replaces the static 90-day staleness flag with a per-domain operational contract
 - [ ] **Reviewer workflow:** review copy is the artifact reviewers validate before the clean deliverable ships
 
 ### Query Audit Log
-- [ ] **Retrieval-side audit:** log every grounding query (MCP + web) — caller identity, query text, entry IDs returned, confidence scores, timestamp
-- [ ] **Admin audit view:** filterable log with export
+- [x] **Retrieval-side audit:** every grounding search (MCP `search_canon`/`search_messaging`) and Canon Navigator chat logs caller, query text, entry IDs returned, domains touched, top confidence, latency — non-blocking, with startup retention prune (`QUERY_LOG_RETENTION_DAYS`, default 90)
+- [x] **Admin audit view:** Governance section — filterable table (caller, source) with CSV export; REST filters: `caller`, `domain_id`, `since`, `source`; also exposed as the `get_query_audit_log` MCP tool
 - [ ] **Downstream feeds:** audit log powers acceptance-signal analytics (v1.3) and identity-scoped retrieval auditing (v1.0)
 
 ---
@@ -395,14 +395,14 @@ Replaces the static 90-day staleness flag with a per-domain operational contract
 - [ ] **Dynamic Grounding Schemas:** Support dynamic Pydantic/JSON Schema validation per domain, allowing custom schemas by department beyond just the default `message_house` layout.
 - [ ] **`engineering_spec` Grounding Type:** API constraints, system SLAs, versioning policy, deprecation notices, security requirements. Keeps developer copilots aligned with real specs — not hallucinated rate limits.
 - [ ] **`policy_shield` Grounding Type:** Legal disclaimers, privacy policy rules, compliance assertions (SOC2/GDPR), pre-approved compliance responses. AI tools retrieve legal language verbatim — no paraphrasing.
-- [ ] **Sub-Canons ("Canons within Canons"):** Nested canons representing divisions, product lines, or functions with configurable parent-child inheritance.
-- [ ] **Inheritance Relationship Types:** Codify 4 parent-child relationship types: *Full Inheritance*, *Selective Override*, *Autonomy with Vocabulary Constraints*, and *Complete Autonomy*.
-- [ ] **Canon Health Scoring:** Dashboard view exposing a proprietary metric showing where narrative coherence and graph connections are breaking down.
+- [x] **Sub-Canons ("Canons within Canons"):** Nested canons via `parent_domain_id` with configurable parent-child inheritance resolved at entry/persona read time.
+- [x] **Inheritance Relationship Types:** All 4 parent-child relationship types codified: *Full Inheritance*, *Selective Override*, *Autonomy with Vocabulary Constraints*, and *Complete Autonomy*.
+- [x] **Canon Health Scoring:** Dashboard health gauge exposing where narrative coherence and graph connections are breaking down.
 
 ### Canon Domain Ownership & Live Bindings
-- [ ] **Department SME Owners:** Assign read/write permissions to specific department wrappers (e.g., HR Team owns HR Domain, Legal Team owns Legal Domain).
-- [ ] **Review Trails:** Changes to a domain must be signed off by designated owners, creating a secure compliance audit trail.
-- [ ] **Bindings Layer:** Implement a dynamic mapping system connecting specific organizational canon elements to specific downstream content outputs to enable live update propagation.
+- [x] **Department SME Owners:** Department scoping + SME rights management; API keys carry `dept:` scopes (`has_department_access`).
+- [x] **Review Trails:** *(partial: full review/audit trail per domain and entry exists; owner sign-off enforcement not yet gated)*
+- [x] **Bindings Layer:** `ArtifactEntryBinding` maps canon entries to downstream artifacts; entry updates flag bound artifacts via `propagation_drift` events.
 
 ### Multi-Domain Dependency Graph
 - [ ] **`INFORMS` / `DEPENDS_ON` Edges:** Define explicit graph relationships between different canon domains (e.g., Product Specifications `INFORMS` Product Marketing Messaging, which `INFORMS` Sales Objection Handlers, which `INFORMS` Legal Disclosures).
@@ -437,12 +437,12 @@ Embargoed or pre-announcement content must never surface outside its authorized 
 
 **Goal:** Broaden ingestion capabilities, expand templates, and integrate competitive market data to sharpen grounding.
 
-- [ ] **Decks, Spreadsheets, & Rich Format Ingestion:** Ingestion adapters for PowerPoint (.pptx), Excel (.xlsx), audio transcripts, voice memos, and unstructured notes.
+- [x] **Decks, Spreadsheets, & Rich Format Ingestion:** *(partial: PPTX and XLSX extractors shipped; audio transcripts, voice memos, and unstructured-notes adapters pending)*
 - [ ] **Render-Mode Tagging:** Ingested assets (slides, quotes, compliance-approved blocks) tagged `render_whole` (insert verbatim exactly as authored) or `read_as_content` (parse as structured input for generation). Complements Tier 1 for legally-reviewed visual assets.
 - [ ] **Industry/Segment Variant Dimension:** `industry` tag on canon entries and personas as a first-class variant axis (persona × channel × industry); retrieval filters and variant selection honor it.
 - [ ] **Deck Indexing & Presentation Assembly:** Index existing approved decks (not just generate new ones); surface relevant slides on query; presentation assembly skill structures a new deck outline from approved slides + canon entries.
 - [ ] **Audio/Video Indexing:** Segment classification at ingest (keynote, demo, testimonial); timestamped moment retrieval so queries surface the relevant clip, not the whole transcript.
-- [ ] **Ingestion Conflict Detection:** Scan uploaded files and flag contradictions against existing canon elements before committing changes.
+- [x] **Ingestion Conflict Detection:** Scan uploaded files and flag contradictions against existing canon elements before committing changes (`pipeline/conflict.py`, hard/soft severity).
 - [ ] **50+ Pre-built Deliverable Templates:** Derive templates from real client work (CEO keynotes, sales decks, battlecards, press releases, investor updates, product messaging frameworks, etc.).
 - [ ] **Competitor document import:** Upload competitor docs → extraction pipeline extracts claims into a `competitive_brief` domain
 - [ ] **Competitive gap analysis:** Compare your canon domain to a competitor's extracted claims — identify where you are differentiated vs where they challenge you
@@ -475,17 +475,17 @@ Embargoed or pre-announcement content must never surface outside its authorized 
 - [ ] **Sample domains:** Loads a pre-built demo domain to explore generation before ingestion
 
 ### Agentic Layer & Interface
-- [ ] **Specialized AI Agents:** Functional agents for Governance, Brand Voice, and Narrative Structure analysis.
-- [ ] **Canon Navigator:** Conversation-first dashboard super agent to query changes, review narrative drifts, and request summaries ("what changed recently and how does it affect my work?").
+- [x] **Specialized AI Agents:** Functional agents for Governance, Brand Voice, and Narrative Structure analysis (`pipeline/agents.py`).
+- [x] **Canon Navigator:** Conversation-first dashboard super agent (streaming SSE chat panel) to query changes, review narrative drifts, and request summaries.
 - [ ] **Recommendation Routing:** Agent analyses of incoming material suggesting where it fits in the canon, what downstream deliverables are affected, and highlighting contradiction conflicts (supporting auto-accept or manual confirmation toggles).
 - [ ] **Proactive Human-in-the-Loop Governance:** Integration points prompting review at appropriate gates.
 - [ ] **Intent-Based Routing & Model Selection:** Classify query intent and route to the appropriate model tier (cheap model for simple retrieval, strong model for synthesis/generation) and the right skill or skill chain — removes model and skill selection burden from the user. Pairs with the multi-LLM backlog item.
 
 ### Custom Controls & Brief Builder
-- [ ] **Tonal Slider Controls:** Adjust tone register (e.g. formal IR presentation vs. conversational social post) while staying within brand voice boundaries.
-- [ ] **Controlled Vocabulary Filters:** Avoid competitor-associated phrasing, and flag or filter out banned terms in deliverables.
+- [x] **Tonal Slider Controls:** Adjust tone register (professionalism/warmth sliders → prompt register bounds) while staying within brand voice boundaries.
+- [x] **Controlled Vocabulary Filters:** `word_list` entries drive a banned-term sweep on every generated output (`pipeline/vocabulary.py`).
 - [ ] **Brief Builder Interface:** Build context inputs directly into deliverable creation wizard to guide LLM assembly.
-- [ ] **Source Annotations:** Automatically tag generated deliverables with source citations mapping directly back to specific grounded canon entries.
+- [ ] **Source Annotations:** *(partial: `grounded_messages` list on every artifact; inline chunk-level citations land with Dual Output in v0.9)*
 - [ ] **Localization Skill:** Adapt generated output for regional markets — tone, cultural references, market context — with the brand voice check running as a QA gate on the localized output.
 
 ### Content Analytics

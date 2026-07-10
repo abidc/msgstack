@@ -1,237 +1,112 @@
-# Task: v0.7 Admin UI — OpenCode
+# Task: v0.9 Governance Wave 2 — Completion & Fixes
 
-**Project:** MsgStack MCP Server  
-**Location:** `C:\Users\Abid\msgstack-mcp\`  
-**Goal:** Add four UI features to the admin dashboard: document type selector on upload, channels management page, persona/channel relationship indicators on message cards, and a graph status widget.
+**Project:** MsgStack MCP Server
+**Location:** `C:\Users\Abid\msgstack-mcp\`
+**Milestone:** v0.9 — finish the Content Tiering / DRI / Query Audit Log work
 
 ---
 
 ## Context
 
-The admin UI is a single-file Jinja2 template at `src/web/index.html` (vanilla JS + inline CSS, ~2,300 lines, no build step). The server runs at `http://localhost:8001` (Docker bridge) or `https://mcp.abidc.dev` (production). The current UI has sections: Dashboard, Frameworks, Upload, Artifact Generator, Skills.
+The previous run implemented the schema and store layer for Content Tiering, DRI Ownership, and the Query Audit Log (all currently **uncommitted** in the working tree — nothing has been committed except the docs commit `0c6fb98`). An independent review found the work solid at the schema/store level but incomplete at the enforcement/wiring level, plus **one production-breaking regression and one test failure that was misreported as pre-existing**.
 
-Before making any changes, read `src/web/index.html` fully to understand the existing patterns:
-- How sections are shown/hidden (look for `showSection()` or similar)
-- How the API is called (look for `fetch('/api/...')` patterns)
-- How cards/items are rendered (look for template literals building HTML strings)
-- The CSS variable system and color scheme
+Your job: fix the critical issues, finish the incomplete parts, sync the docs, and commit everything in clean per-part commits.
 
----
+**Read first:**
+1. This file, fully
+2. `PRODUCT_SPEC.md` §4.9 (Content Tiering) and §4.12 (Query Audit Log) — the acceptance spec
+3. `src/pipeline/generator.py` `_build_context()` (~line 405)
+4. `src/store.py` — `log_query` (~line 2911), `update_entry_status` promotion gate (~line 2803), review-trail methods (~line 1450)
+5. `src/grounding/tools.py` — the search tool implementations that need audit wiring
 
-## API Contract
-
-These endpoints will exist after the backend work is done. Build the UI against this contract.
-
-### Channels API
-
-```
-GET  /api/channels
-Response: [{ "id": "email", "name": "Email", "description": "...", "is_default": true }, ...]
-
-POST /api/channels
-Body: { "id": "partner_portal", "name": "Partner Portal", "description": "..." }
-Response: { "id": "...", "name": "...", "description": "...", "is_default": false }
-
-PATCH /api/channels/{id}
-Body: { "name": "...", "description": "..." }
-Response: updated channel object
-
-DELETE /api/channels/{id}
-Response: { "deleted": true }
-Note: Deleting a default channel returns 400 { "detail": "Cannot delete a default channel" }
-```
-
-### Document Type (on Upload)
-
-```
-POST /api/extract  (existing endpoint — adding optional body field)
-Body (multipart/form-data):
-  - file: <file>
-  - document_type: "message_house" | "brand_guide" | "competitive_brief" | "corp_narrative" | "persona_library"
-
-The extracted and structured house will have document_type set accordingly.
-```
-
-### Graph Stats API
-
-```
-GET /api/graph/stats
-Response: {
-  "nodes": 142,
-  "edges": 387,
-  "by_type": {
-    "GroundingDocument": 5,
-    "GroundingChunk": 112,
-    "Persona": 18,
-    "Channel": 7
-  }
-}
-
-POST /api/graph/rebuild
-Response: { "rebuilt": true, "stats": { ...same as above... } }
-```
-
-### Houses API (existing — now includes document_type)
-
-```
-GET /api/houses
-Response: [{ "id": "...", "name": "...", "document_type": "message_house", ... }, ...]
-```
+**Conventions (unchanged):**
+- `pytest` from repo root must end fully green. Run the **full suite** and report the exact pass/fail counts. Do not attribute a failure to a pre-existing cause without proving it (e.g. `git stash && pytest <that test>` to show it failed before your changes too).
+- Additive migrations only — the production SQLite DB at mcp.abidc.dev upgrades in place.
+- After code changes: `docker compose build && docker compose up -d` to smoke-test at `http://localhost:8001`.
+- Warm-beige/terracotta UI theme; match existing card/badge patterns in `dashboard.html`.
 
 ---
 
-## Feature 1: Document Type Selector on Upload
+## Part A — Critical fixes (do these first, commit as `fix:` commits)
 
-**Where:** In the Upload section, before (or alongside) the file drag-drop area.
+### A1. Generator regression: untier'd entries are silently dropped 🚨
+`src/pipeline/generator.py` `_build_context()` (~line 414) currently filters out every entry whose `content_tier` is `None`:
 
-**Implementation:**
-
-Add a `<select>` element for document type with these options:
-
-```html
-<select id="uploadDocType">
-  <option value="message_house" selected>Message House</option>
-  <option value="brand_guide">Brand Guide</option>
-  <option value="competitive_brief">Competitive Brief</option>
-  <option value="corp_narrative">Corporate Narrative</option>
-  <option value="persona_library">Persona Library</option>
-</select>
+```python
+messages = [m for m in messages if getattr(m, "content_tier", None) is not None]
 ```
 
-Style to match the existing input/form elements (inherit the dark theme variables).
+**Every legacy entry in the production DB has NULL tier**, so artifact generation against the live database grounds on nothing. Remove the filter. Tier affects **ordering and annotation only** in generation; unset tier blocks *promotion* (already handled in `update_entry_status`), never generation. Untier'd entries render with no tier label, sorted after tiered ones.
 
-When the upload is submitted, include the selected value as `document_type` in the FormData:
+**Regression test (required):** a domain whose entries all have `content_tier=NULL` generates an artifact whose grounding context contains those entries.
 
-```javascript
-const formData = new FormData();
-formData.append('file', selectedFile);
-formData.append('document_type', document.getElementById('uploadDocType').value);
-```
+### A2. Query audit log is dead code 🚨
+`store.log_query()` exists but has **zero call sites** — nothing ever writes to the table. Wire it in:
 
-Add a helper text below the select: *"The document type determines how the AI structures the content."*
+- One shared helper (in `src/grounding/tools.py` or a small module both can import) that builds a `QueryAuditLog` from a search call and invokes `store.log_query()`.
+- Call it from: the `search_canon` / `search_messaging` MCP paths, `get_grounding_context`, and the web search endpoint in `web_app.py`.
+- Populate: `caller` (workspace/API-key name where available, else `"mcp-session"` / `"web"`), `surface` (`mcp`|`web`), `tool_or_endpoint`, `query_text`, `domain_ids`, `entry_ids_returned`, `top_confidence`, `result_count`.
+- **Non-blocking:** wrap in try/except — a logging failure must never fail or slow the query (log the exception, continue).
+- Tests: one search writes exactly one row with correct entry IDs; a forced logging exception doesn't break the search.
+
+### A3. Failing test, misreported last run
+`tests/test_approval_gating.py::TestGetEntryHistory::test_get_entry_history_returns_trail` fails: expects 2 trail events, gets 3 (tier assignment now logs an event — which is correct behavior). Fix the test to assert on **event actions/content** rather than a brittle raw count, so future trail additions don't break it. Confirm the extra event is the tier assignment and that its trail entry is well-formed.
 
 ---
 
-## Feature 2: Channels Management Page
+## Part B — Finish Tier 1 enforcement (spec §4.9 — currently label-only)
 
-**Where:** Add a new nav section "Channels" between "Skills" and whatever is currently last. Use the same sidebar nav pattern as existing sections.
+The grounding block only tags entries `[T1 locked]`. That's a label, not a contract. Complete it:
 
-**Implementation:**
+- **B1. Verbatim directives:** In `_build_context()`, Tier 1 entries get an explicit directive, e.g. `[TIER 1 — LOCKED: reproduce this text VERBATIM wherever used. Do not paraphrase, summarize, or alter.]`; Tier 2: `[TIER 2 — preserve substance and positioning; phrasing may adapt.]`; Tier 3 and untier'd: no directive. Also add one block-level instruction in the grounding preamble explaining the tier contract to the model.
+- **B2. Post-generation verbatim validation:** after the LLM returns, for each Tier 1 entry that appears to have been used (fuzzy/substring match against the output), verify it appears verbatim. On violation, append a structured warning to the artifact result (`tier_violations: [...]`) — surface, don't hard-fail.
+- **B3. Alignment integration:** in `src/pipeline/alignment.py`, include tier in the reference context lines (`- [proof_point | TIER 1] ...`) and instruct both auditor prompts that a paraphrase of a Tier 1 claim classifies as a **hard conflict**.
+- Tests: T1 directive present in built context; verbatim violation produces a warning; alignment context contains tier labels.
 
-The Channels section should render:
+## Part C — Finish DRI (currently field-only)
 
-1. **Channels list** — a card grid (or table) showing all channels. Each row/card shows:
-   - Channel `name` and `id`
-   - `description` (editable inline)
-   - A badge showing "Default" if `is_default: true`
-   - Edit and Delete buttons (Delete disabled/greyed for defaults)
+- **C1. Review-trail events:** DRI set/change via the PATCH endpoints appends a `dri_transfer` event to the review trail (old value, new value, who). Applies to both domain and entry DRI.
+- **C2. Accountability view:** admin UI panel (Dashboard section or a Frameworks tab) grouping domains by DRI — **unowned items first** (no DRI on entry or its domain), each domain showing its staleness state (`is_stale()`). REST endpoint to back it (e.g. `GET /api/dri/summary`).
+- Tests: transfer logs a trail event; summary endpoint lists unowned items.
 
-2. **Add Channel form** — below the list, a small form:
-   ```
-   ID:          [text input — slug format, e.g. "partner_portal"]
-   Name:        [text input — display name, e.g. "Partner Portal"]
-   Description: [text input — optional]
-   [Add Channel button]
-   ```
+## Part D — MCP exposure
 
-3. **On load:** `GET /api/channels` → render the list
+- **D1.** Verify `tier` and `dri` (effective DRI) appear in the entry payloads returned by `search_canon` and `get_canon_domain` MCP tools (`src/grounding/tools.py` — search.py already carries `content_tier`, confirm it survives to the tool response; add `dri`).
+- **D2.** Update the `system_instructions` MCP prompt in `src/server.py` to document the tier contract (Tier 1 verbatim / Tier 2 substance / Tier 3 spirit) so AI clients honor it.
 
-4. **On Add:** `POST /api/channels` → refresh list on success
+## Part E — Query log polish
 
-5. **On Delete:** `DELETE /api/channels/{id}` → remove from list; show inline error if 400 (default channel)
+- **E1.** `get_query_log` + `GET /api/query-log`: add `caller`, `domain_id`, `since` filters (in addition to existing `source`/`limit`).
+- **E2.** Startup retention prune: on server start, delete rows older than `QUERY_LOG_RETENTION_DAYS` (default 90, configurable in `src/config.py`). Keep the manual cleanup endpoint.
+- **E3.** Admin UI: confirm the audit table view renders; add client-side CSV export if missing.
 
-6. **On Edit description:** `PATCH /api/channels/{id}` → update in place
+## Part F — Docs & commits (last)
 
-Use the same card/list styling as the Skills section for consistency.
-
----
-
-## Feature 3: Document Type Badge on Framework Cards
-
-**Where:** In the Frameworks list, each framework card/row already shows the house name. Add a small badge showing the `document_type`.
-
-**Implementation:**
-
-Add a badge next to the framework name in the list rendering code. Look for where framework names are rendered in the Frameworks section and add:
-
-```javascript
-const docTypeLabel = {
-  'message_house': 'Message House',
-  'brand_guide': 'Brand Guide',
-  'competitive_brief': 'Competitive Brief',
-  'corp_narrative': 'Corp Narrative',
-  'persona_library': 'Persona Library'
-}[house.document_type] || house.document_type;
-
-const badge = `<span class="doc-type-badge doc-type-${house.document_type}">${docTypeLabel}</span>`;
-```
-
-Add CSS for the badge variants. Use the existing CSS variable system. Suggested color coding:
-- `message_house` — existing accent color (blue/teal)
-- `brand_guide` — purple
-- `competitive_brief` — orange
-- `corp_narrative` — green
-- `persona_library` — yellow
-
-```css
-.doc-type-badge {
-  display: inline-block;
-  font-size: 11px;
-  padding: 2px 7px;
-  border-radius: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  margin-left: 8px;
-  vertical-align: middle;
-}
-.doc-type-message_house { background: rgba(var(--accent-rgb), 0.15); color: var(--accent); }
-.doc-type-brand_guide { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
-.doc-type-competitive_brief { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
-.doc-type-corp_narrative { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
-.doc-type-persona_library { background: rgba(234, 179, 8, 0.15); color: #facc15; }
-```
+- **F1. Doc-sync pass** (skipped last run): verify each is implemented in the cited file, then flip `[ ]` → `[x]` in `ROADMAP.md`:
+  - v0.9 Alignment Scoring items — `src/pipeline/alignment.py`, `score_content_alignment`/`score_canon_alignment` tools, `/score_alignment` endpoint
+  - v0.9 entry status field / approval-gated grounding / element-level RBAC (models + store CRUD) / locked canon / binding-based drift flagging (`store.py` ~1237 `propagation_drift`)
+  - v0.9 Temporary Message Layer — `TemporaryCanonOverlayModel`
+  - v1.0 Sub-Canons + inheritance types; Bindings Layer
+  - v1.1 PPTX/XLSX ingestion + Ingestion Conflict Detection — `extract.py`, `conflict.py`
+  - v1.3 Specialized Agents + Canon Navigator — `agents.py`; Controlled Vocabulary — `vocabulary.py`
+  - Partial implementations: leave unchecked with a short `(partial: ...)` note.
+- **F2.** Flip the v0.9 roadmap checkboxes for Content Tiering, DRI, and Query Audit Log items you've now completed (leave unchecked anything still not done, e.g. tier-aware graph-only retrieval routing if you didn't implement it).
+- **F3. Commits** — the working tree currently holds ALL of the previous run's work uncommitted. Commit in this order:
+  1. `fix(generation): include untier'd entries in grounding context` (A1)
+  2. `fix(tests): make entry-history trail assertions robust to tier events` (A3)
+  3. `feat(tiering): schema, promotion gate, tier-aware grounding + verbatim enforcement` (previous tiering work + Part B)
+  4. `feat(dri): ownership fields, transfer trail events, accountability view` (previous DRI work + Part C)
+  5. `feat(audit): query audit log wired into grounding paths, filters, retention` (previous audit work + A2 + Part E)
+  6. `feat(mcp): expose tier and dri in payloads, document tier contract` (Part D)
+  7. `docs: sync roadmap checkboxes with implemented state` (F1 + F2)
 
 ---
 
-## Feature 4: Graph Status Widget on Dashboard
+## Acceptance checklist
 
-**Where:** The Dashboard section shows stats cards (frameworks count, messages count, etc.). Add a new "Knowledge Graph" stat card.
-
-**Implementation:**
-
-On dashboard load, make an additional fetch call:
-
-```javascript
-fetch('/api/graph/stats')
-  .then(r => r.json())
-  .then(data => renderGraphWidget(data))
-  .catch(() => renderGraphWidget(null));  // widget shows "Not built" gracefully
-```
-
-The widget should display:
-- Total nodes count (large number, like the other stat cards)
-- Edge count as secondary stat
-- A breakdown by type: `Documents: N · Chunks: N · Personas: N · Channels: N`
-- A "Rebuild Graph" button that calls `POST /api/graph/rebuild` and refreshes the widget
-
-Example card layout:
-```
-┌─────────────────────────────┐
-│  Knowledge Graph            │
-│  142 nodes  ·  387 edges    │
-│  Docs: 5 · Chunks: 112      │
-│  Personas: 18 · Channels: 7 │
-│  [Rebuild Graph]            │
-└─────────────────────────────┘
-```
-
-Style: match the existing stat cards. The rebuild button should be small and ghost-styled (not a full primary button).
-
----
-
-## Notes
-
-- The UI runs inside the Docker container. After any edit to `src/web/index.html`, run `docker compose build && docker compose up -d` to pick up the change (or use a volume mount if available for faster iteration).
-- Confirm `http://localhost:8001` is live before testing.
-- If the backend endpoints (`/api/channels`, `/api/graph/stats`) are not yet implemented, stub the fetch calls with mock data so UI development can proceed in parallel.
-- Do NOT modify `src/web/base.html` or `src/web/dashboard.html` (Jinja2 templates) — those are for the admin UI navigation shell; changes to the SPA logic belong in `src/web/index.html`.
+- [ ] Full `pytest` run is green — report exact counts; no failure excused without proof it predates your changes
+- [ ] Fresh DB boots clean AND a copy of the existing `data/msgstack.db` upgrades in place
+- [ ] **Artifact generation works against a DB where entries have NULL tier** (the A1 regression test)
+- [ ] A `search_canon` MCP call produces a query-log row
+- [ ] `docker compose build && docker compose up -d` → dashboard loads; tier selector, DRI panel, audit table all render
+- [ ] Working tree clean at the end — everything committed per F3
