@@ -1,6 +1,7 @@
 """SQLite / PostgreSQL-backed canon storage."""
 
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Self
 from uuid import UUID, uuid4
@@ -31,8 +32,8 @@ from sqlalchemy.orm import (
 )
 
 from src.models import (
-    BrandSettings, Channel, DocumentType, DomainStatus, EntryStatus,
-    CanonDomain, CanonEntry, Persona, SectionType,
+    BrandSettings, Channel, ContentTier, DocumentType, DomainStatus, EntryStatus,
+    CanonDomain, CanonEntry, Persona, SectionType, QueryAuditLog,
     HouseStatus, KeyMessage, MessageHouse,  # Deprecated aliases
     UserRole, InheritancePolicy, UserProfile, ElementPermission,
     ArtifactEntryBinding, TemporaryCanonOverlay
@@ -118,6 +119,25 @@ class TemporaryCanonOverlayModel(Base):
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class QueryAuditLogModel(Base):
+    __tablename__ = "query_audit_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
+    session_id: Mapped[str] = mapped_column(String(255), default="")
+    user_id: Mapped[str] = mapped_column(String(255), default="")
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    model_used: Mapped[str] = mapped_column(String(255), default="")
+    artifacts_used: Mapped[str] = mapped_column(Text, default="[]")
+    entries_used: Mapped[str] = mapped_column(Text, default="[]")
+    domain_ids: Mapped[str] = mapped_column(Text, default="[]")
+    top_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String(50), default="")
 
 
 class WorkspaceModel(Base):
@@ -220,6 +240,7 @@ class CanonDomainModel(Base):
     inheritance_policy: Mapped[str] = mapped_column(String(50), default="full")
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_reviewed: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dri: Mapped[str] = mapped_column(String(255), default="")
 
     canon_entries: Mapped[list["CanonEntryModel"]] = relationship(
         back_populates="canon_domain", cascade="all, delete-orphan"
@@ -305,6 +326,8 @@ class CanonEntryModel(Base):
         backref="canon_entries"
     )
     source_chunk_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    dri: Mapped[str] = mapped_column(String(255), default="")
     canon_domain: Mapped["CanonDomainModel"] = relationship(back_populates="canon_entries")
 
     @property
@@ -543,6 +566,7 @@ class VectorMetadataModel(Base):
     channel: Mapped[str] = mapped_column(String(255), default="all")
     canon_entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    content_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     @property
     def message_house_id(self) -> str:
@@ -674,6 +698,12 @@ class Store:
                 if "message_house_id" in cols and "canon_domain_id" not in cols:
                     conn.execute(text("ALTER TABLE vector_metadata RENAME COLUMN message_house_id TO canon_domain_id"))
                     conn.commit()
+                if "content_tier" not in cols:
+                    try:
+                        conn.execute(text("ALTER TABLE vector_metadata ADD COLUMN content_tier VARCHAR(20) DEFAULT NULL"))
+                        conn.commit()
+                    except Exception:
+                        pass
                 if "key_message_id" in cols and "canon_entry_id" not in cols:
                     conn.execute(text("ALTER TABLE vector_metadata RENAME COLUMN key_message_id TO canon_entry_id"))
                     conn.commit()
@@ -730,6 +760,12 @@ class Store:
                         conn.commit()
                     except Exception:
                         pass
+                if "dri" not in mh_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE canon_domains ADD COLUMN dri VARCHAR(255) DEFAULT ''"))
+                        conn.commit()
+                    except Exception:
+                        pass
 
             if "workspaces" in tables:
                 ws_cols = {c["name"] for c in insp.get_columns("workspaces")}
@@ -739,6 +775,19 @@ class Store:
                         conn.commit()
                     except Exception:
                         pass
+
+            if "query_audit_log" in tables:
+                qal_cols = {c["name"] for c in insp.get_columns("query_audit_log")}
+                for col, col_def in (
+                    ("domain_ids", "TEXT DEFAULT '[]'"),
+                    ("top_confidence", "FLOAT DEFAULT 0.0"),
+                ):
+                    if col not in qal_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE query_audit_log ADD COLUMN {col} {col_def}"))
+                            conn.commit()
+                        except Exception:
+                            pass
 
             if "pillars" not in tables:
                 conn.execute(text("""
@@ -757,6 +806,18 @@ class Store:
                 if "pillar_id" not in km_cols:
                     try:
                         conn.execute(text("ALTER TABLE canon_entries ADD COLUMN pillar_id INTEGER REFERENCES pillars(id) ON DELETE SET NULL"))
+                        conn.commit()
+                    except Exception:
+                        pass
+                if "content_tier" not in km_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE canon_entries ADD COLUMN content_tier VARCHAR(20) DEFAULT NULL"))
+                        conn.commit()
+                    except Exception:
+                        pass
+                if "dri" not in km_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE canon_entries ADD COLUMN dri VARCHAR(255) DEFAULT ''"))
                         conn.commit()
                     except Exception:
                         pass
@@ -1023,6 +1084,7 @@ class Store:
         channel: str,
         key_message_id: Optional[UUID] = None,
         last_synced: Optional[datetime] = None,
+        content_tier: Optional[str] = None,
         # Allow new naming parameters for compatibility
         canon_domain_id: Optional[UUID] = None,
         canon_domain_name: Optional[str] = None,
@@ -1048,6 +1110,7 @@ class Store:
                 "channel": channel,
                 "canon_entry_id": str(actual_entry_id) if actual_entry_id else None,
                 "last_synced": last_synced,
+                "content_tier": content_tier,
             }
             if existing:
                 for k, v in data.items():
@@ -2752,6 +2815,9 @@ class Store:
             entry = s.get(CanonEntryModel, entry_id)
             if not entry:
                 return None
+            # Promotion gate: content_tier must be set before approving or locking
+            if status in ("approved", "locked") and not entry.content_tier:
+                raise ValueError("Content tier must be assigned before entry can be approved or locked.")
             entry.status = status
             if status == "approved":
                 entry.approved_by = approved_by or "admin"
@@ -2770,6 +2836,119 @@ class Store:
             return {"id": entry_id, "status": entry.status, "approved_by": entry.approved_by}
 
     update_message_status = update_entry_status  # Deprecated alias
+
+    def update_entry_tier(self, entry_id: str, tier: str | None) -> dict | None:
+        """Set or clear the content tier on a canon entry."""
+        valid_tiers = {"tier_1_locked", "tier_2_structured", "tier_3_grounded", None}
+        if tier is not None and tier not in valid_tiers:
+            raise ValueError(f"Invalid tier. Must be one of: tier_1_locked, tier_2_structured, tier_3_grounded")
+        with self.session() as s:
+            entry = s.get(CanonEntryModel, entry_id)
+            if not entry:
+                return None
+            entry.content_tier = tier
+            log = ReviewLogModel(
+                id=str(uuid4()),
+                canon_domain_id=entry.canon_domain_id,
+                canon_entry_id=entry_id,
+                action="tier_update",
+                performed_by="admin",
+                timestamp=_now(),
+                notes=f"Content tier set to {tier}" if tier else "Content tier cleared",
+            )
+            s.add(log)
+            s.commit()
+            return {"id": entry_id, "content_tier": entry.content_tier}
+
+    def set_domain_dri(self, domain_id: str, dri: str, performed_by: str = "admin") -> dict | None:
+        with self.session() as s:
+            dom = s.get(CanonDomainModel, domain_id)
+            if not dom:
+                return None
+            old_dri = dom.dri or "(unassigned)"
+            dom.dri = dri
+            s.add(ReviewLogModel(
+                id=str(uuid4()),
+                canon_domain_id=domain_id,
+                canon_entry_id=None,
+                action="dri_transfer",
+                performed_by=performed_by,
+                timestamp=_now(),
+                notes=f"Domain DRI changed from {old_dri} to {dri or '(unassigned)'}",
+            ))
+            s.commit()
+            return {"id": domain_id, "dri": dom.dri}
+
+    def set_entry_dri(self, entry_id: str, dri: str, performed_by: str = "admin") -> dict | None:
+        with self.session() as s:
+            entry = s.get(CanonEntryModel, entry_id)
+            if not entry:
+                return None
+            old_dri = entry.dri or "(unassigned)"
+            entry.dri = dri
+            s.add(ReviewLogModel(
+                id=str(uuid4()),
+                canon_domain_id=entry.canon_domain_id,
+                canon_entry_id=entry_id,
+                action="dri_transfer",
+                performed_by=performed_by,
+                timestamp=_now(),
+                notes=f"Entry DRI changed from {old_dri} to {dri or '(unassigned)'}",
+            ))
+            s.commit()
+            return {"id": entry_id, "dri": entry.dri}
+
+    def get_effective_dri(self, entry_id: str) -> str:
+        with self.session() as s:
+            entry = s.get(CanonEntryModel, entry_id)
+            if not entry:
+                return ""
+            if entry.dri:
+                return entry.dri
+            dom = s.get(CanonDomainModel, entry.canon_domain_id)
+            return dom.dri if dom else ""
+
+    def get_dri_summary(self) -> dict:
+        """Accountability view: domains grouped by DRI, unowned items first.
+
+        A domain is unowned when it has no DRI; an entry is unowned when
+        neither it nor its domain has a DRI.
+        """
+        with self.session() as s:
+            domains = s.query(CanonDomainModel).all()
+            by_dri: dict[str, list[dict]] = {}
+            unowned: list[dict] = []
+            for dom in domains:
+                entry_rows = s.query(CanonEntryModel).filter(
+                    CanonEntryModel.canon_domain_id == dom.id
+                ).all()
+                unowned_entries = (
+                    [str(e.id) for e in entry_rows if not e.dri] if not dom.dri else []
+                )
+                last_reviewed = dom.last_reviewed
+                is_stale = (
+                    (datetime.now() - last_reviewed).days > 90 if last_reviewed else True
+                )
+                info = {
+                    "domain_id": str(dom.id),
+                    "name": dom.name,
+                    "dri": dom.dri or "",
+                    "department": dom.department,
+                    "entry_count": len(entry_rows),
+                    "unowned_entry_count": len(unowned_entries),
+                    "is_stale": is_stale,
+                    "last_reviewed": last_reviewed.isoformat() if last_reviewed else None,
+                }
+                if dom.dri:
+                    by_dri.setdefault(dom.dri, []).append(info)
+                else:
+                    unowned.append(info)
+            return {
+                "unowned": unowned,
+                "by_dri": by_dri,
+                "dri_count": len(by_dri),
+                "unowned_count": len(unowned),
+            }
 
     def bulk_update_entry_status(self, entry_ids: list[str], status: str, approved_by: str = "") -> int:
         """Bulk update status for multiple entries. Returns count updated."""
@@ -2803,6 +2982,74 @@ class Store:
                 }
                 for r in rows
             ]
+
+    # ── Query Audit Log ──────────────────────────────────────────────────────
+
+    def log_query(self, entry: QueryAuditLog) -> None:
+        with self.session() as s:
+            s.add(QueryAuditLogModel(
+                id=str(entry.id),
+                workspace_id=entry.workspace_id,
+                session_id=entry.session_id,
+                user_id=entry.user_id,
+                query_text=entry.query_text,
+                model_used=entry.model_used,
+                artifacts_used=json.dumps(entry.artifacts_used) if entry.artifacts_used else "[]",
+                entries_used=json.dumps(entry.entries_used) if entry.entries_used else "[]",
+                domain_ids=json.dumps(entry.domain_ids) if entry.domain_ids else "[]",
+                top_confidence=entry.top_confidence,
+                timestamp=entry.timestamp,
+                latency_ms=entry.latency_ms,
+                tokens_used=entry.tokens_used,
+                source=entry.source,
+            ))
+            s.commit()
+
+    def get_query_log(
+        self,
+        limit: int = 100,
+        source: str | None = None,
+        caller: str | None = None,
+        domain_id: str | None = None,
+        since: datetime | None = None,
+    ) -> list[dict]:
+        with self.session() as s:
+            q = s.query(QueryAuditLogModel).order_by(QueryAuditLogModel.timestamp.desc())
+            if source:
+                q = q.filter(QueryAuditLogModel.source == source)
+            if caller:
+                q = q.filter(QueryAuditLogModel.user_id == caller)
+            if domain_id:
+                q = q.filter(QueryAuditLogModel.domain_ids.contains(str(domain_id)))
+            if since:
+                q = q.filter(QueryAuditLogModel.timestamp >= since)
+            rows = q.limit(limit).all()
+            return [
+                {
+                    "id": r.id,
+                    "workspace_id": r.workspace_id,
+                    "session_id": r.session_id,
+                    "user_id": r.user_id,
+                    "query_text": r.query_text,
+                    "model_used": r.model_used,
+                    "artifacts_used": json.loads(r.artifacts_used or "[]"),
+                    "entries_used": json.loads(r.entries_used or "[]"),
+                    "domain_ids": json.loads(r.domain_ids or "[]"),
+                    "top_confidence": r.top_confidence,
+                    "timestamp": r.timestamp.isoformat(),
+                    "latency_ms": r.latency_ms,
+                    "tokens_used": r.tokens_used,
+                    "source": r.source,
+                }
+                for r in rows
+            ]
+
+    def clean_query_log(self, older_than_days: int = 90) -> int:
+        cutoff = _now() - timedelta(days=older_than_days)
+        with self.session() as s:
+            deleted = s.query(QueryAuditLogModel).filter(QueryAuditLogModel.timestamp < cutoff).delete()
+            s.commit()
+            return deleted
 
     # ── Phase 4: Staleness / Last Reviewed ───────────────────────────────────
 
@@ -3171,7 +3418,8 @@ def _domain_from_row(row: CanonDomainModel) -> CanonDomain:
         last_reviewed=row.last_reviewed,
         # Phase 2 additions:
         parent_domain_id=UUID(row.parent_domain_id) if row.parent_domain_id else None,
-        inheritance_policy=InheritancePolicy(row.inheritance_policy) if row.inheritance_policy else InheritancePolicy.FULL
+        inheritance_policy=InheritancePolicy(row.inheritance_policy) if row.inheritance_policy else InheritancePolicy.FULL,
+        dri=row.dri or "",
     )
 
 
@@ -3189,10 +3437,12 @@ def _entry_from_row(row: CanonEntryModel) -> CanonEntry:
         status=EntryStatus(row.status) if row.status else EntryStatus.DRAFT,
         approved_by=row.approved_by,
         approved_at=row.approved_at,
+        content_tier=ContentTier(row.content_tier) if row.content_tier else None,
         variants=row.variants or {},
         personas=row.personas or [],
         channels=[_safe_channel(c.id if hasattr(c, "id") else str(c)) for c in (row.channels or [])] or ["all"],
         source_chunk_id=row.source_chunk_id,
+        dri=row.dri or "",
     )
 
 

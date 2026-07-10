@@ -81,6 +81,12 @@ class EntryStatus(str, Enum):
 MessageStatus = EntryStatus  # Deprecated alias
 
 
+class ContentTier(str, Enum):
+    TIER_1_LOCKED = "tier_1_locked"
+    TIER_2_STRUCTURED = "tier_2_structured"
+    TIER_3_GROUNDED = "tier_3_grounded"
+
+
 class ArtifactStatus(str, Enum):
     DRAFT = "draft"
     INTERNAL_REVIEW = "internal_review"
@@ -122,6 +128,7 @@ class CanonDomain(BaseModel):
     # Phase 2 additions:
     parent_domain_id: UUID | None = None
     inheritance_policy: InheritancePolicy = InheritancePolicy.FULL
+    dri: str = ""
 
     @property
     def document_type(self) -> GroundingType:
@@ -154,6 +161,8 @@ class CanonEntry(BaseModel):
     status: EntryStatus = EntryStatus.DRAFT
     approved_by: str | None = None
     approved_at: datetime | None = None
+    content_tier: ContentTier | None = None
+    dri: str = ""
 
     @field_validator('priority', mode='before')
     @classmethod
@@ -273,6 +282,7 @@ class GroundingChunk(BaseModel):
     canon_domain_name: str = Field(default="", validation_alias=AliasChoices('canon_domain_name', 'house_name'), serialization_alias='canon_domain_name')
     canon_domain_summary: str = Field(default="", validation_alias=AliasChoices('canon_domain_summary', 'house_summary'), serialization_alias='canon_domain_summary')
     last_synced: datetime | None = None
+    content_tier: str | None = None
 
     @property
     def message_house_id(self) -> UUID:
@@ -532,3 +542,20 @@ class TemporaryCanonOverlay(BaseModel):
     priority: int = 1
     created_by: str
     expires_at: datetime
+
+
+class QueryAuditLog(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    workspace_id: str = "default"
+    session_id: str = ""
+    user_id: str = ""  # caller identity: API-key name, "mcp-session", or "web"
+    query_text: str
+    model_used: str = ""
+    artifacts_used: list[str] = Field(default_factory=list)
+    entries_used: list[str] = Field(default_factory=list)
+    domain_ids: list[str] = Field(default_factory=list)
+    top_confidence: float = 0.0
+    timestamp: datetime = Field(default_factory=datetime.now)
+    latency_ms: float = 0.0
+    tokens_used: int = 0
+    source: str = ""  # e.g. "mcp:search_canon", "web:chat"

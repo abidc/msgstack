@@ -60,7 +60,9 @@ class AlignmentEngine:
             context.append("APPROVED KEY MESSAGES:")
             for m in messages:
                 stype = getattr(m, "section_type", "message")
-                context.append(f"- [{stype}] {m.content}")
+                tier = getattr(m, "content_tier", None)
+                tier_tag = " | TIER 1 — VERBATIM ONLY" if tier == "tier_1_locked" else ""
+                context.append(f"- [{stype}{tier_tag}] {m.content}")
 
         # Compute dynamic semantic similarity matches using VectorMetadataModel via GroundingEngine  
         from src.grounding.search import GroundingEngine
@@ -103,7 +105,9 @@ class AlignmentEngine:
             "You must score the content on a scale of 0-100 based on how well it aligns with the official messaging. "
             "Consider both vector match confidences and direct conceptual alignment. "
             "Look for contradictions (where the content says something contrary to the positioning) and omissions "
-            "(where key proof points or required messaging are missing).\n\n"
+            "(where key proof points or required messaging are missing). "
+            "Messages marked 'TIER 1 — VERBATIM ONLY' are locked: if the content uses one of these claims "
+            "in paraphrased or altered form, report it as a contradiction — Tier 1 claims must appear word-for-word.\n\n"
             "Output MUST be strict JSON matching this schema:\n"
             "{\n"
             '  "overall_score": 85,\n'
@@ -168,10 +172,17 @@ def score_alignment(
     soft_conflicts = []
     aligned_sections = []
 
+    # Build reference context once — tier labels tell the auditor which
+    # claims are locked-verbatim (paraphrase of Tier 1 = hard conflict).
+    def _entry_line(e) -> str:
+        tier = getattr(e, "content_tier", None)
+        tier_tag = " | TIER 1 — VERBATIM ONLY" if tier == "tier_1_locked" else ""
+        return f"- [{e.section_type}{tier_tag}] {e.content}"
+
+    reference_context = "\n".join(_entry_line(e) for e in canon_entries)
+
     # 4. Semantic comparison per paragraph
     for i, para in enumerate(draft_paragraphs):
-        # Build prompt for LLM comparison
-        reference_context = "\n".join([f"- [{e.section_type}] {e.content}" for e in canon_entries])
         prompt = (
             f"You are an expert copy auditor. Compare the Draft Paragraph against the Approved Canon Claims.\n\n"
             f"Approved Canon Claims:\n{reference_context}\n"
@@ -188,6 +199,8 @@ def score_alignment(
             f"Rules:\n"
             f"- 'aligned': claim matches or supports canon details. Deduction: 0\n"
             f"- 'hard_conflict': contradicts a factual claim (e.g., pricing, features, metrics). Deduction: 15-20\n"
+            f"- 'hard_conflict' ALSO applies when the paragraph uses a claim marked 'TIER 1 — VERBATIM ONLY' "
+            f"in paraphrased or altered form — Tier 1 claims must be reproduced word-for-word. Deduction: 15-20\n"
             f"- 'soft_conflict': uses unapproved words, deviates in brand tone, or has minor misalignment. Deduction: 5-10"
         )
         try:

@@ -987,6 +987,31 @@ def list_departments() -> dict:
     return {"departments": result}
 
 
+@mcp.tool()
+def get_query_audit_log(
+    limit: int = 100,
+    source: Optional[str] = None,
+    caller: Optional[str] = None,
+    domain_id: Optional[str] = None,
+) -> dict:
+    """Retrieve a log of all grounding query activity for auditing and compliance.
+
+    Returns the most recent queries submitted through the system, including
+    the query text, entries returned, domains touched, top confidence, and
+    latency. Use this tool to review usage patterns, verify compliance, or
+    debug retrieval issues.
+
+    Args:
+        limit: Maximum number of log entries to return (default 100, max 1000).
+        source: Filter by source (e.g. 'mcp:search_canon', 'web:chat'). All sources if omitted.
+        caller: Filter by caller identity (API-key name, 'mcp-session', 'web').
+        domain_id: Filter to queries whose results touched this canon domain.
+    """
+    store = get_store()
+    log = store.get_query_log(
+        limit=min(limit, 1000), source=source, caller=caller, domain_id=domain_id
+    )
+    return {"entries": log, "count": len(log)}
 
 
 # ── MCP Prompts ──────────────────────────────────────────────────────────────
@@ -1044,6 +1069,18 @@ a domain's positioning, personas, or approved canon entries.
   specific proof points, or all entries for a persona. Confidence is always 1.0 (no approximation).
 - Use `search_messaging` for **exploratory or semantic queries** where you want the closest match
   to a natural language request. Use `retrieval_mode="graph"` as a shortcut for the same effect.
+
+## Content Tier Contract
+
+Canon entries carry a `content_tier` that governs how you may use them:
+
+- **tier_1_locked** — Sacrosanct. Reproduce the entry text VERBATIM wherever its content is used.
+  Never paraphrase, shorten, restyle, or approximate a Tier 1 entry. If it doesn't fit, use a
+  different entry — do not alter it.
+- **tier_2_structured** — Substance-locked. Keep the meaning, claims, and positioning intact;
+  you may adapt phrasing to fit the output format.
+- **tier_3_grounded** (or untagged) — Flexible. Stay consistent with the canon's direction and
+  tone; phrasing and structure are yours.
 """
 
 

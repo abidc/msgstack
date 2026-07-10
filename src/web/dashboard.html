@@ -379,6 +379,55 @@
     </div>
 </section>
 
+<!-- ── Governance ── -->
+<section id="governance" class="section">
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Governance</div>
+                <div class="page-subtitle">DRI accountability and query audit log</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div class="card-title">DRI Accountability</div>
+                <button class="btn btn-ghost btn-sm" onclick="loadGovernance()">Refresh</button>
+            </div>
+            <div style="font-size:12px;color:var(--text-3);margin-bottom:10px;">Domains grouped by their Directly Responsible Individual. Unowned domains listed first.</div>
+            <div id="dri-summary-container" style="font-size:13px;"></div>
+        </div>
+
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div class="card-title">Query Audit Log</div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <input class="form-input" id="ql-caller" placeholder="Filter by caller" style="width:150px;font-size:12px;padding:4px 8px;">
+                    <input class="form-input" id="ql-source" placeholder="Filter by source" style="width:150px;font-size:12px;padding:4px 8px;">
+                    <button class="btn btn-ghost btn-sm" onclick="loadQueryLog()">Apply</button>
+                    <button class="btn btn-ghost btn-sm" onclick="exportQueryLogCsv()">Export CSV</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <thead>
+                        <tr style="text-align:left;color:var(--text-3);border-bottom:1px solid var(--border);">
+                            <th style="padding:6px 8px;">Time</th>
+                            <th style="padding:6px 8px;">Caller</th>
+                            <th style="padding:6px 8px;">Source</th>
+                            <th style="padding:6px 8px;">Query</th>
+                            <th style="padding:6px 8px;">Results</th>
+                            <th style="padding:6px 8px;">Top conf.</th>
+                            <th style="padding:6px 8px;">Latency</th>
+                        </tr>
+                    </thead>
+                    <tbody id="query-log-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
 <!-- ── Skills ── -->
 <section id="skills" class="section">
     <div class="page">
@@ -990,6 +1039,86 @@
         else if (id === 'graph') loadGraphExplorer();
         else if (id === 'settings') loadSettings();
         else if (id === 'api-keys') loadApiKeys();
+        else if (id === 'governance') loadGovernance();
+    }
+
+    // ── Governance: DRI accountability + query audit log ─────────────────────
+
+    let _queryLogRows = [];
+
+    async function loadGovernance() {
+        loadDriSummary();
+        loadQueryLog();
+    }
+
+    async function loadDriSummary() {
+        const el = document.getElementById('dri-summary-container');
+        try {
+            const data = await apiFetch('/api/dri/summary').then(r => r.json());
+            let html = '';
+            if (data.unowned?.length) {
+                html += `<div style="font-weight:600;color:var(--warning);margin-bottom:6px;">Unowned (${data.unowned.length})</div>`;
+                html += data.unowned.map(d => _driDomainRow(d)).join('');
+            }
+            for (const [dri, domains] of Object.entries(data.by_dri || {})) {
+                html += `<div style="font-weight:600;margin:10px 0 6px;">${esc(dri)} (${domains.length})</div>`;
+                html += domains.map(d => _driDomainRow(d)).join('');
+            }
+            el.innerHTML = html || '<div style="color:var(--text-3);">No canon domains yet.</div>';
+        } catch (e) {
+            el.innerHTML = `<div style="color:var(--danger);">Failed to load DRI summary: ${esc(e.message)}</div>`;
+        }
+    }
+
+    function _driDomainRow(d) {
+        const stale = d.is_stale ? '<span style="color:var(--warning);font-size:11px;margin-left:8px;">STALE</span>' : '';
+        const unowned = d.unowned_entry_count ? `<span style="color:var(--text-3);font-size:11px;margin-left:8px;">${d.unowned_entry_count} unowned entries</span>` : '';
+        return `<div style="display:flex;align-items:center;padding:5px 8px;border-bottom:1px solid var(--border);">
+            <a href="javascript:void(0)" onclick="viewDomain('${d.domain_id}')" style="color:var(--text);text-decoration:none;font-weight:500;">${esc(d.name)}</a>
+            <span style="color:var(--text-3);font-size:11px;margin-left:8px;">${d.entry_count} entries</span>${stale}${unowned}
+        </div>`;
+    }
+
+    async function loadQueryLog() {
+        const body = document.getElementById('query-log-body');
+        const caller = document.getElementById('ql-caller')?.value.trim();
+        const source = document.getElementById('ql-source')?.value.trim();
+        const params = new URLSearchParams({ limit: '200' });
+        if (caller) params.set('caller', caller);
+        if (source) params.set('source', source);
+        try {
+            _queryLogRows = await apiFetch(`/api/query-log?${params}`).then(r => r.json());
+            if (!_queryLogRows.length) {
+                body.innerHTML = '<tr><td colspan="7" style="padding:14px 8px;color:var(--text-3);">No queries logged yet.</td></tr>';
+                return;
+            }
+            body.innerHTML = _queryLogRows.map(r => `<tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:5px 8px;white-space:nowrap;">${esc((r.timestamp || '').replace('T', ' ').slice(0, 19))}</td>
+                <td style="padding:5px 8px;">${esc(r.user_id || '')}</td>
+                <td style="padding:5px 8px;">${esc(r.source || '')}</td>
+                <td style="padding:5px 8px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.query_text)}">${esc(r.query_text)}</td>
+                <td style="padding:5px 8px;">${(r.entries_used || []).length}</td>
+                <td style="padding:5px 8px;">${(r.top_confidence ?? 0).toFixed(2)}</td>
+                <td style="padding:5px 8px;">${Math.round(r.latency_ms || 0)}ms</td>
+            </tr>`).join('');
+        } catch (e) {
+            body.innerHTML = `<tr><td colspan="7" style="padding:14px 8px;color:var(--danger);">Failed to load query log: ${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    function exportQueryLogCsv() {
+        if (!_queryLogRows.length) { toast('Nothing to export', 'error'); return; }
+        const cols = ['timestamp', 'user_id', 'source', 'query_text', 'entries_used', 'domain_ids', 'top_confidence', 'latency_ms'];
+        const escCsv = v => `"${String(Array.isArray(v) ? v.join(';') : (v ?? '')).replace(/"/g, '""')}"`;
+        const csv = [cols.join(',')]
+            .concat(_queryLogRows.map(r => cols.map(c => escCsv(r[c])).join(',')))
+            .join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `msgstack-query-log-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
     }
 
     window.onpopstate = e => showSection(e.state?.section || 'dashboard', false);
@@ -997,7 +1126,7 @@
     function initRouting() {
         const hash = window.location.hash.replace(/^#/, '');
         const path = hash || window.location.pathname.replace(/^\//, '') || 'dashboard';
-        const valid = ['dashboard','frameworks','upload','artifacts','scoring','skills','channels','connections','graph','settings','api-keys'];
+        const valid = ['dashboard','frameworks','upload','artifacts','scoring','governance','skills','channels','connections','graph','settings','api-keys'];
         showSection(valid.includes(path) ? path : 'dashboard', false);
     }
 
@@ -2950,6 +3079,29 @@ const NODE_COLORS = {
         return `<span style="font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:20px;background:${m.bg};color:${m.color};">${m.label}</span>`;
     }
 
+    function tierBadge(tier) {
+        const tiers = {
+            'tier_1_locked':    {label:'T1 Locked',    color:'#7c3aed', bg:'rgba(124,58,237,.12)'},
+            'tier_2_structured':{label:'T2 Structured', color:'#2563eb', bg:'rgba(37,99,235,.12)'},
+            'tier_3_grounded':  {label:'T3 Grounded',  color:'#059669', bg:'rgba(5,150,105,.12)'},
+        };
+        const m = tiers[tier];
+        if (!m) return '';
+        return `<span style="font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:20px;background:${m.bg};color:${m.color};">${m.label}</span>`;
+    }
+
+    function tierSelect(value) {
+        const opts = [
+            {value:'',label:'No tier'},
+            {value:'tier_1_locked',label:'T1 Locked'},
+            {value:'tier_2_structured',label:'T2 Structured'},
+            {value:'tier_3_grounded',label:'T3 Grounded'},
+        ];
+        return `<select class="tier-picker" style="font-size:10px;padding:2px 6px;border-radius:12px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);cursor:pointer;font-family:inherit;">${
+            opts.map(o => `<option value="${o.value}"${value===o.value?' selected':''}>${o.label}</option>`).join('')
+        }</select>`;
+    }
+
     async function setMsgStatus(msgId, status, btn) {
         const prev = btn ? btn.innerHTML : '';
         if (btn) { btn.disabled = true; btn.textContent = '…'; }
@@ -2966,6 +3118,51 @@ const NODE_COLORS = {
             if (btn) { btn.disabled = false; btn.innerHTML = prev; }
         }
     }
+
+    async function setEntryTier(msgId, selectEl) {
+        const tier = selectEl.value || null;
+        try {
+            await apiFetch(`${API}/entries/${msgId}/tier`, {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ content_tier: tier }),
+            });
+            toast(`Tier set to ${tier || 'none'}`, 'success');
+            viewDomain(currentDomainId);
+        } catch(e) {
+            toast('Tier update failed: ' + e.message, 'error');
+        }
+    }
+
+    // Live tier selector change handler
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('tier-picker')) {
+            const row = e.target.closest('.msg-row');
+            if (row) setEntryTier(row.dataset.id, e.target);
+        }
+    });
+
+    async function setEntryDri(msgId, inputEl) {
+        const dri = inputEl.value.trim();
+        try {
+            await apiFetch(`${API}/entries/${msgId}/dri`, {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ dri }),
+            });
+            toast('DRI updated', 'success');
+        } catch(e) {
+            toast('DRI update failed: ' + e.message, 'error');
+        }
+    }
+
+    // Live DRI blur handler
+    document.addEventListener('blur', function(e) {
+        if (e.target.classList.contains('dri-input')) {
+            const row = e.target.closest('.msg-row');
+            if (row) setEntryDri(row.dataset.id, e.target);
+        }
+    }, true);
 
     // Bulk approve — checkboxes on each entry row
     let _bulkSelected = new Set();
@@ -3068,6 +3265,11 @@ const NODE_COLORS = {
                         <span style="flex:1;font-size:13.5px;color:var(--text);line-height:1.55;">${esc(m.content)}</span>
                         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                             <span title="${heatTip}" style="font-size:12px;color:${_heatColor(used)};cursor:help;">${heatIcon}</span>
+                            ${tierBadge(m.content_tier)}
+                            ${tierSelect(m.content_tier)}
+                            <input class="dri-input" value="${esc(m.dri || '')}" placeholder="DRI"
+                                style="width:80px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);"
+                                data-id="${m.id}" title="Directly Responsible Individual">
                             ${msgStatusBadge(status)}
                             ${status === 'draft' || status === 'in_review'
                                 ? `<button onclick="setMsgStatus('${m.id}','approved',this)" title="Approve"

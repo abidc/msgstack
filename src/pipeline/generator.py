@@ -1,9 +1,27 @@
 """Skill-based artifact generator using LLM + skills + grounding context."""
 
 import json
+import logging
 import os
+import re
 from typing import Optional
 from uuid import UUID
+
+log = logging.getLogger(__name__)
+
+# Per-entry tier directives injected into the grounding block (spec §4.9).
+# Tier 3 and untier'd entries carry no directive — default latitude.
+TIER_DIRECTIVES = {
+    "tier_1_locked": "[TIER 1 — LOCKED: reproduce this text VERBATIM wherever used. Do not paraphrase, summarize, or alter.] ",
+    "tier_2_structured": "[TIER 2 — preserve substance and positioning; phrasing may adapt.] ",
+}
+
+TIER_CONTRACT_PREAMBLE = (
+    "CONTENT TIER CONTRACT: entries tagged [TIER 1 — LOCKED] are sacrosanct — copy them "
+    "word-for-word wherever their content is used; never paraphrase, shorten, or restyle them. "
+    "Entries tagged [TIER 2] must keep their substance and positioning intact, though phrasing "
+    "may adapt. Untagged entries may be adapted freely within the brand voice.\n\n"
+)
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -36,6 +54,44 @@ class GeneratedArtifact(BaseModel):
     renderer_type: Optional[str] = None
     renderer_output: Optional[RenderOutput] = None
     used_drafts_fallback: bool = False
+    tier_violations: list[dict] = []
+
+
+def _normalize_ws(text: str) -> str:
+    """Collapse whitespace so formatting differences don't fail a verbatim check."""
+    return re.sub(r"\s+", " ", text or "").strip().lower()
+
+
+def find_tier1_violations(messages: list, output: str) -> list[dict]:
+    """Detect Tier 1 entries that appear to have been used but not verbatim.
+
+    An entry counts as "used" when most of its significant words appear in the
+    output (fuzzy match); it passes when its whitespace-normalized text appears
+    as an exact substring. Used-but-not-verbatim → violation.
+    """
+    violations = []
+    norm_output = _normalize_ws(output)
+    output_words = set(re.findall(r"[a-z0-9']+", norm_output))
+    for m in messages:
+        if (getattr(m, "content_tier", None) or "") != "tier_1_locked":
+            continue
+        norm_entry = _normalize_ws(m.content)
+        if not norm_entry:
+            continue
+        if norm_entry in norm_output:
+            continue  # verbatim — OK
+        entry_words = [w for w in re.findall(r"[a-z0-9']+", norm_entry) if len(w) > 3]
+        if not entry_words:
+            continue
+        overlap = sum(1 for w in entry_words if w in output_words) / len(entry_words)
+        if overlap >= 0.6:
+            violations.append({
+                "entry_id": str(getattr(m, "id", "")),
+                "content": m.content,
+                "word_overlap": round(overlap, 2),
+                "warning": "Tier 1 entry appears to have been paraphrased — it must be reproduced verbatim.",
+            })
+    return violations
 
 
 class ArtifactGenerator:
@@ -135,6 +191,7 @@ class ArtifactGenerator:
                 "GROUNDING CONTEXT — every claim, headline, and proof point you write "
                 "MUST be drawn from the material below. Do not introduce capabilities, "
                 "statistics, or claims not present here.\n\n"
+                f"{TIER_CONTRACT_PREAMBLE}"
                 f"{context['context']}\n"
                 f"{tone_register}\n\n"
                 "---\n\n"
@@ -220,6 +277,13 @@ class ArtifactGenerator:
         elif renderer_type == "penpot":
             render_output = renderer.render_penpot(sections, render_context)
 
+        tier_violations = find_tier1_violations(messages, raw)
+        if tier_violations:
+            log.warning(
+                "Artifact %s/%s has %d Tier 1 verbatim violation(s)",
+                skill_id, house_id, len(tier_violations),
+            )
+
         return GeneratedArtifact(
             skill_id=skill_id,
             house_id=house_id,
@@ -227,6 +291,7 @@ class ArtifactGenerator:
             sections=sections,
             raw_content=raw,
             grounded_messages=grounded,
+            tier_violations=tier_violations,
             input_tokens=response.usage.prompt_tokens if response.usage else 0,
             output_tokens=response.usage.completion_tokens if response.usage else 0,
             design_spec=sections.get("design_spec"),
@@ -409,7 +474,11 @@ class ArtifactGenerator:
         personas: list[Persona],
         custom: dict,
     ) -> dict:
-        # Group ALL messages by section type, sorted by priority within each group
+        # Tier affects ordering and annotation ONLY — never inclusion. Untier'd
+        # (legacy NULL-tier) entries are always included, sorted after tiered ones.
+        # Unset tier blocks *promotion* (update_entry_status), not generation.
+        tier_order = {"tier_1_locked": 0, "tier_2_structured": 1, "tier_3_grounded": 2}
+        # Group ALL messages by section type, sorted by tier then priority within each group
         by_section: dict[str, list[KeyMessage]] = {}
         for m in messages:
             key = str(m.section_type)
@@ -417,10 +486,11 @@ class ArtifactGenerator:
 
         section_blocks = []
         for section_type in sorted(by_section):
-            msgs = sorted(by_section[section_type], key=lambda x: x.priority or 3)
+            msgs = sorted(by_section[section_type], key=lambda x: (tier_order.get(getattr(x, "content_tier", None) or "", 99), x.priority or 3))
             section_blocks.append(f"### {section_type.upper().replace('_', ' ')} ({len(msgs)})")
             for m in msgs:
-                section_blocks.append(f"  - {m.content}")
+                directive = TIER_DIRECTIVES.get(getattr(m, "content_tier", None) or "", "")
+                section_blocks.append(f"  - {directive}{m.content}")
         key_messages_str = "\n".join(section_blocks)
 
         # Build full persona blocks — all personas, all attributes

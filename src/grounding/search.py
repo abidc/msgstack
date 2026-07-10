@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 
 from src.models import (
     Channel,
+    ContentTier,
     GroundingChunk,
     GroundingContext,
     GroundingResult,
@@ -204,6 +205,7 @@ class GroundingEngine:
                         "channel": record.channel,
                         "key_message_id": record.key_message_id,
                         "last_synced": record.last_synced.isoformat() if record.last_synced else None,
+                        "content_tier": record.content_tier,
                     }
                 })
 
@@ -234,6 +236,7 @@ class GroundingEngine:
                 house_name=meta.get("house_name", ""),
                 house_summary=meta.get("house_summary", ""),
                 last_synced=datetime.fromisoformat(meta["last_synced"]) if meta.get("last_synced") else None,
+                content_tier=meta.get("content_tier"),
             )
             house_id_str = str(chunk.message_house_id)
             houses_represented[house_id_str] = houses_represented.get(house_id_str, 0) + 1
@@ -465,6 +468,7 @@ class GroundingEngine:
                     if any(kw in msg.content.lower() for kw in query_lower.split()[:3])
                     else 0.5
                 ) * status_boost)
+                tier = getattr(msg, "content_tier", None)
                 results.append(
                     GroundingResult(
                         chunk_id=str(msg.id),
@@ -478,6 +482,7 @@ class GroundingEngine:
                             "house_id": str(house.id),
                             "house_name": house.name,
                             "last_synced": house.last_synced.isoformat() if house.last_synced else None,
+                            "content_tier": tier,
                         },
                         confidence=score,
                         rerank_reason=f"fallback: matched by keyword proximity ({status})",
@@ -530,6 +535,7 @@ class GroundingEngine:
                     channel=str(msg.channels[0]) if msg.channels else "all",
                     key_message_id=msg.id,
                     last_synced=house.last_synced,
+                    content_tier=getattr(msg, "content_tier", None),
                 )
 
             # 2. Embed and index message house positioning fields

@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
 from src.models import (
     ArtifactStatus, Channel, GroundingType, DocumentType, DomainStatus, EntryStatus,
-    CanonEntry, CanonDomain, Persona, SectionType,
+    CanonEntry, CanonDomain, Persona, SectionType, QueryAuditLog,
     HouseStatus, KeyMessage, MessageHouse, MessageStatus  # Deprecated aliases
 )
 from src.store import init_store, get_store
@@ -111,6 +111,15 @@ async def startup_event():
         log.info("Default templates seeded successfully")
     except Exception as e:
         log.warning("Default templates seeding failed: %s", e)
+
+    # Query audit log retention prune (QUERY_LOG_RETENTION_DAYS, default 90)
+    try:
+        from src.config import settings as _settings
+        deleted = store.clean_query_log(older_than_days=_settings.query_log_retention_days)
+        if deleted:
+            log.info("Query audit log: pruned %d rows older than %d days", deleted, _settings.query_log_retention_days)
+    except Exception as e:
+        log.warning("Query audit log prune failed: %s", e)
 
 def _check_token_budget(workspace_id: str) -> None:
     """Raise HTTP 402 if workspace token budget is exhausted."""
@@ -557,6 +566,7 @@ class EntryCreate(BaseModel):
     variants: dict = {}
     personas: list = []
     channels: list = ["all"]
+    content_tier: str | None = None
 
     @property
     def message_house_id(self) -> str:
@@ -582,6 +592,10 @@ def create_message(data: EntryCreate, auth: AuthContext = Depends(require_write)
     if not auth.has_department_access(house.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
+        tier = None
+        if data.content_tier:
+            from src.models import ContentTier
+            tier = ContentTier(data.content_tier)
         msg = CanonEntry(
             canon_domain_id=domain_id,
             section_type=SectionType(data.section_type),
@@ -590,6 +604,7 @@ def create_message(data: EntryCreate, auth: AuthContext = Depends(require_write)
             variants=data.variants,
             personas=data.personas,
             channels=[Channel(c) for c in data.channels],
+            content_tier=tier,
         )
         store.upsert_key_message(msg)
         return {"id": str(msg.id)}
@@ -670,9 +685,13 @@ def update_message_status(data: EntryStatusUpdate, msg_id: Optional[str] = None,
     if not house or not auth.has_department_access(house.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
-        msg.status = EntryStatus(data.status)
+        new_status = EntryStatus(data.status)
     except ValueError:
         raise HTTPException(400, f"Invalid status: {data.status}")
+    # Promotion gate: content_tier required before approving or locking
+    if new_status in (EntryStatus.APPROVED, EntryStatus.LOCKED) and not msg.content_tier:
+        raise HTTPException(400, "Content tier must be assigned before entry can be approved or locked.")
+    msg.status = new_status
     if msg.status == EntryStatus.APPROVED and data.approved_by:
         msg.approved_by = data.approved_by
         msg.approved_at = _now()
@@ -686,6 +705,62 @@ def update_message_status(data: EntryStatusUpdate, msg_id: Optional[str] = None,
         notes=data.notes or "",
     )
     return {"ok": True, "id": actual_id, "status": str(msg.status)}
+
+
+class TierUpdate(BaseModel):
+    content_tier: str | None
+
+
+@app.patch("/api/entries/{entry_id}/tier")
+@app.patch("/api/messages/{msg_id}/tier")
+def update_entry_tier(data: TierUpdate, entry_id: Optional[str] = None, msg_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    """Set or clear the content tier on a canon entry."""
+    actual_id = entry_id or msg_id
+    result = store.update_entry_tier(actual_id, data.content_tier)
+    if not result:
+        raise HTTPException(404, "Canon entry not found")
+    return {"ok": True, "id": actual_id, "content_tier": result["content_tier"]}
+
+
+class DriUpdate(BaseModel):
+    dri: str
+
+
+@app.patch("/api/canon-domains/{domain_id}/dri")
+@app.patch("/api/houses/{house_id}/dri")
+def update_domain_dri(data: DriUpdate, domain_id: Optional[str] = None, house_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    """Set the DRI on a canon domain. Logs a dri_transfer event to the review trail."""
+    actual_id = domain_id or house_id
+    result = store.set_domain_dri(actual_id, data.dri, performed_by=auth.name)
+    if not result:
+        raise HTTPException(404, "Canon domain not found")
+    return {"ok": True, "id": actual_id, "dri": result["dri"]}
+
+
+@app.patch("/api/entries/{entry_id}/dri")
+@app.patch("/api/messages/{msg_id}/dri")
+def update_entry_dri(data: DriUpdate, entry_id: Optional[str] = None, msg_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    """Set the DRI on a canon entry (overrides domain DRI). Logs a dri_transfer event."""
+    actual_id = entry_id or msg_id
+    result = store.set_entry_dri(actual_id, data.dri, performed_by=auth.name)
+    if not result:
+        raise HTTPException(404, "Canon entry not found")
+    return {"ok": True, "id": actual_id, "dri": result["dri"]}
+
+
+@app.get("/api/dri/summary")
+def get_dri_summary():
+    """Accountability view: domains grouped by DRI, unowned items first."""
+    return store.get_dri_summary()
+
+
+@app.get("/api/entries/{entry_id}/effective-dri")
+@app.get("/api/messages/{msg_id}/effective-dri")
+def get_effective_dri_endpoint(entry_id: Optional[str] = None, msg_id: Optional[str] = None):
+    """Get the effective DRI for a canon entry (entry-level if set, else domain-level)."""
+    actual_id = entry_id or msg_id
+    dri = store.get_effective_dri(actual_id)
+    return {"ok": True, "id": actual_id, "dri": dri}
 
 
 # --- House Review & Staleness ---
@@ -3993,6 +4068,18 @@ def api_chat_stream(req: ChatRequest, auth: AuthContext = Depends(get_auth_conte
         from openai import OpenAI
         import os as _os
 
+        # Query audit (non-blocking) — chat is the web-surface query path
+        try:
+            from src.models import QueryAuditLog
+            store.log_query(QueryAuditLog(
+                workspace_id=req.workspace_id or "default",
+                user_id=auth.name or "web",
+                query_text=req.query,
+                source="web:chat",
+            ))
+        except Exception as _log_exc:
+            log.warning("Query audit logging failed (non-blocking): %s", _log_exc)
+
         client = OpenAI(api_key=_os.environ.get("OPENAI_API_KEY"))
         navigator = CanonNavigator(client, store)
 
@@ -4004,6 +4091,27 @@ def api_chat_stream(req: ChatRequest, auth: AuthContext = Depends(get_auth_conte
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except Exception as e:
         raise HTTPException(500, f"Streaming connection failed: {e}")
+
+
+# ── Query Audit Log ─────────────────────────────────────────────────────────
+
+@app.get("/api/query-log")
+def get_query_log(
+    limit: int = Query(100, ge=1, le=1000),
+    source: Optional[str] = Query(None),
+    caller: Optional[str] = Query(None),
+    domain_id: Optional[str] = Query(None),
+    since: Optional[datetime] = Query(None),
+):
+    return store.get_query_log(
+        limit=limit, source=source, caller=caller, domain_id=domain_id, since=since
+    )
+
+
+@app.delete("/api/query-log/cleanup")
+def clean_query_log(older_than_days: int = Query(90, ge=1)):
+    deleted = store.clean_query_log(older_than_days=older_than_days)
+    return {"ok": True, "deleted": deleted}
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)
