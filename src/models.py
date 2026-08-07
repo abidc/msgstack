@@ -87,6 +87,57 @@ class ArtifactStatus(str, Enum):
     APPROVED = "approved"
 
 
+class NodeType(str, Enum):
+    """Node kinds an edge may connect."""
+    ASSERTION = "assertion"
+    SPEC = "spec"
+    ENTITY = "entity"
+
+
+class RelType(str, Enum):
+    """Typed graph relationships.
+
+    DEPENDS_ON and INFORMS are the propagation-bearing edges: a change to the
+    destination marks the source stale. The rest are navigational.
+    """
+    DEPENDS_ON = "DEPENDS_ON"      # src is invalidated when dst changes
+    INFORMS = "INFORMS"            # dst feeds src; softer than DEPENDS_ON
+    SUPERSEDES = "SUPERSEDES"      # src replaces dst
+    CONTRADICTS = "CONTRADICTS"    # src and dst cannot both hold
+    OWNS = "OWNS"                  # src is the authority for dst
+    IMPLEMENTS = "IMPLEMENTS"      # src realises the contract in dst
+    MENTIONS = "MENTIONS"          # src refers to entity dst
+
+
+#: Relationships that cascade staleness from destination to source.
+PROPAGATING_RELS: set[str] = {RelType.DEPENDS_ON.value, RelType.INFORMS.value}
+
+
+class Entity(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    id: UUID = Field(default_factory=uuid4)
+    workspace_id: str = "default"
+    name: str
+    normalized_name: str = ""
+    entity_type: str = "concept"
+    description: str = ""
+    aliases: list[str] = Field(default_factory=list)
+
+
+class Edge(BaseModel):
+    model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
+    id: UUID = Field(default_factory=uuid4)
+    workspace_id: str = "default"
+    src_type: NodeType
+    src_id: str
+    dst_type: NodeType
+    dst_id: str
+    rel_type: RelType
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    provenance: str = ""
+    created_by: str = ""
+
+
 class InheritancePolicy(str, Enum):
     FULL = "full"
     SELECTIVE_OVERRIDE = "selective_override"

@@ -148,6 +148,37 @@ The load-bearing phase. Today `src/grounding/graph.py` builds a per-spec *contai
 | 2e | **Change propagation.** On assertion update, walk inbound `DEPENDS_ON`/`INFORMS`, mark downstream `Outdated`, notify. | The one piece of governance worth keeping — it is a graph mechanism, not a workflow |
 | 2f | **Scaling honesty.** Graph is rebuilt in-memory from DB on start (`PRODUCT_SPEC` §8). | Fine at current scale. Document as a known limit; do not claim otherwise |
 
+### Phase 2 — as built (2026-08-07)
+
+Delivered: `entities` / `entity_mentions` / `edges` tables; `RelType` vocabulary
+with `PROPAGATING_RELS`; `GraphEngine.expand()` k-hop traversal; RRF fusion in
+`_fuse_with_graph`; transitive `propagate_change()`; MCP tools `traverse_graph`,
+`get_impact`, `link_assertions`. 24 tests in `tests/test_graph.py`.
+
+Verified on a copy of the live database: two assertions in different specs are
+unreachable from each other until a shared entity links them, then reachable in
+exactly 2 hops via `->MENTIONS <-MENTIONS`; editing one marks the other outdated
+across the spec boundary.
+
+**Two design decisions worth keeping:**
+
+*Hub guard.* The first working traversal connected everything to everything.
+Nearly every assertion carries channel `"all"`, so walking `APPLIES_TO` put every
+assertion two hops from every other one through the shared Channel node — the
+graph degenerated into a complete graph and traversal was worthless while
+appearing to work. Fixed two ways: `APPLIES_TO`/`CONTAINS`/`HAS_SECTION` are
+non-traversable (they are containment scaffolding, not relationships), and any
+node above `_HUB_DEGREE` may be *reached* but never expanded *through*. The
+degree guard is the general form and protects against future hub-like nodes.
+Regression tests: `test_shared_channel_does_not_connect_unrelated_assertions`,
+`test_hub_node_is_not_traversed_through`.
+
+*No fuzzy entity merging.* `resolve_entity` matches on normalized name or
+registered alias only. The >0.90-cosine auto-merge from the original design is
+deliberately not implemented: a false merge silently fuses two unrelated
+services and is far harder to notice than a duplicate. Ambiguous cases stay
+separate and are merged explicitly via `merge_entities()`.
+
 ## 5. Phase 3b — Cut the governance apparatus
 
 This is the day-job separation. All of it is unused (§1).
@@ -246,9 +277,12 @@ The codebase carries **generation-1 aliases** (`message_house`, `house_id`, `key
 ```
 Phase 0   Vocabulary + scope decisions           ✓ done
 Phase 1   Narrative                              ✓ this file
-Phase 4   Rename sweep + alias-debt cleanup      ← in progress
-Phase 3b  Cut the governance apparatus           net deletion, unblocks Phase 2
-Phase 2   Make the graph real                    the big one
+Phase 3b  Cut the governance apparatus           ✓ done — reordered ahead of
+                                                  Phase 4 so deleted code was
+                                                  never renamed first
+Phase 4   Rename sweep + alias-debt cleanup      ✓ done
+Phase 2   Make the graph real                    ✓ done — see "as built" above
+                                                  ← next: entity extraction
 Phase 3   Schema rewrite + eng re-aim            destructive — backups taken
 Phase 5   Website                                claims now backed by code
 Phase 6   Docs

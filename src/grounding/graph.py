@@ -236,6 +236,32 @@ class GraphEngine:
                                            description="", is_custom=True)
                         g.add_edge(chunk_node, cnode, rel="APPLIES_TO")
 
+        # ── Entities + typed edges ───────────────────────────────────────
+        # Everything above is containment: each edge stays inside one spec.
+        # These two loops are what make the structure an actual graph — entity
+        # nodes join assertions across specs, and typed edges express explicit
+        # cross-spec relationships.
+        for ent in store.list_entities():
+            g.add_node(f"entity:{ent['id']}", type="Entity",
+                       id=ent["id"], name=ent["name"],
+                       entity_type=ent["entity_type"],
+                       description=ent.get("description", ""),
+                       aliases=ent.get("aliases", []))
+
+        for m in store.list_entity_mentions():
+            a_node, e_node = f"chunk:{m['assertion_id']}", f"entity:{m['entity_id']}"
+            if g.has_node(a_node) and g.has_node(e_node):
+                g.add_edge(a_node, e_node, rel="MENTIONS", confidence=m.get("confidence", 1.0))
+
+        _PREFIX = {"assertion": "chunk:", "spec": "spec:", "entity": "entity:"}
+        for e in store.list_edges():
+            src = _PREFIX.get(e["src_type"], "") + e["src_id"]
+            dst = _PREFIX.get(e["dst_type"], "") + e["dst_id"]
+            if g.has_node(src) and g.has_node(dst):
+                g.add_edge(src, dst, rel=e["rel_type"],
+                           confidence=e.get("confidence", 1.0),
+                           edge_id=e["id"], provenance=e.get("provenance", ""))
+
         self._graph = g
         self._built = True
         log.debug("Graph rebuilt: %d nodes, %d edges",
@@ -255,6 +281,136 @@ class GraphEngine:
                     if d2.get("rel") == "CONTAINS":
                         chunk_nodes.add(chunk_node)
         return chunk_nodes
+
+    # ── Traversal ────────────────────────────────────────────────────────
+    #: Edges worth walking during retrieval expansion, and what a hop costs.
+    #: Lower decay = the relationship carries less relevance across the hop.
+    _TRAVERSAL_DECAY: dict[str, float] = {
+        "MENTIONS": 0.75,      # assertion -> entity: the cross-spec bridge
+        "DEPENDS_ON": 0.85,
+        "INFORMS": 0.80,
+        "IMPLEMENTS": 0.75,
+        "SUPERSEDES": 0.90,
+        "CONTRADICTS": 0.85,   # a contradiction is highly relevant to surface
+        "OWNS": 0.60,
+        "GROUPS": 0.50,
+        "INHERITS_FROM": 0.70,
+        "ADDRESSES": 0.55,
+    }
+
+    #: Relationships never walked during retrieval. APPLIES_TO connects every
+    #: assertion to the channel it publishes on, and almost everything carries
+    #: channel "all" — so traversing it makes every assertion two hops from
+    #: every other one and the graph degenerates into a complete graph.
+    #: CONTAINS is the Section containment edge and has the same problem within
+    #: a spec. Both remain in the graph for structural queries; they are simply
+    #: not paths for relevance.
+    _NON_TRAVERSABLE: frozenset = frozenset({"APPLIES_TO", "CONTAINS", "HAS_SECTION"})
+
+    #: A node connected to more than this many others is a hub, not a
+    #: relationship. Traversal may *reach* it but never continues *through* it.
+    #: Guards against any future node type acquiring hub-like degree.
+    _HUB_DEGREE = 25
+
+    def _is_hub(self, node: str) -> bool:
+        return (self._graph.in_degree(node) + self._graph.out_degree(node)) > self._HUB_DEGREE
+
+    def expand(
+        self,
+        seed_assertion_ids: list[str],
+        hops: int = 2,
+        rel_types: list[str] | None = None,
+        min_weight: float = 0.15,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Breadth-first k-hop expansion from seed assertions.
+
+        Walks edges in both directions — a dependency is relevant read either
+        way — decaying a path weight per hop by relationship type. Returns
+        assertion nodes only (entities are waypoints, not results), each with
+        the weight and the path that reached it, best first.
+
+        This is the traversal the previous `graph` retrieval mode claimed to do
+        and did not: it filtered chunks by spec id and never left the spec.
+        """
+        self._ensure_built()
+        if not _NX_AVAILABLE or self._graph is None:
+            return []
+
+        allowed = set(rel_types) if rel_types else None
+        g = self._graph
+        seeds = [f"chunk:{a}" for a in seed_assertion_ids]
+
+        best: dict[str, float] = {}
+        path_to: dict[str, list[str]] = {}
+        frontier: list[tuple[str, float, list[str]]] = []
+        for s in seeds:
+            if g.has_node(s):
+                best[s] = 1.0
+                path_to[s] = []
+                frontier.append((s, 1.0, []))
+
+        for _ in range(max(0, hops)):
+            nxt: list[tuple[str, float, list[str]]] = []
+            for node, weight, path in frontier:
+                # Stop at hubs: reaching one is fine, continuing through it
+                # would connect every node to every other node.
+                if path and self._is_hub(node):
+                    continue
+                neighbours = (
+                    [(v, d, "out") for _, v, d in g.out_edges(node, data=True)]
+                    + [(u, d, "in") for u, _, d in g.in_edges(node, data=True)]
+                )
+                for other, data, direction in neighbours:
+                    rel = data.get("rel", "")
+                    if rel in self._NON_TRAVERSABLE:
+                        continue
+                    if allowed is not None and rel not in allowed:
+                        continue
+                    decay = self._TRAVERSAL_DECAY.get(rel, 0.4)
+                    w = weight * decay * float(data.get("confidence", 1.0))
+                    if w < min_weight or w <= best.get(other, 0.0):
+                        continue
+                    best[other] = w
+                    arrow = "->" if direction == "out" else "<-"
+                    path_to[other] = path + [f"{arrow}{rel}"]
+                    nxt.append((other, w, path_to[other]))
+            if not nxt:
+                break
+            frontier = nxt
+
+        out: list[dict] = []
+        seed_set = set(seeds)
+        for node, weight in best.items():
+            if node in seed_set or not node.startswith("chunk:"):
+                continue
+            attrs = dict(g.nodes[node])
+            attrs["graph_weight"] = round(weight, 4)
+            attrs["graph_path"] = path_to.get(node, [])
+            attrs["hops"] = len(path_to.get(node, []))
+            out.append(attrs)
+
+        out.sort(key=lambda a: a["graph_weight"], reverse=True)
+        return out[:limit]
+
+    def neighbours(self, node_type: str, node_id: str) -> dict:
+        """Immediate typed neighbourhood of a node, grouped by relationship."""
+        self._ensure_built()
+        if not _NX_AVAILABLE or self._graph is None:
+            return {}
+        prefix = {"assertion": "chunk:", "spec": "spec:", "entity": "entity:"}.get(node_type, "")
+        node = f"{prefix}{node_id}"
+        if not self._graph.has_node(node):
+            return {}
+        g = self._graph
+        grouped: dict[str, list[dict]] = {}
+        for _, v, d in g.out_edges(node, data=True):
+            grouped.setdefault(d.get("rel", "?"), []).append(
+                {"direction": "out", "node": v, **dict(g.nodes[v])})
+        for u, _, d in g.in_edges(node, data=True):
+            grouped.setdefault(d.get("rel", "?"), []).append(
+                {"direction": "in", "node": u, **dict(g.nodes[u])})
+        return grouped
 
     def get_chunks_for_spec(self, spec_id: str) -> list[dict]:
         """All KeyMessages for a spec, sorted by priority."""

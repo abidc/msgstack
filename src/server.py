@@ -861,6 +861,105 @@ def list_departments() -> dict:
     return {"departments": result}
 
 
+@mcp.tool()
+def traverse_graph(
+    assertion_ids: list[str],
+    hops: int = 2,
+    rel_types: Optional[list[str]] = None,
+    limit: int = 25,
+) -> dict:
+    """Walk the knowledge graph outward from one or more assertions.
+
+    Follows typed relationships — DEPENDS_ON, INFORMS, SUPERSEDES, CONTRADICTS,
+    IMPLEMENTS, MENTIONS — in both directions, and crosses spec boundaries:
+    an assertion in a different spec that references the same entity, or that
+    a dependency edge points at, is reachable here but not via search.
+
+    Use this to answer "what else is affected by this?" or "what does this
+    depend on?" rather than "what is similar to this?".
+
+    Args:
+        assertion_ids: UUIDs of the assertions to start from.
+        hops: Maximum path length. 2 is usually right — 1 finds only direct
+            neighbours, 3+ tends to reach weakly related material.
+        rel_types: Restrict to these relationships. All types if omitted.
+        limit: Maximum assertions to return.
+    """
+    from src.grounding.graph import get_graph_engine
+    found = get_graph_engine().expand(
+        assertion_ids, hops=hops, rel_types=rel_types, limit=limit
+    )
+    return {
+        "seeds": assertion_ids,
+        "hops": hops,
+        "results": [{
+            "assertion_id": f.get("id"),
+            "content": f.get("content"),
+            "section_type": f.get("section_type"),
+            "status": f.get("status"),
+            "weight": f.get("graph_weight"),
+            "hops": f.get("hops"),
+            "path": f.get("graph_path"),
+        } for f in found],
+        "count": len(found),
+    }
+
+
+@mcp.tool()
+def get_impact(node_id: str, node_type: str = "assertion") -> dict:
+    """Show everything that goes stale if this node changes.
+
+    Walks inbound DEPENDS_ON and INFORMS edges transitively. Call this before
+    editing an assertion to see the blast radius — the same traversal that runs
+    automatically on write and marks dependents outdated.
+    """
+    store = get_store()
+    direct = store.get_dependents(node_type, node_id)
+    return {
+        "node": {"type": node_type, "id": node_id},
+        "direct_dependents": direct,
+        "direct_count": len(direct),
+    }
+
+
+@mcp.tool()
+def link_assertions(
+    src_assertion_id: str,
+    dst_assertion_id: str,
+    rel_type: str = "DEPENDS_ON",
+    provenance: str = "",
+) -> dict:
+    """Create a typed relationship between two assertions.
+
+    DEPENDS_ON and INFORMS are propagating: when the destination changes, the
+    source is automatically marked outdated. SUPERSEDES, CONTRADICTS,
+    IMPLEMENTS and OWNS are navigational — they shape traversal without
+    cascading staleness.
+
+    Args:
+        src_assertion_id: The dependent / referring assertion.
+        dst_assertion_id: The assertion depended on / referred to.
+        rel_type: One of DEPENDS_ON, INFORMS, SUPERSEDES, CONTRADICTS,
+            IMPLEMENTS, OWNS, MENTIONS.
+        provenance: Free text recording why this link exists.
+    """
+    from src.models import RelType
+    store = get_store()
+    try:
+        rel = RelType(rel_type).value
+    except ValueError:
+        return {"error": f"Unknown rel_type {rel_type!r}. Valid: {[r.value for r in RelType]}"}
+    try:
+        edge_id = store.add_edge(
+            "assertion", src_assertion_id, "assertion", dst_assertion_id,
+            rel, provenance=provenance, created_by="mcp",
+        )
+    except ValueError as e:
+        return {"error": str(e)}
+    return {"edge_id": edge_id, "rel_type": rel,
+            "src": src_assertion_id, "dst": dst_assertion_id}
+
+
 # ── MCP Prompts ──────────────────────────────────────────────────────────────
 # Clients that support prompts/list (OpenWebUI, Claude Desktop, etc.) will
 # discover these and can inject them as system messages automatically.

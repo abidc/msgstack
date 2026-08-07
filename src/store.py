@@ -1,6 +1,7 @@
 """SQLite / PostgreSQL-backed spec graph storage."""
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Self
@@ -35,6 +36,7 @@ from src.models import (
     BrandSettings, Channel, ContentTier, GroundingType, SpecStatus, AssertionStatus,
     Spec, Assertion, Persona, SectionType,
     InheritancePolicy, ArtifactEntryBinding,
+    Entity, Edge, NodeType, RelType, PROPAGATING_RELS,
 )
 
 
@@ -83,6 +85,61 @@ class ArtifactEntryBindingModel(Base):
     assertion_id: Mapped[str] = mapped_column(String(36), ForeignKey("assertions.id", ondelete="CASCADE"), nullable=False)
     element_type: Mapped[str] = mapped_column(String(50), nullable=False)
     bound_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class EntityModel(Base):
+    """A resolved concept that assertions refer to — a service, endpoint, policy,
+    component. Entities are workspace-scoped rather than spec-scoped: that is what
+    makes cross-spec traversal possible. Two assertions in different specs that
+    mention the same service resolve to one entity node and become 2 hops apart.
+    """
+    __tablename__ = "entities"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # lowercase/punctuation-stripped form used for exact-match resolution
+    normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, default="concept")
+    description: Mapped[str] = mapped_column(Text, default="")
+    aliases: Mapped[str] = mapped_column(Text, default="[]")  # JSON list
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class EntityMentionModel(Base):
+    """Assertion -> Entity. The join that lets a traversal leave one spec and
+    arrive in another without an explicitly authored cross-spec edge.
+    """
+    __tablename__ = "entity_mentions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    entity_id: Mapped[str] = mapped_column(String(36), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False)
+    assertion_id: Mapped[str] = mapped_column(String(36), ForeignKey("assertions.id", ondelete="CASCADE"), nullable=False)
+    spec_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class EdgeModel(Base):
+    """A typed, directed relationship between two graph nodes.
+
+    src/dst are (type, id) pairs rather than foreign keys because an edge may
+    connect any node kind — assertion, spec or entity — and SQLite has no
+    polymorphic FK. Referential integrity is enforced on write in add_edge().
+    """
+    __tablename__ = "edges"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
+    src_type: Mapped[str] = mapped_column(String(20), nullable=False)   # assertion | spec | entity
+    src_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    dst_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    dst_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    rel_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    provenance: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
@@ -463,6 +520,12 @@ Index("ix_chunk_usage_chunk_id", ChunkUsageStatModel.chunk_id)
 Index("ix_vector_metadata_spec_id", VectorMetadataModel.spec_id)
 Index("ix_binding_artifact", ArtifactEntryBindingModel.artifact_id)
 Index("ix_binding_entry", ArtifactEntryBindingModel.assertion_id)
+Index("ix_entity_norm", EntityModel.workspace_id, EntityModel.normalized_name)
+Index("ix_mention_entity", EntityMentionModel.entity_id)
+Index("ix_mention_assertion", EntityMentionModel.assertion_id)
+Index("ix_edge_src", EdgeModel.src_type, EdgeModel.src_id)
+Index("ix_edge_dst", EdgeModel.dst_type, EdgeModel.dst_id)
+Index("ix_edge_rel", EdgeModel.rel_type)
 
 
 class Store:
@@ -717,6 +780,52 @@ class Store:
                         conn.commit()
                     except Exception:
                         pass
+            if "entities" not in tables:
+                conn.execute(text("""
+                    CREATE TABLE entities (
+                        id VARCHAR(36) PRIMARY KEY,
+                        workspace_id VARCHAR(36) NOT NULL DEFAULT 'default',
+                        name VARCHAR(255) NOT NULL,
+                        normalized_name VARCHAR(255) NOT NULL,
+                        entity_type VARCHAR(50) NOT NULL DEFAULT 'concept',
+                        description TEXT DEFAULT '',
+                        aliases TEXT DEFAULT '[]',
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            if "entity_mentions" not in tables:
+                conn.execute(text("""
+                    CREATE TABLE entity_mentions (
+                        id VARCHAR(36) PRIMARY KEY,
+                        entity_id VARCHAR(36) NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+                        assertion_id VARCHAR(36) NOT NULL REFERENCES assertions(id) ON DELETE CASCADE,
+                        spec_id VARCHAR(36) NOT NULL,
+                        confidence FLOAT DEFAULT 1.0,
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
+            if "edges" not in tables:
+                conn.execute(text("""
+                    CREATE TABLE edges (
+                        id VARCHAR(36) PRIMARY KEY,
+                        workspace_id VARCHAR(36) NOT NULL DEFAULT 'default',
+                        src_type VARCHAR(20) NOT NULL,
+                        src_id VARCHAR(36) NOT NULL,
+                        dst_type VARCHAR(20) NOT NULL,
+                        dst_id VARCHAR(36) NOT NULL,
+                        rel_type VARCHAR(30) NOT NULL,
+                        confidence FLOAT DEFAULT 1.0,
+                        provenance TEXT DEFAULT '',
+                        created_by VARCHAR(255) DEFAULT '',
+                        created_at DATETIME NOT NULL
+                    )
+                """))
+                conn.commit()
+
             if "artifact_entry_bindings" not in tables:
                 conn.execute(text("""
                     CREATE TABLE artifact_entry_bindings (
@@ -1027,6 +1136,9 @@ class Store:
                     if art:
                         art.status = "draft"  # Set to draft so it requires re-approval/review
                 s.commit()
+
+        if content_changed:
+            self.propagate_change("assertion", str(entry.id))
 
         _invalidate_graph()
 
@@ -2155,7 +2267,8 @@ class Store:
             
             s.delete(row)
             s.commit()
-            return True
+        _invalidate_graph()
+        return True
 
     # --- API Keys ---
 
@@ -2485,7 +2598,8 @@ class Store:
                 return False
             s.delete(row)
             s.commit()
-            return True
+        _invalidate_graph()
+        return True
 
     # --- Source Files ---
 
@@ -2892,6 +3006,275 @@ class Store:
                 }
                 for m in models
             ]
+
+    # ==========================================
+    # Graph: entities, mentions, typed edges
+    # ==========================================
+
+    @staticmethod
+    def normalize_entity_name(name: str) -> str:
+        """Fold a surface form to its match key. Deliberately aggressive —
+        'Payments API', 'payments-api' and 'payments_api' are one entity."""
+        return re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
+
+    def resolve_entity(
+        self,
+        name: str,
+        entity_type: str = "concept",
+        workspace_id: str = "default",
+        description: str = "",
+        create: bool = True,
+    ) -> Optional[str]:
+        """Find or create the entity for a surface form. Returns its id.
+
+        Resolution is exact-match on the normalized name or on a registered
+        alias. Embedding-similarity merging is deliberately not done here —
+        a false merge silently fuses two unrelated services and is much harder
+        to notice than a duplicate. Ambiguous cases become separate entities
+        and can be merged explicitly with merge_entities().
+        """
+        norm = self.normalize_entity_name(name)
+        if not norm:
+            return None
+        with self.session() as s:
+            row = s.query(EntityModel).filter(
+                EntityModel.workspace_id == workspace_id,
+                EntityModel.normalized_name == norm,
+            ).first()
+            if row:
+                return row.id
+            # alias match
+            for cand in s.query(EntityModel).filter(EntityModel.workspace_id == workspace_id).all():
+                if norm in {self.normalize_entity_name(a) for a in json.loads(cand.aliases or "[]")}:
+                    return cand.id
+            if not create:
+                return None
+            eid = str(uuid4())
+            s.add(EntityModel(
+                id=eid, workspace_id=workspace_id, name=name, normalized_name=norm,
+                entity_type=entity_type, description=description, aliases="[]",
+                created_at=_now(),
+            ))
+            s.commit()
+        _invalidate_graph()
+        return eid
+
+    def merge_entities(self, keep_id: str, merge_id: str) -> int:
+        """Fold merge_id into keep_id: repoint mentions and edges, absorb the
+        alias, delete the loser. Returns rows repointed."""
+        if keep_id == merge_id:
+            return 0
+        moved = 0
+        with self.session() as s:
+            keep = s.get(EntityModel, keep_id)
+            loser = s.get(EntityModel, merge_id)
+            if not keep or not loser:
+                return 0
+            aliases = set(json.loads(keep.aliases or "[]"))
+            aliases.add(loser.name)
+            aliases.update(json.loads(loser.aliases or "[]"))
+            keep.aliases = json.dumps(sorted(aliases))
+            moved += s.query(EntityMentionModel).filter(
+                EntityMentionModel.entity_id == merge_id
+            ).update({"entity_id": keep_id})
+            moved += s.query(EdgeModel).filter(
+                EdgeModel.src_type == "entity", EdgeModel.src_id == merge_id
+            ).update({"src_id": keep_id})
+            moved += s.query(EdgeModel).filter(
+                EdgeModel.dst_type == "entity", EdgeModel.dst_id == merge_id
+            ).update({"dst_id": keep_id})
+            s.delete(loser)
+            s.commit()
+        _invalidate_graph()
+        return moved
+
+    def add_entity_mention(
+        self, entity_id: str, assertion_id: str, spec_id: str, confidence: float = 1.0
+    ) -> Optional[str]:
+        with self.session() as s:
+            existing = s.query(EntityMentionModel).filter(
+                EntityMentionModel.entity_id == entity_id,
+                EntityMentionModel.assertion_id == assertion_id,
+            ).first()
+            if existing:
+                return existing.id
+            mid = str(uuid4())
+            s.add(EntityMentionModel(
+                id=mid, entity_id=entity_id, assertion_id=str(assertion_id),
+                spec_id=str(spec_id), confidence=confidence, created_at=_now(),
+            ))
+            s.commit()
+        _invalidate_graph()
+        return mid
+
+    def list_entities(self, workspace_id: str = "default") -> list[dict]:
+        with self.session() as s:
+            rows = s.query(EntityModel).filter(EntityModel.workspace_id == workspace_id).all()
+            return [{
+                "id": r.id, "name": r.name, "normalized_name": r.normalized_name,
+                "entity_type": r.entity_type, "description": r.description,
+                "aliases": json.loads(r.aliases or "[]"),
+            } for r in rows]
+
+    def list_entity_mentions(self, workspace_id: str = "default") -> list[dict]:
+        with self.session() as s:
+            rows = (
+                s.query(EntityMentionModel)
+                .join(EntityModel, EntityModel.id == EntityMentionModel.entity_id)
+                .filter(EntityModel.workspace_id == workspace_id)
+                .all()
+            )
+            return [{
+                "entity_id": r.entity_id, "assertion_id": r.assertion_id,
+                "spec_id": r.spec_id, "confidence": r.confidence,
+            } for r in rows]
+
+    def _node_exists(self, node_type: str, node_id: str) -> bool:
+        table = {"assertion": AssertionModel, "spec": SpecModel, "entity": EntityModel}.get(node_type)
+        if table is None:
+            return False
+        with self.session() as s:
+            return s.get(table, str(node_id)) is not None
+
+    def add_edge(
+        self,
+        src_type: str, src_id: str,
+        dst_type: str, dst_id: str,
+        rel_type: str,
+        confidence: float = 1.0,
+        provenance: str = "",
+        created_by: str = "",
+        workspace_id: str = "default",
+    ) -> str:
+        """Create a typed edge. Raises ValueError if either endpoint is missing —
+        SQLite cannot express a polymorphic FK, so integrity is checked here."""
+        for t, i, lbl in ((src_type, src_id, "src"), (dst_type, dst_id, "dst")):
+            if not self._node_exists(t, i):
+                raise ValueError(f"{lbl} node not found: {t}:{i}")
+        with self.session() as s:
+            existing = s.query(EdgeModel).filter(
+                EdgeModel.src_type == src_type, EdgeModel.src_id == str(src_id),
+                EdgeModel.dst_type == dst_type, EdgeModel.dst_id == str(dst_id),
+                EdgeModel.rel_type == rel_type,
+            ).first()
+            if existing:
+                return existing.id
+            eid = str(uuid4())
+            s.add(EdgeModel(
+                id=eid, workspace_id=workspace_id,
+                src_type=src_type, src_id=str(src_id),
+                dst_type=dst_type, dst_id=str(dst_id),
+                rel_type=rel_type, confidence=confidence,
+                provenance=provenance, created_by=created_by, created_at=_now(),
+            ))
+            s.commit()
+        _invalidate_graph()
+        return eid
+
+    def delete_edge(self, edge_id: str) -> bool:
+        with self.session() as s:
+            row = s.get(EdgeModel, edge_id)
+            if not row:
+                return False
+            s.delete(row)
+            s.commit()
+        _invalidate_graph()
+        return True
+
+    def list_edges(
+        self,
+        workspace_id: str = "default",
+        rel_type: Optional[str] = None,
+        src_id: Optional[str] = None,
+        dst_id: Optional[str] = None,
+    ) -> list[dict]:
+        with self.session() as s:
+            q = s.query(EdgeModel).filter(EdgeModel.workspace_id == workspace_id)
+            if rel_type:
+                q = q.filter(EdgeModel.rel_type == rel_type)
+            if src_id:
+                q = q.filter(EdgeModel.src_id == str(src_id))
+            if dst_id:
+                q = q.filter(EdgeModel.dst_id == str(dst_id))
+            return [{
+                "id": r.id, "src_type": r.src_type, "src_id": r.src_id,
+                "dst_type": r.dst_type, "dst_id": r.dst_id, "rel_type": r.rel_type,
+                "confidence": r.confidence, "provenance": r.provenance,
+                "created_by": r.created_by,
+            } for r in q.all()]
+
+    def get_dependents(self, node_type: str, node_id: str) -> list[dict]:
+        """Edges whose destination is this node via a propagating relationship —
+        i.e. everything that goes stale when this node changes."""
+        with self.session() as s:
+            rows = s.query(EdgeModel).filter(
+                EdgeModel.dst_type == node_type,
+                EdgeModel.dst_id == str(node_id),
+                EdgeModel.rel_type.in_(sorted(PROPAGATING_RELS)),
+            ).all()
+            return [{
+                "id": r.id, "src_type": r.src_type, "src_id": r.src_id,
+                "rel_type": r.rel_type, "confidence": r.confidence,
+            } for r in rows]
+
+    def propagate_change(
+        self, node_type: str, node_id: str, max_depth: int = 5, _seen: set | None = None
+    ) -> list[dict]:
+        """Cascade staleness along inbound DEPENDS_ON / INFORMS edges.
+
+        When a node changes, everything that declared a dependency on it is
+        marked outdated and the transition is written to the review trail.
+        Recurses so a chain A -> B -> C fully invalidates, with a visited set
+        guarding against cycles (nothing prevents an author creating one).
+
+        Returns the list of nodes marked stale.
+        """
+        seen = _seen if _seen is not None else set()
+        key = (node_type, str(node_id))
+        if key in seen or max_depth <= 0:
+            return []
+        seen.add(key)
+
+        affected: list[dict] = []
+        for dep in self.get_dependents(node_type, node_id):
+            src_type, src_id = dep["src_type"], dep["src_id"]
+            if (src_type, src_id) in seen:
+                continue
+            with self.session() as s:
+                if src_type == "assertion":
+                    row = s.get(AssertionModel, src_id)
+                    if row and row.status != "outdated":
+                        row.status = "outdated"
+                        s.add(ReviewLogModel(
+                            id=str(uuid4()),
+                            spec_id=str(row.spec_id),
+                            assertion_id=src_id,
+                            action="propagation_drift",
+                            performed_by="system_graph",
+                            timestamp=datetime.now(),
+                            notes=(
+                                f"Marked outdated: {dep['rel_type']} edge to "
+                                f"{node_type}:{node_id}, which changed."
+                            ),
+                        ))
+                        s.commit()
+                        affected.append({
+                            "node_type": src_type, "node_id": src_id,
+                            "rel_type": dep["rel_type"], "spec_id": str(row.spec_id),
+                        })
+                elif src_type == "spec":
+                    row = s.get(SpecModel, src_id)
+                    if row and row.status != "needs_review":
+                        row.status = "needs_review"
+                        s.commit()
+                        affected.append({
+                            "node_type": src_type, "node_id": src_id,
+                            "rel_type": dep["rel_type"],
+                        })
+            affected.extend(
+                self.propagate_change(src_type, src_id, max_depth - 1, seen)
+            )
+        return affected
 
     def check_spec_completeness(self, domain_id: UUID) -> dict:
         domain = self.get_spec(domain_id)

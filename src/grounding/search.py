@@ -34,6 +34,14 @@ def string_to_uint64(s: str) -> int:
     return int(sha[:16], 16)
 
 
+def _is_uuid(value: str) -> bool:
+    try:
+        UUID(str(value))
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 class GroundingEngine:
     def __init__(
         self,
@@ -211,6 +219,15 @@ class GroundingEngine:
 
         matches = self._rerank(query, matches, top_k, filters)
 
+        # ── Hybrid fusion ────────────────────────────────────────────────
+        # Vector recall gives the seeds; the graph expands from them; the two
+        # rankings are combined with reciprocal rank fusion. This is what makes
+        # the mode genuinely hybrid — previously "hybrid" ran vector only and
+        # attached graph context as decoration, so a relevant assertion in
+        # another spec could never surface.
+        if retrieval_mode == "hybrid" and matches:
+            matches = self._fuse_with_graph(matches, filters, top_k)
+
         grounding_results = []
         specs_represented: dict[str, int] = {}
         confidence_scores = []
@@ -382,6 +399,130 @@ class GroundingEngine:
                 return {r.chunk_id: r.boost_factor for r in rows}
         except Exception:
             return {}
+
+    def _visible(self, status: str, filters: SearchFilters) -> bool:
+        """Lifecycle gate shared by every retrieval path."""
+        if status == "outdated":
+            return False
+        if getattr(filters, "include_unapproved", False):
+            return True
+        if getattr(filters, "include_drafts", False):
+            return True
+        return status in ("approved", "locked")
+
+    def _graph_expand(
+        self,
+        seed_assertion_ids: list[str],
+        filters: SearchFilters,
+        hops: int = 2,
+        limit: int = 25,
+    ) -> list[dict]:
+        """Traverse outward from seed assertions and return visible neighbours.
+
+        Unlike the vector path this crosses spec boundaries: an assertion in
+        another spec that mentions the same entity, or that an explicit
+        DEPENDS_ON edge points at, is reachable in two hops.
+        """
+        from src.grounding.graph import get_graph_engine
+        try:
+            found = get_graph_engine().expand(
+                seed_assertion_ids, hops=hops, limit=limit * 2
+            )
+        except Exception as e:
+            log.warning("Graph expansion failed (non-blocking): %s", e)
+            return []
+
+        out = []
+        for node in found:
+            if not self._visible(node.get("status", "draft"), filters):
+                continue
+            if filters.section_types and node.get("section_type") not in filters.section_types:
+                continue
+            out.append(node)
+        return out[:limit]
+
+    #: RRF damping. 60 is the value from the original Cormack et al. paper and
+    #: keeps a rank-1 hit from dominating a list it only narrowly leads.
+    _RRF_K = 60
+
+    def _fuse_with_graph(
+        self, vector_matches: list[dict], filters: SearchFilters, top_k: int
+    ) -> list[dict]:
+        """Reciprocal rank fusion of the vector ranking with a graph expansion
+        seeded from its top hits.
+
+        score(d) = Σ 1/(k + rank_i(d)) over each list d appears in. Documents
+        found by both routes rise above ones found by either alone, which is
+        the entire point of running two retrievers.
+        """
+        seeds = [
+            m["metadata"].get("assertion_id")
+            for m in vector_matches[: min(5, len(vector_matches))]
+            if m.get("metadata", {}).get("assertion_id")
+        ]
+        if not seeds:
+            return vector_matches
+
+        expanded = self._graph_expand(seeds, filters, hops=2, limit=top_k * 2)
+        if not expanded:
+            return vector_matches
+
+        scores: dict[str, float] = {}
+        merged: dict[str, dict] = {}
+
+        for rank, m in enumerate(vector_matches):
+            key = m["metadata"].get("assertion_id") or m["id"]
+            scores[key] = scores.get(key, 0.0) + 1.0 / (self._RRF_K + rank + 1)
+            merged[key] = m
+
+        known = {m["metadata"].get("assertion_id") for m in vector_matches}
+        for rank, node in enumerate(expanded):
+            key = node.get("id")
+            if not key:
+                continue
+            scores[key] = scores.get(key, 0.0) + 1.0 / (self._RRF_K + rank + 1)
+            if key in merged:
+                merged[key].setdefault("metadata", {})["graph_path"] = node.get("graph_path")
+                continue
+            if key in known:
+                continue
+            # Reached only by traversal — may live in a different spec entirely.
+            record = self.store.get_assertion(UUID(key)) if _is_uuid(key) else None
+            if record is None:
+                continue
+            spec = self.store.get_spec(record.spec_id)
+            merged[key] = {
+                "id": f"chunk-{key}",
+                "score": node.get("graph_weight", 0.0),
+                "metadata": {
+                    "spec_id": str(record.spec_id),
+                    "spec_name": spec.name if spec else "",
+                    "spec_summary": spec.summary if spec else "",
+                    "content": record.content,
+                    "section_type": str(record.section_type),
+                    "priority": record.priority,
+                    "persona": None,
+                    "channel": "all",
+                    "assertion_id": key,
+                    "last_synced": None,
+                    "content_tier": record.content_tier,
+                    "graph_path": node.get("graph_path"),
+                },
+                "rerank_reason": (
+                    f"graph:{node.get('hops')}hop "
+                    f"{''.join(node.get('graph_path') or [])}"
+                ),
+            }
+
+        ordered = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+        fused = []
+        for key, s in ordered:
+            if key not in merged:
+                continue
+            m = merged[key]
+            m["fusion_score"] = round(s, 6)
+            fused.append(m)
+        return fused
 
     def _graph_search(self, spec_id: UUID, filters: SearchFilters) -> GroundingResponse:
         """Deterministic graph retrieval — bypasses vector approximation, filters outdated, prioritizes approved/locked."""
