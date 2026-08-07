@@ -2,17 +2,17 @@
 
 Graph schema
 ------------
-MessageHouse
-  ├─[HAS_SECTION]──► Section (one per section_type present in the house)
-  │                    └─[CONTAINS]──► KeyMessage
-  ├─[HAS_PILLAR]───► MessagingPillar (optional user grouping, orthogonal to sections)
-  │                    └─[GROUPS]────► KeyMessage
+Spec
+  ├─[HAS_SECTION]──► Section (one per section_type present in the spec)
+  │                    └─[CONTAINS]──► Assertion
+  ├─[HAS_PILLAR]───► Pillar (optional user grouping, orthogonal to sections)
+  │                    └─[GROUPS]────► Assertion
   └─[TARGETS]──────► Persona
                        ├─[HAS_PAIN_POINT]──► PainPoint
                        ├─[HAS_TRIGGER]─────► BuyingTrigger
                        └─[HAS_OBJECTION]───► Objection
 
-KeyMessage
+Assertion
   ├─[ADDRESSES]──► Persona
   └─[APPLIES_TO]─► Channel
 """
@@ -103,58 +103,58 @@ class GraphEngine:
         store = get_store()
 
         g = nx.DiGraph()
-        houses = store.list_houses()
+        specs = store.list_specs()
         ch_meta_map = {c["id"]: c for c in store.get_channels()}
 
-        for house in houses:
-            house_node = f"house:{house.id}"
-            g.add_node(house_node, type="MessageHouse",
-                       id=str(house.id), name=house.name,
-                       document_type=str(house.document_type),
-                       tagline=getattr(house, "tagline", ""),
-                       positioning=getattr(house, "positioning", ""),
-                       summary=house.summary,
+        for spec in specs:
+            spec_node = f"spec:{spec.id}"
+            g.add_node(spec_node, type="Spec",
+                       id=str(spec.id), name=spec.name,
+                       grounding_type=str(spec.grounding_type),
+                       tagline=getattr(spec, "tagline", ""),
+                       positioning=getattr(spec, "positioning", ""),
+                       summary=spec.summary,
                        # Phase 2 additions:
-                       parent_domain_id=str(house.parent_domain_id) if house.parent_domain_id else None,
-                       inheritance_policy=str(house.inheritance_policy))
+                       parent_domain_id=str(spec.parent_domain_id) if spec.parent_domain_id else None,
+                       inheritance_policy=str(spec.inheritance_policy))
 
             # Add relationship edge to parent if linked
-            if house.parent_domain_id:
-                parent_node = f"house:{house.parent_domain_id}"
-                g.add_edge(house_node, parent_node, rel="INHERITS_FROM")
+            if spec.parent_domain_id:
+                parent_node = f"spec:{spec.parent_domain_id}"
+                g.add_edge(spec_node, parent_node, rel="INHERITS_FROM")
 
             # Pillars — optional user-defined groupings (orthogonal to sections)
-            pillars = store.list_pillars(house.id)
+            pillars = store.list_pillars(spec.id)
             pillar_map: dict[int, str] = {}
             for pillar in pillars:
                 pil_node = f"pillar:{pillar.id}"
-                g.add_node(pil_node, type="MessagingPillar",
+                g.add_node(pil_node, type="Pillar",
                            id=str(pillar.id), name=pillar.name,
                            description=pillar.description or "",
-                           house_id=str(house.id))
-                g.add_edge(house_node, pil_node, rel="HAS_PILLAR")
+                           spec_id=str(spec.id))
+                g.add_edge(spec_node, pil_node, rel="HAS_PILLAR")
                 pillar_map[pillar.id] = pil_node
 
             # Personas + sub-nodes (built before messages so edges can reference them)
-            for persona in store.get_personas(house.id):
-                pnode = f"persona:{house.id}:{persona.name}"
+            for persona in store.get_personas(spec.id):
+                pnode = f"persona:{spec.id}:{persona.name}"
                 g.add_node(pnode, type="Persona", name=persona.name,
-                           house_id=str(house.id),
+                           spec_id=str(spec.id),
                            description=getattr(persona, "description", ""))
-                g.add_edge(house_node, pnode, rel="TARGETS")
+                g.add_edge(spec_node, pnode, rel="TARGETS")
 
                 db_pps = store.list_pain_points(str(persona.id))
                 if db_pps:
                     for pp in db_pps:
                         n = f"pain_point_db:{pp.id}"
                         g.add_node(n, type="PainPoint", id=str(pp.id), content=pp.content,
-                                   persona_name=persona.name, house_id=str(house.id))
+                                   persona_name=persona.name, spec_id=str(spec.id))
                         g.add_edge(pnode, n, rel="HAS_PAIN_POINT")
                 else:
                     for i, txt in enumerate(persona.pain_points or []):
-                        n = f"pain_point:{house.id}:{persona.name}:{i}"
+                        n = f"pain_point:{spec.id}:{persona.name}:{i}"
                         g.add_node(n, type="PainPoint", id=n, content=str(txt),
-                                   persona_name=persona.name, house_id=str(house.id))
+                                   persona_name=persona.name, spec_id=str(spec.id))
                         g.add_edge(pnode, n, rel="HAS_PAIN_POINT")
 
                 db_trigs = store.list_buying_triggers(str(persona.id))
@@ -162,13 +162,13 @@ class GraphEngine:
                     for bt in db_trigs:
                         n = f"trigger_db:{bt.id}"
                         g.add_node(n, type="BuyingTrigger", id=str(bt.id), content=bt.content,
-                                   persona_name=persona.name, house_id=str(house.id))
+                                   persona_name=persona.name, spec_id=str(spec.id))
                         g.add_edge(pnode, n, rel="HAS_TRIGGER")
                 else:
                     for i, txt in enumerate(persona.buying_triggers or []):
-                        n = f"trigger:{house.id}:{persona.name}:{i}"
+                        n = f"trigger:{spec.id}:{persona.name}:{i}"
                         g.add_node(n, type="BuyingTrigger", id=n, content=str(txt),
-                                   persona_name=persona.name, house_id=str(house.id))
+                                   persona_name=persona.name, spec_id=str(spec.id))
                         g.add_edge(pnode, n, rel="HAS_TRIGGER")
 
                 db_obs = store.list_objections(str(persona.id))
@@ -177,34 +177,34 @@ class GraphEngine:
                         n = f"objection_db:{ob.id}"
                         g.add_node(n, type="Objection", id=str(ob.id),
                                    statement=ob.statement, response=ob.response or "",
-                                   persona_name=persona.name, house_id=str(house.id))
+                                   persona_name=persona.name, spec_id=str(spec.id))
                         g.add_edge(pnode, n, rel="HAS_OBJECTION")
                 else:
                     for i, ob in enumerate(persona.objections or []):
-                        n = f"objection:{house.id}:{persona.name}:{i}"
+                        n = f"objection:{spec.id}:{persona.name}:{i}"
                         stmt = ob.get("statement", "") if isinstance(ob, dict) else str(ob)
                         resp = ob.get("response", "") if isinstance(ob, dict) else ""
                         g.add_node(n, type="Objection", id=n, statement=stmt, response=resp,
-                                   persona_name=persona.name, house_id=str(house.id))
+                                   persona_name=persona.name, spec_id=str(spec.id))
                         g.add_edge(pnode, n, rel="HAS_OBJECTION")
 
             # Sections + KeyMessages
             by_section: dict[str, list] = {}
-            for msg in store.get_key_messages(house.id):
+            for msg in store.get_key_messages(spec.id):
                 by_section.setdefault(str(msg.section_type), []).append(msg)
 
             for section_type, msgs in by_section.items():
-                sec_node = f"section:{house.id}:{section_type}"
+                sec_node = f"section:{spec.id}:{section_type}"
                 label = _SECTION_LABELS.get(section_type,
                                              section_type.replace("_", " ").title())
                 g.add_node(sec_node, type="Section",
                            id=sec_node, section_type=section_type, label=label,
-                           house_id=str(house.id), count=len(msgs))
-                g.add_edge(house_node, sec_node, rel="HAS_SECTION")
+                           spec_id=str(spec.id), count=len(msgs))
+                g.add_edge(spec_node, sec_node, rel="HAS_SECTION")
 
                 for msg in msgs:
                     chunk_node = f"chunk:{msg.id}"
-                    g.add_node(chunk_node, type="KeyMessage",
+                    g.add_node(chunk_node, type="Assertion",
                                id=str(msg.id), content=msg.content,
                                section_type=section_type, priority=msg.priority,
                                status=getattr(msg, "status", "draft"),
@@ -215,11 +215,11 @@ class GraphEngine:
                         g.add_edge(pillar_map[msg.pillar_id], chunk_node, rel="GROUPS")
 
                     for persona_name in (msg.personas or []):
-                        pnode = f"persona:{house.id}:{persona_name}"
+                        pnode = f"persona:{spec.id}:{persona_name}"
                         if not g.has_node(pnode):
                             g.add_node(pnode, type="Persona", name=persona_name,
-                                       house_id=str(house.id), description="")
-                            g.add_edge(house_node, pnode, rel="TARGETS")
+                                       spec_id=str(spec.id), description="")
+                            g.add_edge(spec_node, pnode, rel="TARGETS")
                         g.add_edge(chunk_node, pnode, rel="ADDRESSES")
 
                     for ch in (msg.channels or []):
@@ -245,43 +245,43 @@ class GraphEngine:
         if not self._built:
             self.rebuild()
 
-    def _house_chunk_nodes(self, house_id: str) -> set[str]:
-        """All KeyMessage node IDs for a house, traversing through Section nodes."""
-        house_node = f"house:{house_id}"
+    def _spec_chunk_nodes(self, spec_id: str) -> set[str]:
+        """All Assertion node IDs for a spec, traversing through Section nodes."""
+        spec_node = f"spec:{spec_id}"
         chunk_nodes: set[str] = set()
-        for _, sec_node, d in self._graph.out_edges(house_node, data=True):
+        for _, sec_node, d in self._graph.out_edges(spec_node, data=True):
             if d.get("rel") == "HAS_SECTION":
                 for _, chunk_node, d2 in self._graph.out_edges(sec_node, data=True):
                     if d2.get("rel") == "CONTAINS":
                         chunk_nodes.add(chunk_node)
         return chunk_nodes
 
-    def get_chunks_for_house(self, house_id: str) -> list[dict]:
-        """All KeyMessages for a house, sorted by priority."""
+    def get_chunks_for_spec(self, spec_id: str) -> list[dict]:
+        """All KeyMessages for a spec, sorted by priority."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        house_node = f"house:{house_id}"
-        if house_node not in self._graph:
+        spec_node = f"spec:{spec_id}"
+        if spec_node not in self._graph:
             return []
         chunks: list[dict] = []
-        for _, sec_node, d in self._graph.out_edges(house_node, data=True):
+        for _, sec_node, d in self._graph.out_edges(spec_node, data=True):
             if d.get("rel") == "HAS_SECTION":
                 for _, chunk_node, d2 in self._graph.out_edges(sec_node, data=True):
                     if d2.get("rel") == "CONTAINS":
                         chunks.append(dict(self._graph.nodes[chunk_node]))
         return sorted(chunks, key=lambda c: c.get("priority", 3))
 
-    def get_sections_for_house(self, house_id: str) -> list[dict]:
-        """Section nodes for a house with their KeyMessages nested, ordered by section type."""
+    def get_sections_for_spec(self, spec_id: str) -> list[dict]:
+        """Section nodes for a spec with their KeyMessages nested, ordered by section type."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        house_node = f"house:{house_id}"
-        if house_node not in self._graph:
+        spec_node = f"spec:{spec_id}"
+        if spec_node not in self._graph:
             return []
         sections: list[dict] = []
-        for _, sec_node, d in self._graph.out_edges(house_node, data=True):
+        for _, sec_node, d in self._graph.out_edges(spec_node, data=True):
             if d.get("rel") == "HAS_SECTION":
                 sec_attrs = dict(self._graph.nodes[sec_node])
                 messages: list[dict] = []
@@ -293,32 +293,32 @@ class GraphEngine:
         return sorted(sections,
                       key=lambda s: _SECTION_ORDER.get(s.get("section_type", ""), 99))
 
-    def get_chunks_for_persona(self, house_id: str, persona_name: str) -> list[dict]:
-        """KeyMessages that ADDRESS a specific persona within a house."""
+    def get_chunks_for_persona(self, spec_id: str, persona_name: str) -> list[dict]:
+        """KeyMessages that ADDRESS a specific persona within a spec."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        persona_node = f"persona:{house_id}:{persona_name}"
+        persona_node = f"persona:{spec_id}:{persona_name}"
         if persona_node not in self._graph:
             return []
         return [dict(self._graph.nodes[n]) for n, _, d
                 in self._graph.in_edges(persona_node, data=True)
                 if d.get("rel") == "ADDRESSES"]
 
-    def get_chunks_for_channel(self, house_id: str, channel: str) -> list[dict]:
-        """KeyMessages that APPLY_TO a specific channel within a house."""
+    def get_chunks_for_channel(self, spec_id: str, channel: str) -> list[dict]:
+        """KeyMessages that APPLY_TO a specific channel within a spec."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
         channel_node = f"channel:{channel}"
         if channel_node not in self._graph:
             return []
-        house_chunks = self._house_chunk_nodes(house_id)
+        spec_chunks = self._spec_chunk_nodes(spec_id)
         return [dict(self._graph.nodes[n]) for n, _, d
                 in self._graph.in_edges(channel_node, data=True)
-                if d.get("rel") == "APPLIES_TO" and n in house_chunks]
+                if d.get("rel") == "APPLIES_TO" and n in spec_chunks]
 
-    def get_connections(self, house_id: str,
+    def get_connections(self, spec_id: str,
                         persona: str | None = None,
                         channel: str | None = None) -> list[dict]:
         """Graph query entry point — filter by optional persona and/or channel."""
@@ -326,16 +326,16 @@ class GraphEngine:
         if not _NX_AVAILABLE:
             return []
         if persona and channel:
-            by_p = {c["id"] for c in self.get_chunks_for_persona(house_id, persona)}
-            by_c = {c["id"] for c in self.get_chunks_for_channel(house_id, channel)}
+            by_p = {c["id"] for c in self.get_chunks_for_persona(spec_id, persona)}
+            by_c = {c["id"] for c in self.get_chunks_for_channel(spec_id, channel)}
             ids = by_p & by_c
-            results = [c for c in self.get_chunks_for_house(house_id) if c.get("id") in ids]
+            results = [c for c in self.get_chunks_for_spec(spec_id) if c.get("id") in ids]
         elif persona:
-            results = self.get_chunks_for_persona(house_id, persona)
+            results = self.get_chunks_for_persona(spec_id, persona)
         elif channel:
-            results = self.get_chunks_for_channel(house_id, channel)
+            results = self.get_chunks_for_channel(spec_id, channel)
         else:
-            results = self.get_chunks_for_house(house_id)
+            results = self.get_chunks_for_spec(spec_id)
         # Filter out nodes with no content (fix #8)
         return [c for c in results if c.get("content", "").strip()]
 
@@ -362,7 +362,7 @@ class GraphEngine:
                          or (content[:35] + "…" if len(content) > 35 else content)
                          or nid)
             entry: dict[str, Any] = {"id": nid, "type": ntype, "label": label}
-            if ntype == "MessageHouse":
+            if ntype == "Spec":
                 entry.update({"name": attrs.get("name", ""),
                                "document_type": attrs.get("document_type", ""),
                                "tagline": attrs.get("tagline", ""),
@@ -371,36 +371,36 @@ class GraphEngine:
                 entry.update({"section_type": attrs.get("section_type", ""),
                                "label": attrs.get("label", ""),
                                "count": attrs.get("count", 0),
-                               "house_id": attrs.get("house_id", "")})
+                               "spec_id": attrs.get("spec_id", "")})
                 entry["color"] = _SECTION_COLORS.get(attrs.get("section_type", ""), "#6366f1")
-            elif ntype == "KeyMessage":
+            elif ntype == "Assertion":
                 entry.update({"section_type": attrs.get("section_type", ""),
                                "priority": attrs.get("priority"),
                                "content": (attrs.get("content") or "")[:150],
                                "status": attrs.get("status", "draft")})
                 entry["color"] = _STATUS_COLORS.get(attrs.get("status", "draft"), "#9ca3af")
-            elif ntype == "MessagingPillar":
+            elif ntype == "Pillar":
                 entry.update({"name": attrs.get("name", ""),
                                "description": attrs.get("description", ""),
-                               "house_id": attrs.get("house_id", "")})
+                               "spec_id": attrs.get("spec_id", "")})
             elif ntype == "Persona":
                 entry.update({"name": attrs.get("name", ""),
-                               "house_id": attrs.get("house_id", "")})
+                               "spec_id": attrs.get("spec_id", "")})
             elif ntype == "Channel":
                 entry["name"] = attrs.get("name", "")
             elif ntype == "PainPoint":
                 entry.update({"content": (attrs.get("content") or "")[:150],
                                "persona_name": attrs.get("persona_name", ""),
-                               "house_id": attrs.get("house_id", "")})
+                               "spec_id": attrs.get("spec_id", "")})
             elif ntype == "BuyingTrigger":
                 entry.update({"content": (attrs.get("content") or "")[:150],
                                "persona_name": attrs.get("persona_name", ""),
-                               "house_id": attrs.get("house_id", "")})
+                               "spec_id": attrs.get("spec_id", "")})
             elif ntype == "Objection":
                 entry.update({"statement": (attrs.get("statement") or "")[:150],
                                "response": (attrs.get("response") or "")[:150],
                                "persona_name": attrs.get("persona_name", ""),
-                               "house_id": attrs.get("house_id", "")})
+                               "spec_id": attrs.get("spec_id", "")})
             nodes.append(entry)
         edges = [{"source": s, "target": t, "rel": d.get("rel", "")}
                  for s, t, d in g.edges(data=True)]

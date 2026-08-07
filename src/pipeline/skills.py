@@ -11,16 +11,16 @@ DEFAULT_SKILLS = {
     "one_pager": {
         "id": "one_pager",
         "name": "One-Pager",
-        "description": "A structured overview of a messaging house with positioning, key messages, and personas.",
+        "description": "A structured overview of a messaging spec with positioning, key messages, and personas.",
         "channels": ["all"],
         "sections": [
             {"key": "positioning", "label": "Positioning Statement", "required": True},
             {"key": "tagline", "label": "Tagline", "required": False},
             {"key": "differentiation", "label": "Differentiation", "required": True},
-            {"key": "key_messages", "label": "Key Messages", "required": True},
+            {"key": "assertions", "label": "Key Messages", "required": True},
             {"key": "personas", "label": "Target Personas", "required": True},
         ],
-        "prompt_template": """Generate a one-pager for {house_name} grounded in this messaging framework:
+        "prompt_template": """Generate a one-pager for {spec_name} grounded in this messaging framework:
 
 {context}
 
@@ -45,7 +45,7 @@ Output as structured markdown.""",
             {"key": "cta", "label": "Call to Action", "required": False},
             {"key": "hashtags", "label": "Hashtags", "required": False},
         ],
-        "prompt_template": """Write a LinkedIn post grounded in {house_name} messaging.
+        "prompt_template": """Write a LinkedIn post grounded in {spec_name} messaging.
 
 Core message: {primary_message}
 Persona: {persona}
@@ -73,7 +73,7 @@ Rules:
             {"key": "body", "label": "Body Copy", "required": True},
             {"key": "cta", "label": "Call to Action", "required": True},
         ],
-        "prompt_template": """Write an email at the {stage} stage for {house_name}.
+        "prompt_template": """Write an email at the {stage} stage for {spec_name}.
 
 Grounded in this positioning: {positioning}
 
@@ -101,10 +101,10 @@ Rules:
             {"key": "counter_messaging", "label": "Counter Messaging", "required": True},
             {"key": "proof_points", "label": "Proof Points", "required": True},
         ],
-        "prompt_template": """Write a battlecard for {house_name} against {competitor}.
+        "prompt_template": """Write a battlecard for {spec_name} against {competitor}.
 
 Our positioning: {positioning}
-Our key advantages: {key_messages}
+Our key advantages: {assertions}
 
 Structure:
 1. Competitor overview (1 paragraph — what they're known for)
@@ -132,7 +132,7 @@ Tone: confident, factual, never disparaging""",
             {"key": "boilerplate", "label": "Boilerplate", "required": True},
             {"key": "media_contact", "label": "Media Contact", "required": True},
         ],
-        "prompt_template": """Write a press release for {house_name} announcing {announcement}.
+        "prompt_template": """Write a press release for {spec_name} announcing {announcement}.
 
 Grounded in: {positioning}
 
@@ -158,10 +158,10 @@ Rules:
             {"key": "conclusion", "label": "Conclusion", "required": True},
             {"key": "cta", "label": "Call to Action", "required": True},
         ],
-        "prompt_template": """Write a blog post for {house_name} on the topic of {topic}.
+        "prompt_template": """Write a blog post for {spec_name} on the topic of {topic}.
 
 Grounded in: {positioning}
-Key messages to weave in: {key_messages}
+Key messages to weave in: {assertions}
 Persona: {persona}
 
 Rules:
@@ -185,7 +185,7 @@ Rules:
             {"key": "q", "label": "Question", "required": True},
             {"key": "a", "label": "Answer", "required": True},
         ],
-        "prompt_template": """Write an FAQ document for {house_name} addressing {audience} questions.
+        "prompt_template": """Write an FAQ document for {spec_name} addressing {audience} questions.
 
 Grounded in: {positioning}
 Common objections to address: {objections}
@@ -211,10 +211,10 @@ Rules:
             {"key": "objection_handling", "label": "Common Objections + Responses", "required": True},
             {"key": "close", "label": "Close / Next Steps", "required": True},
         ],
-        "prompt_template": """Write a sales talk track for {house_name}.
+        "prompt_template": """Write a sales talk track for {spec_name}.
 
 Grounded in: {positioning}
-Key differentiators: {key_messages}
+Key differentiators: {assertions}
 Target persona: {persona}
 
 Structure:
@@ -239,7 +239,7 @@ Tone: consultative, confident, not pushy. Ask questions before pitching.""",
             {"key": "response", "label": "Response", "required": True},
             {"key": "proof", "label": "Supporting Proof Point", "required": False},
         ],
-        "prompt_template": """Write a comprehensive objection handler reference card for {house_name}.
+        "prompt_template": """Write a comprehensive objection handler reference card for {spec_name}.
 
 Grounded in: {positioning}
 Known objections from personas: {objections}
@@ -273,7 +273,7 @@ Tone: empathetic, factual, never defensive.""",
             {"key": "booth_hooks", "label": "Booth / Session Hooks", "required": False},
             {"key": "follow_up", "label": "Post-Event Follow-up Messaging", "required": True},
         ],
-        "prompt_template": """Write an event messaging brief for {house_name} at {event_name}.
+        "prompt_template": """Write an event messaging brief for {spec_name} at {event_name}.
 
 Grounded in: {positioning}
 Key audience at this event: {audience}
@@ -302,16 +302,16 @@ Tone: energetic but credible. Avoid generic conference buzzwords.""",
             {"key": "business_case", "label": "Business Case", "required": True},
             {"key": "next_steps", "label": "Next Steps", "required": True},
         ],
-        "prompt_template": """Write an executive summary for {house_name} targeted at C-level decision makers.
+        "prompt_template": """Write an executive summary for {spec_name} targeted at C-level decision makers.
 
 Grounded in: {positioning}
-Key proof points: {key_messages}
+Key proof points: {assertions}
 Target executive persona: {persona}
 
 Use the SCR (Situation-Complication-Resolution) framework:
 1. Situation (1 paragraph): The current state — what is the executive already dealing with?
 2. Complication (1 paragraph): What's the problem or risk if nothing changes?
-3. Resolution (1 paragraph): How {house_name} addresses it specifically
+3. Resolution (1 paragraph): How {spec_name} addresses it specifically
 4. Business case (bullet points): 3 quantified outcomes or ROI data points
 5. Next steps: 2-3 low-friction action items with owners and timeline
 
@@ -335,10 +335,10 @@ Rules:
             {"key": "field_messaging", "label": "Field-Ready Messaging", "required": True},
             {"key": "resources", "label": "Available Resources", "required": False},
         ],
-        "prompt_template": """Write a channel partner messaging brief for {house_name}.
+        "prompt_template": """Write a channel partner messaging brief for {spec_name}.
 
 Our positioning: {positioning}
-Our key differentiators: {key_messages}
+Our key differentiators: {assertions}
 
 Structure:
 1. Joint value proposition (2-3 sentences: what we do together that neither does alone)
@@ -359,21 +359,21 @@ Tone: partner-first. Focus on what the partner gains, not what we gain.""",
         "sections": [
             {"key": "design_spec", "label": "Design JSON Specification", "required": True},
         ],
-        "prompt_template": """Generate a structured design specification for a visual One-Pager for {house_name}.
+        "prompt_template": """Generate a structured design specification for a visual One-Pager for {spec_name}.
 
 TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
 {visual_context}
 
 GROUNDING REMINDER:
-- Use ONLY content from the messaging house below.
+- Use ONLY content from the messaging spec below.
 - Do NOT invent headlines, stats, or claims.
 - Copy pre-filled zone content EXACTLY (edit only for tone/polish).
 
-HOUSE DATA:
+SPEC DATA:
 - Tagline: {tagline} (keep under 10 words)
 - Positioning: {positioning}
 - Differentiation: {differentiation}
-- Top messages: {key_messages}
+- Top messages: {assertions}
 
 OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
@@ -402,20 +402,20 @@ RULES:
         "sections": [
             {"key": "design_spec", "label": "Design JSON Specification", "required": True},
         ],
-        "prompt_template": """Generate a structured design specification for a Data Sheet for {house_name}.
+        "prompt_template": """Generate a structured design specification for a Data Sheet for {spec_name}.
 
 TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
 {visual_context}
 
 GROUNDING REMINDER:
-- Use ONLY content from the messaging house below.
+- Use ONLY content from the messaging spec below.
 - Do NOT invent specs, features, or benefits.
 - Copy pre-filled zone content EXACTLY (edit only for tone/polish).
 
-HOUSE DATA:
+SPEC DATA:
 - Tagline: {tagline}
 - Positioning: {positioning}
-- Key Benefits: {key_messages}
+- Key Benefits: {assertions}
 
 OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
@@ -446,19 +446,19 @@ RULES:
             {"key": "design_spec", "label": "Design JSON Specification", "required": True},
             {"key": "competitor", "label": "Competitor Name", "required": True},
         ],
-        "prompt_template": """Generate a structured design specification for a Visual Battlecard for {house_name} against {competitor}.
+        "prompt_template": """Generate a structured design specification for a Visual Battlecard for {spec_name} against {competitor}.
 
 TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
 {visual_context}
 
 GROUNDING REMINDER:
-- Use ONLY objections/responses from the messaging house.
+- Use ONLY objections/responses from the messaging spec.
 - Pull objections and responses from graph for VERBATIM accuracy.
 - Copy pre-filled zone content EXACTLY (edit only for tone/polish).
 
 COMPETITOR: {competitor}
 OUR POSITIONING: {positioning}
-KEY MESSAGES: {key_messages}
+KEY MESSAGES: {assertions}
 PERSONA OBJECTIONS: {objections}
 
 OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
@@ -488,19 +488,19 @@ RULES:
         "sections": [
             {"key": "design_spec", "label": "Design JSON Specification", "required": True},
         ],
-        "prompt_template": """Generate a structured design specification for a Social Card for {house_name}.
+        "prompt_template": """Generate a structured design specification for a Social Card for {spec_name}.
 
 TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
 {visual_context}
 
 GROUNDING REMINDER:
-- Select the absolute highest-priority message from the house.
+- Select the absolute highest-priority message from the spec.
 - Apply a bold, social-friendly tone.
 
 OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
   "zones": [
-    {{ "id": "header", "type": "header", "text_content": "{house_name}" }},
+    {{ "id": "header", "type": "header", "text_content": "{spec_name}" }},
     {{ "id": "hero", "type": "hero", "text_content": "Bold claim or headline" }},
     {{ "id": "subhead", "type": "message_list", "list_items": ["Supporting context 1", "Supporting context 2"] }},
     {{ "id": "cta_footer", "type": "cta_footer", "text_content": "Link or CTA" }}
@@ -521,7 +521,7 @@ RULES:
         "sections": [
             {"key": "design_spec", "label": "Design JSON Specification", "required": True},
         ],
-        "prompt_template": """Generate a structured design specification for a Visual Executive Summary for {house_name}.
+        "prompt_template": """Generate a structured design specification for a Visual Executive Summary for {spec_name}.
 
 TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
 {visual_context}
@@ -534,7 +534,7 @@ GROUNDING REMINDER:
 OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
 {{
   "zones": [
-    {{ "id": "header", "type": "header", "text_content": "{house_name} | Executive Summary" }},
+    {{ "id": "header", "type": "header", "text_content": "{spec_name} | Executive Summary" }},
     {{ "id": "positioning", "type": "positioning_block", "text_content": "Full positioning paragraph" }},
     {{ "id": "pillars", "type": "pillar_grid", "list_items": ["Pillar 1", "Pillar 2", "Pillar 3"] }},
     {{ "id": "persona_strip", "type": "persona_strip", "list_items": ["Persona 1", "Persona 2"] }},
@@ -558,11 +558,11 @@ RULES:
         "sections": [
             {"key": "design_spec", "label": "Design JSON Specification", "required": True},
         ],
-        "prompt_template": """Generate a structured JSON specification for a Reveal.js Sales Deck for {house_name}.
+        "prompt_template": """Generate a structured JSON specification for a Reveal.js Sales Deck for {spec_name}.
 
 GROUNDING REMINDER:
 - Start with the Problem/Pain Points from the target persona.
-- Transition to the Solution ({house_name} positioning).
+- Transition to the Solution ({spec_name} positioning).
 - Cover 3 key differentiators/benefits.
 - Include a Proof Point or Customer Success stat.
 
@@ -571,7 +571,7 @@ OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
   "slides": [
     {{
       "type": "title",
-      "title": "{house_name}",
+      "title": "{spec_name}",
       "content": "Tagline or Positioning",
       "notes": "Speaker notes for title slide"
     }},
@@ -583,7 +583,7 @@ OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
     }},
     {{
       "type": "split",
-      "title": "Why {house_name}?",
+      "title": "Why {spec_name}?",
       "left_content": "<h3>Traditional Approach</h3><ul><li>Issue 1</li></ul>",
       "right_content": "<h3>Our Approach</h3><ul><li>Benefit 1</li></ul>",
       "notes": "Speaker notes"
@@ -595,7 +595,7 @@ RULES:
 - Must have 5-7 slides maximum.
 - Slide `content` fields must contain raw HTML (e.g. <ul>, <li>, <h3>, <p>).
 - Use `type: "split"` when comparing or showing two distinct columns.
-- Ensure all claims and benefits are drawn exclusively from the messaging house.""",
+- Ensure all claims and benefits are drawn exclusively from the messaging spec.""",
         "prefab_template": "sales_deck",
         "renderer": "reveal"
     },

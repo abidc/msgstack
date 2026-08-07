@@ -1,4 +1,4 @@
-"""LLM-based MessageHouse structuring: raw text → structured markdown."""
+"""LLM-based Spec structuring: raw text → structured markdown."""
 
 import json
 import logging
@@ -42,7 +42,7 @@ def detect_document_type(text: str, filename: str = "") -> str:
     return "message_house"  # default
 
 
-class StructuredHouse(BaseModel):
+class StructuredSpec(BaseModel):
     name: str
     summary: str
     audience: str
@@ -50,7 +50,7 @@ class StructuredHouse(BaseModel):
     positioning: str
     tagline: str
     differentiation: str
-    key_messages: list[dict] = Field(default_factory=list)
+    assertions: list[dict] = Field(default_factory=list)
     personas: list[dict]
     pillars: list[dict] = Field(default_factory=list)
     ungrouped_chunks: list[dict] = Field(default_factory=list)
@@ -67,7 +67,7 @@ class StructuredHouse(BaseModel):
 REQUIRED_SECTIONS = ["summary", "audience", "positioning", "tagline", "differentiation"]
 REQUIRED_MESSAGE_TYPES = ["headline", "benefit", "proof_point"]
 
-_STRUCTURE_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete MessageHouse.
+_STRUCTURE_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete Spec.
 
 Return a JSON object matching this schema:
 {
@@ -164,7 +164,7 @@ Return a JSON object matching this schema:
   "tagline": "Official tagline or brand slogan if present",
   "differentiation": "What makes this brand's voice/style distinctive",
   "brand_personality": "Voice and tone descriptors extracted from the guide",
-  "key_messages": [
+  "assertions": [
     {
       "section_type": "brand_voice | style_rule | word_list",
       "priority": 1-5,
@@ -199,7 +199,7 @@ Return a JSON object matching this schema:
   "tagline": "Our differentiated tagline vs this competitor (if present)",
   "differentiation": "Our key advantages over this competitor",
   "brand_personality": "",
-  "key_messages": [
+  "assertions": [
     {
       "section_type": "competitor_strength | competitor_weakness | competitive_response",
       "priority": 1-5,
@@ -233,7 +233,7 @@ Return a JSON object matching this schema:
   "tagline": "Company tagline or motto if present",
   "differentiation": "What makes this company's story distinct",
   "brand_personality": "Company personality and cultural values",
-  "key_messages": [
+  "assertions": [
     {
       "section_type": "narrative_pillar | company_value | founding_story",
       "priority": 1-5,
@@ -266,7 +266,7 @@ Return a JSON object matching this schema:
   "tagline": "",
   "differentiation": "",
   "brand_personality": "",
-  "key_messages": [
+  "assertions": [
     {
       "section_type": "persona_detail",
       "priority": 1-3,
@@ -288,8 +288,8 @@ Return a JSON object matching this schema:
 }
 
 Rules:
-- Each persona should appear both as a full Persona object AND as key_messages with section_type "persona_detail"
-- key_messages for personas should be atomic, quotable insights (one per message), not summaries
+- Each persona should appear both as a full Persona object AND as assertions with section_type "persona_detail"
+- assertions for personas should be atomic, quotable insights (one per message), not summaries
 - Set priority 1 for the primary persona, 2-3 for secondary
 
 SOURCE DOCUMENT:
@@ -317,13 +317,12 @@ Markdown text:
 {text}"""
 
 
-class HouseStructurer:
+class SpecStructurer:
     MAX_SINGLE_CHUNK = 24000
     CHUNK_SIZE = 20000
     CHUNK_OVERLAP = 1000
 
     _PROMPT_MAP = {
-        "canon_domain": _STRUCTURE_PROMPT,
         "message_house": _STRUCTURE_PROMPT,
         "brand_guide": _BRAND_GUIDE_PROMPT,
         "competitive_brief": _COMPETITIVE_BRIEF_PROMPT,
@@ -345,8 +344,8 @@ class HouseStructurer:
             self._client = OpenAI(api_key=self._api_key)
         return self._client
 
-    def structure(self, text: str, source_name: str = "Untitled Source", document_type: str = "message_house") -> "tuple[StructuredHouse, dict]":
-        """Run the structurer LLM on raw text and return (StructuredHouse, usage_dict).
+    def structure(self, text: str, source_name: str = "Untitled Source", document_type: str = "message_house") -> "tuple[StructuredSpec, dict]":
+        """Run the structurer LLM on raw text and return (StructuredSpec, usage_dict).
 
         usage_dict has keys: input_tokens, output_tokens.
         For documents >24k chars, splits into overlapping chunks, structures each,
@@ -356,19 +355,19 @@ class HouseStructurer:
         prompt_template = self._PROMPT_MAP.get(document_type, _STRUCTURE_PROMPT)
 
         if len(text) <= self.MAX_SINGLE_CHUNK:
-            house = self._structure_single_chunk(text, source_name, prompt_template)
+            spec = self._structure_single_chunk(text, source_name, prompt_template)
         else:
             chunks = self._split_text(text)
-            houses = [None] * len(chunks)
+            specs = [None] * len(chunks)
             max_workers = min(len(chunks), 5)  # cap at 5 to avoid rate-limit bursts
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 futures = {}
                 for i, chunk in enumerate(chunks):
                     futures[pool.submit(self._structure_single_chunk, chunk, source_name, prompt_template)] = i
                 for future in as_completed(futures):
-                    houses[futures[future]] = future.result()
-            house = self._merge_structures(houses, source_name)
-        return house, dict(self._usage)
+                    specs[futures[future]] = future.result()
+            spec = self._merge_structures(specs, source_name)
+        return spec, dict(self._usage)
 
     def _split_text(self, text: str) -> list[str]:
         """Split text at paragraph boundaries into ~CHUNK_SIZE char chunks."""
@@ -389,7 +388,7 @@ class HouseStructurer:
             start = max(split_at - self.CHUNK_OVERLAP, split_at)
         return [c for c in chunks if c.strip()]
 
-    def _structure_single_chunk(self, text: str, source_name: str, prompt_template: str) -> StructuredHouse:
+    def _structure_single_chunk(self, text: str, source_name: str, prompt_template: str) -> StructuredSpec:
         """Structure one text chunk with retry on transient OpenAI errors."""
         # Use replace instead of .format() so curly braces in the document don't
         # get interpreted as format placeholders (causes KeyError on e.g. JSON snippets).
@@ -400,7 +399,7 @@ class HouseStructurer:
             # Ensure name is set if missing in LLM response
             if not data.get("name") or data["name"] in ("Product name", "Brand name", "Company name"):
                 data["name"] = source_name
-            return StructuredHouse(**data)
+            return StructuredSpec(**data)
         except (json.JSONDecodeError, Exception) as e:
             # Fallback to markdown parser if JSON fails (though unlikely with response_format)
             log.warning("JSON parsing failed, falling back to markdown parser: %s", e)
@@ -440,16 +439,16 @@ class HouseStructurer:
                 raise
         raise last_exc
 
-    def _merge_structures(self, houses: list["StructuredHouse"], source_name: str) -> StructuredHouse:
-        """Merge multiple StructuredHouse objects from chunked structuring."""
-        if not houses:
-            return StructuredHouse(name=source_name, summary="", audience="", brand_personality="",
-                                   positioning="", tagline="", differentiation="", key_messages=[], personas=[])
-        if len(houses) == 1:
-            return houses[0]
+    def _merge_structures(self, specs: list["StructuredSpec"], source_name: str) -> StructuredSpec:
+        """Merge multiple StructuredSpec objects from chunked structuring."""
+        if not specs:
+            return StructuredSpec(name=source_name, summary="", audience="", brand_personality="",
+                                   positioning="", tagline="", differentiation="", assertions=[], personas=[])
+        if len(specs) == 1:
+            return specs[0]
 
         def first_nonempty(attr: str) -> str:
-            for h in houses:
+            for h in specs:
                 v = getattr(h, attr, "")
                 if v and v.strip() and v.strip() != "[Not found in source]":
                     return v
@@ -457,8 +456,8 @@ class HouseStructurer:
 
         merged_messages: list[dict] = []
         seen_content: set[str] = set()
-        for h in houses:
-            for m in h.key_messages:
+        for h in specs:
+            for m in h.assertions:
                 key = m["content"].strip().lower()[:80]
                 if key not in seen_content:
                     seen_content.add(key)
@@ -466,7 +465,7 @@ class HouseStructurer:
 
         # Merge pillars (deduplicate by name; deduplicate chunks by content)
         pillar_by_name: dict[str, dict] = {}
-        for h in houses:
+        for h in specs:
             for pillar in h.pillars:
                 pname = pillar.get("name", "")
                 if pname not in pillar_by_name:
@@ -480,7 +479,7 @@ class HouseStructurer:
 
         # Merge ungrouped chunks (deduplicated against all pillar chunks too)
         merged_ungrouped: list[dict] = []
-        for h in houses:
+        for h in specs:
             for chunk in h.ungrouped_chunks:
                 key = chunk.get("content", "").strip().lower()[:80]
                 if key and key not in seen_content:
@@ -489,14 +488,14 @@ class HouseStructurer:
 
         merged_personas: list[dict] = []
         seen_names: set[str] = set()
-        for h in houses:
+        for h in specs:
             for p in h.personas:
                 name_key = p.get("name", "").strip().lower()
                 if name_key not in seen_names:
                     seen_names.add(name_key)
                     merged_personas.append(p)
 
-        merged = StructuredHouse(
+        merged = StructuredSpec(
             name=first_nonempty("name") or source_name,
             summary=first_nonempty("summary"),
             audience=first_nonempty("audience"),
@@ -504,7 +503,7 @@ class HouseStructurer:
             positioning=first_nonempty("positioning"),
             tagline=first_nonempty("tagline"),
             differentiation=first_nonempty("differentiation"),
-            key_messages=merged_messages,
+            assertions=merged_messages,
             pillars=merged_pillars,
             ungrouped_chunks=merged_ungrouped,
             personas=merged_personas,
@@ -513,7 +512,7 @@ class HouseStructurer:
         merged.missing_sections = self._find_missing(merged)
         return merged
 
-    def _parse_markdown(self, md: str, source_name: str) -> StructuredHouse:
+    def _parse_markdown(self, md: str, source_name: str) -> StructuredSpec:
         lines = md.split("\n")
         sections = {}
         current_section = None
@@ -540,10 +539,15 @@ class HouseStructurer:
                 name = stripped[2:].strip()
                 break
 
-        key_messages = self._parse_key_messages(sections.get("key_messages", ""))
+        # Heading text drives the section key. Accept both the historical
+        # "## Key Messages" (used by every proxy file in data/sources/) and the
+        # current "## Assertions" so existing documents keep parsing.
+        assertions = self._parse_key_messages(
+            sections.get("assertions") or sections.get("key_messages", "")
+        )
         personas = self._parse_personas(sections.get("personas", ""))
 
-        house = StructuredHouse(
+        spec = StructuredSpec(
             name=name,
             summary=sections.get("summary", ""),
             audience=sections.get("target_audience", "") or sections.get("audience", ""),
@@ -551,33 +555,33 @@ class HouseStructurer:
             positioning=sections.get("positioning", ""),
             tagline=sections.get("tagline", ""),
             differentiation=sections.get("differentiation", ""),
-            key_messages=key_messages,
+            assertions=assertions,
             personas=personas,
             know_your_market=sections.get("know_your_market", ""),
         )
-        house.missing_sections = self._find_missing(house)
-        return house
+        spec.missing_sections = self._find_missing(spec)
+        return spec
 
-    def _find_missing(self, house: "StructuredHouse") -> list[str]:
+    def _find_missing(self, spec: "StructuredSpec") -> list[str]:
         missing = []
         field_map = {
-            "summary": house.summary,
-            "audience": house.audience,
-            "brand_personality": house.brand_personality,
-            "positioning": house.positioning,
-            "tagline": house.tagline,
-            "differentiation": house.differentiation,
+            "summary": spec.summary,
+            "audience": spec.audience,
+            "brand_personality": spec.brand_personality,
+            "positioning": spec.positioning,
+            "tagline": spec.tagline,
+            "differentiation": spec.differentiation,
         }
         for field, value in field_map.items():
             if not value or value.strip() in ("", "[Not found in source]"):
                 missing.append(field)
 
-        found_types = {m["section_type"] for m in house.key_messages}
+        found_types = {m["section_type"] for m in spec.assertions}
         for t in REQUIRED_MESSAGE_TYPES:
             if t not in found_types:
                 missing.append(f"messages:{t}")
 
-        if not house.personas:
+        if not spec.personas:
             missing.append("personas")
 
         return missing
@@ -713,24 +717,24 @@ class HouseStructurer:
 
         return personas
 
-    def to_markdown(self, house: StructuredHouse) -> str:
-        """Render a StructuredHouse back to markdown."""
-        lines = [f"# {house.name}", ""]
-        if house.know_your_market:
-            lines.append(f"## Know Your Market\n{house.know_your_market}")
-        lines.append(f"## Summary\n{house.summary}")
-        lines.append(f"\n## Target Audience\n{house.audience}")
-        lines.append(f"\n## Brand Personality\n{house.brand_personality}")
-        lines.append(f"\n## Positioning\n{house.positioning}")
-        lines.append(f"\n## Tagline\n{house.tagline}")
-        lines.append(f"\n## Differentiation\n{house.differentiation}")
+    def to_markdown(self, spec: StructuredSpec) -> str:
+        """Render a StructuredSpec back to markdown."""
+        lines = [f"# {spec.name}", ""]
+        if spec.know_your_market:
+            lines.append(f"## Know Your Market\n{spec.know_your_market}")
+        lines.append(f"## Summary\n{spec.summary}")
+        lines.append(f"\n## Target Audience\n{spec.audience}")
+        lines.append(f"\n## Brand Personality\n{spec.brand_personality}")
+        lines.append(f"\n## Positioning\n{spec.positioning}")
+        lines.append(f"\n## Tagline\n{spec.tagline}")
+        lines.append(f"\n## Differentiation\n{spec.differentiation}")
 
-        if house.key_messages:
+        if spec.assertions:
             lines.append("\n## Key Messages")
             section_order = ["headline", "subhead", "benefit", "use_case", "proof_point", "objection", "social_proof"]
             from collections import defaultdict
             by_section = defaultdict(list)
-            for m in house.key_messages:
+            for m in spec.assertions:
                 by_section[m["section_type"]].append(m)
 
             for sec in section_order:
@@ -739,9 +743,9 @@ class HouseStructurer:
                     for m in by_section[sec]:
                         lines.append(f"- {m['content']}")
 
-        if house.personas:
+        if spec.personas:
             lines.append("\n## Personas")
-            for p in house.personas:
+            for p in spec.personas:
                 lines.append(f"\n### {p['name']}")
                 if p.get("description"):
                     lines.append(f"**Role:** {p['description']}")

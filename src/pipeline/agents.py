@@ -1,4 +1,4 @@
-"""Multi-Agent Layer — specialized functional agents and the Canon Navigator."""
+"""Multi-Agent Layer — specialized functional agents and the Spec Navigator."""
 
 import json
 import logging
@@ -20,7 +20,7 @@ class GovernanceAgent(BaseAgent):
     """Specialized agent for enforcing approvals, review logs, and conflict checks."""
 
     def analyze_change(self, entry_id: str, new_content: str) -> dict:
-        entry = self.store.get_canon_entry(UUID(entry_id))
+        entry = self.store.get_assertion(UUID(entry_id))
         if not entry:
             return {"status": "error", "error": "Entry not found"}
 
@@ -49,7 +49,7 @@ class VoiceAgent(BaseAgent):
     """Specialized agent for analyzing brand register parameters (tonal slider fits) and vocabulary."""
 
     def analyze_tone(self, text: str, domain_id: UUID) -> dict:
-        domain = self.store.get_canon_domain(domain_id)
+        domain = self.store.get_spec(domain_id)
         personality = domain.brand_personality if domain else "General"
 
         prompt = (
@@ -72,15 +72,15 @@ class VoiceAgent(BaseAgent):
 
 
 class StructureAgent(BaseAgent):
-    """Specialized agent for validating canon domain completeness specs."""
+    """Specialized agent for validating spec completeness specs."""
 
     def analyze_domain(self, domain_id: UUID) -> dict:
-        report = self.store.check_framework_completeness(domain_id)
+        report = self.store.check_spec_completeness(domain_id)
         score = report.get("score", 0)
         missing = report.get("missing_sections", [])
 
         prompt = (
-            f"A messaging house has a completeness score of {score}%.\n"
+            f"A messaging spec has a completeness score of {score}%.\n"
             f"It is missing these sections: {missing}\n\n"
             f"Suggest specific actions to improve the framework score. Return JSON:\n"
             f'{{"improvement_plan": "Brief text instructions", '
@@ -100,8 +100,8 @@ class StructureAgent(BaseAgent):
             return {"status": "error", "error": str(e)}
 
 
-class CanonNavigator(BaseAgent):
-    """Orchestrator super-agent. Natural language interface for users to query canon state."""
+class SpecNavigator(BaseAgent):
+    """Orchestrator super-agent. Natural language interface for users to query spec graph state."""
 
     def __init__(self, client: OpenAI, store: Store):
         super().__init__(client, store)
@@ -118,11 +118,11 @@ class CanonNavigator(BaseAgent):
         stats = graph.get_stats()
 
         prompt = (
-            f"You are the Canon Navigator — the conversational assistant for the MsgStack Canon Grounding Layer.\n"
+            f"You are the Spec Navigator — the conversational assistant for the MsgStack Spec Grounding Layer.\n"
             f"Current Workspace: {workspace_id}\n"
             f"Graph stats: {stats.get('nodes', 0)} nodes, {stats.get('edges', 0)} edges.\n\n"
-            f"Ground your answers in the approved organizational canon. If users ask about drift, edits, "
-            f"or the status of specific messaging houses, use your training. Do not invent details.\n\n"
+            f"Ground your answers in the approved spec. If users ask about drift, edits, "
+            f"or the status of specific messaging specs, use your training. Do not invent details.\n\n"
             f"User Query: {query}"
         )
 
@@ -130,7 +130,7 @@ class CanonNavigator(BaseAgent):
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are the friendly, professional Canon Navigator super-agent. Stream your answer in Markdown format."},
+                    {"role": "system", "content": "You are the friendly, professional Spec Navigator super-agent. Stream your answer in Markdown format."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,

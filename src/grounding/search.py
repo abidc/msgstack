@@ -125,13 +125,13 @@ class GroundingEngine:
         query: str,
         filters: Optional[SearchFilters] = None,
         top_k: int = 8,
-        active_house_id: Optional[UUID] = None,
+        active_spec_id: Optional[UUID] = None,
         retrieval_mode: str = "hybrid",
     ) -> GroundingResponse:
         filters = filters or SearchFilters()
 
-        if retrieval_mode == "graph" and active_house_id:
-            return self._graph_search(active_house_id, filters)
+        if retrieval_mode == "graph" and active_spec_id:
+            return self._graph_search(active_spec_id, filters)
         if retrieval_mode == "keyword":
             return self._fallback_search(query, filters)
 
@@ -142,16 +142,16 @@ class GroundingEngine:
                 existing = getattr(filters, attr, None) or []
                 merged = list(set(existing + val))
                 setattr(filters, attr, merged if merged else None)
-            elif attr == "message_houses":
-                existing = filters.message_houses or []
-                filters.message_houses = list(set(existing + val)) if val else None
+            elif attr == "specs":
+                existing = filters.specs or []
+                filters.specs = list(set(existing + val)) if val else None
 
-        if active_house_id and not filters.message_houses:
-            filters.message_houses = [str(active_house_id)]
+        if active_spec_id and not filters.specs:
+            filters.specs = [str(active_spec_id)]
 
         # SQLite pre-filtering
         matching_records = self.store.list_vector_metadata_matching_filters(
-            message_houses=filters.message_houses,
+            specs=filters.specs,
             section_types=filters.section_types,
             personas=filters.personas,
             channels=filters.channels,
@@ -162,9 +162,9 @@ class GroundingEngine:
             return GroundingResponse(
                 results=[],
                 grounding_context=GroundingContext(
-                    active_house_id=active_house_id,
-                    house_name="",
-                    house_summary="",
+                    active_spec_id=active_spec_id,
+                    spec_name="",
+                    spec_summary="",
                     confidence="low",
                 )
             )
@@ -195,15 +195,15 @@ class GroundingEngine:
                     "id": record.id,
                     "score": float(score),
                     "metadata": {
-                        "message_house_id": record.message_house_id,
-                        "house_name": record.house_name,
-                        "house_summary": record.house_summary,
+                        "spec_id": record.spec_id,
+                        "spec_name": record.spec_name,
+                        "spec_summary": record.spec_summary,
                         "content": record.content,
                         "section_type": record.section_type,
                         "priority": record.priority,
                         "persona": record.persona,
                         "channel": record.channel,
-                        "key_message_id": record.key_message_id,
+                        "assertion_id": record.assertion_id,
                         "last_synced": record.last_synced.isoformat() if record.last_synced else None,
                         "content_tier": record.content_tier,
                     }
@@ -212,7 +212,7 @@ class GroundingEngine:
         matches = self._rerank(query, matches, top_k, filters)
 
         grounding_results = []
-        houses_represented: dict[str, int] = {}
+        specs_represented: dict[str, int] = {}
         confidence_scores = []
         coverage: dict[str, str] = {"section_types": "none", "personas": "none", "channels": "none"}
 
@@ -226,20 +226,20 @@ class GroundingEngine:
             
             chunk = GroundingChunk(
                 id=match["id"],
-                message_house_id=UUID(meta.get("message_house_id", "00000000-0000-0000-0000-000000000000")),
-                key_message_id=UUID(meta.get("key_message_id")) if meta.get("key_message_id") else None,
+                spec_id=UUID(meta.get("spec_id", "00000000-0000-0000-0000-000000000000")),
+                assertion_id=UUID(meta.get("assertion_id")) if meta.get("assertion_id") else None,
                 content=meta.get("content", ""),
                 section_type=st,
                 priority=int(meta.get("priority", 3)),
                 persona=meta.get("persona"),
                 channel=Channel(meta.get("channel", "all")),
-                house_name=meta.get("house_name", ""),
-                house_summary=meta.get("house_summary", ""),
+                spec_name=meta.get("spec_name", ""),
+                spec_summary=meta.get("spec_summary", ""),
                 last_synced=datetime.fromisoformat(meta["last_synced"]) if meta.get("last_synced") else None,
                 content_tier=meta.get("content_tier"),
             )
-            house_id_str = str(chunk.message_house_id)
-            houses_represented[house_id_str] = houses_represented.get(house_id_str, 0) + 1
+            spec_id_str = str(chunk.spec_id)
+            specs_represented[spec_id_str] = specs_represented.get(spec_id_str, 0) + 1
             confidence_scores.append(match.get("score", 0))
             grounding_results.append(
                 GroundingResult(
@@ -251,8 +251,8 @@ class GroundingEngine:
                     channel=str(chunk.channel),
                     channel_variants={},
                     source={
-                        "house_id": str(chunk.message_house_id),
-                        "house_name": chunk.house_name,
+                        "spec_id": str(chunk.spec_id),
+                        "spec_name": chunk.spec_name,
                         "last_synced": chunk.last_synced.isoformat() if chunk.last_synced else None,
                     },
                     confidence=match.get("score", 0),
@@ -261,10 +261,10 @@ class GroundingEngine:
             )
 
         if grounding_results:
-            top_house_id = max(houses_represented, key=houses_represented.get)
-            house = self.store.get_house(UUID(top_house_id))
-            house_name = house.name if house else grounding_results[0].source["house_name"]
-            house_summary = house.summary if house else ""
+            top_spec_id = max(specs_represented, key=specs_represented.get)
+            spec = self.store.get_spec(UUID(top_spec_id))
+            spec_name = spec.name if spec else grounding_results[0].source["spec_name"]
+            spec_summary = spec.summary if spec else ""
 
             avg_conf = sum(confidence_scores) / len(confidence_scores)
             if avg_conf > 0.8:
@@ -280,9 +280,9 @@ class GroundingEngine:
             coverage["channels"] = "partial"
         else:
             confidence = "low"
-            house_name = ""
-            house_summary = ""
-            top_house_id = str(active_house_id) if active_house_id else None
+            spec_name = ""
+            spec_summary = ""
+            top_spec_id = str(active_spec_id) if active_spec_id else None
 
         active_personas = list({r.persona for r in grounding_results if r.persona})
 
@@ -296,9 +296,9 @@ class GroundingEngine:
                 )
 
         ctx = GroundingContext(
-            active_house_id=UUID(top_house_id) if top_house_id else active_house_id,
-            house_name=house_name,
-            house_summary=house_summary,
+            active_spec_id=UUID(top_spec_id) if top_spec_id else active_spec_id,
+            spec_name=spec_name,
+            spec_summary=spec_summary,
             active_personas=active_personas,
             used_chunks=len(grounding_results),
             confidence=confidence,
@@ -318,7 +318,7 @@ class GroundingEngine:
         boost_map = self._get_boost_factors()
 
         # Fetch status map of KeyMessages in matches to prioritize approved/locked
-        msg_ids = [m["metadata"]["key_message_id"] for m in matches if m.get("metadata", {}).get("key_message_id")]
+        msg_ids = [m["metadata"]["assertion_id"] for m in matches if m.get("metadata", {}).get("assertion_id")]
         status_map = {}
         if msg_ids:
             try:
@@ -333,7 +333,7 @@ class GroundingEngine:
         include_drafts = getattr(filters, "include_drafts", False)
         filtered_matches = []
         for m in matches:
-            km_id = m.get("metadata", {}).get("key_message_id")
+            km_id = m.get("metadata", {}).get("assertion_id")
             if km_id:
                 status = status_map.get(km_id, "draft")
                 if status == "outdated":
@@ -356,7 +356,7 @@ class GroundingEngine:
             feedback_boost = boost_map.get(chunk_id, 1.0)
 
             # Governance status prioritization
-            km_id = match.get("metadata", {}).get("key_message_id")
+            km_id = match.get("metadata", {}).get("assertion_id")
             status = status_map.get(km_id) if km_id else "approved"
             if status == "locked":
                 status_boost = 1.25
@@ -383,13 +383,13 @@ class GroundingEngine:
         except Exception:
             return {}
 
-    def _graph_search(self, house_id: UUID, filters: SearchFilters) -> GroundingResponse:
+    def _graph_search(self, spec_id: UUID, filters: SearchFilters) -> GroundingResponse:
         """Deterministic graph retrieval — bypasses vector approximation, filters outdated, prioritizes approved/locked."""
         from src.grounding.graph import get_graph_engine
         engine = get_graph_engine()
         persona = (filters.personas or [None])[0] if filters.personas else None
         channel = (filters.channels or [None])[0] if filters.channels else None
-        chunks = engine.get_connections(str(house_id), persona=persona, channel=channel)
+        chunks = engine.get_connections(str(spec_id), persona=persona, channel=channel)
 
         results = []
         for chunk in chunks:
@@ -412,30 +412,30 @@ class GroundingEngine:
                 persona=persona,
                 channel=channel or "all",
                 channel_variants={},
-                source={"house_id": str(house_id), "house_name": ""},
+                source={"spec_id": str(spec_id), "spec_name": ""},
                 confidence=1.0 - (s_val * 0.05),
                 rerank_reason=f"graph:deterministic ({status})",
             ))
 
         results.sort(key=lambda r: r.confidence, reverse=True)
-        house = self.store.get_house(house_id)
+        spec = self.store.get_spec(spec_id)
         return GroundingResponse(
             results=results[:8],
             grounding_context=GroundingContext(
-                active_house_id=house_id,
-                house_name=house.name if house else "",
-                house_summary=house.summary if house else "",
+                active_spec_id=spec_id,
+                spec_name=spec.name if spec else "",
+                spec_summary=spec.summary if spec else "",
                 confidence="high" if results else "low",
             ),
         )
 
     def _fallback_search(self, query: str, filters: SearchFilters) -> GroundingResponse:
         """Fallback search using keyword match, filters outdated, and prioritizes approved/locked."""
-        all_houses = self.store.list_houses()
+        all_specs = self.store.list_specs()
         results: list[GroundingResult] = []
 
-        for house in all_houses:
-            messages = self.store.get_key_messages(house.id, include_unapproved=getattr(filters, "include_drafts", False))
+        for spec in all_specs:
+            messages = self.store.get_key_messages(spec.id, include_unapproved=getattr(filters, "include_drafts", False))
             for msg in messages:
                 # Exclude outdated messages
                 status = getattr(msg, "status", "draft")
@@ -479,9 +479,9 @@ class GroundingEngine:
                         channel="all",
                         channel_variants=msg.variants,
                         source={
-                            "house_id": str(house.id),
-                            "house_name": house.name,
-                            "last_synced": house.last_synced.isoformat() if house.last_synced else None,
+                            "spec_id": str(spec.id),
+                            "spec_name": spec.name,
+                            "last_synced": spec.last_synced.isoformat() if spec.last_synced else None,
                             "content_tier": tier,
                         },
                         confidence=score,
@@ -493,22 +493,22 @@ class GroundingEngine:
         return GroundingResponse(
             results=results[:8],
             grounding_context=GroundingContext(
-                active_house_id=all_houses[0].id if all_houses else None,
-                house_name=all_houses[0].name if all_houses else "",
-                house_summary=all_houses[0].summary if all_houses else "",
+                active_spec_id=all_specs[0].id if all_specs else None,
+                spec_name=all_specs[0].name if all_specs else "",
+                spec_summary=all_specs[0].summary if all_specs else "",
                 confidence="medium" if results else "low",
             ),
         )
 
-    def index_house(self, house_id: UUID) -> int:
-        house = self.store.get_house(house_id)
-        if not house:
-            raise ValueError(f"House {house_id} not found")
+    def index_spec(self, spec_id: UUID) -> int:
+        spec = self.store.get_spec(spec_id)
+        if not spec:
+            raise ValueError(f"Spec {spec_id} not found")
 
         # Clear existing vectors to prevent duplicates
-        self.delete_house_vectors(house_id)
+        self.delete_spec_vectors(spec_id)
 
-        messages = self.store.get_key_messages(house_id, include_unapproved=True)
+        messages = self.store.get_key_messages(spec_id, include_unapproved=True)
         vectors_to_add = []
         ids_to_add = []
 
@@ -525,20 +525,20 @@ class GroundingEngine:
 
                 self.store.upsert_vector_metadata(
                     id=str_id,
-                    message_house_id=house_id,
-                    house_name=house.name,
-                    house_summary=house.summary or "",
+                    spec_id=spec_id,
+                    spec_name=spec.name,
+                    spec_summary=spec.summary or "",
                     content=content,
                     section_type=str(msg.section_type),
                     priority=msg.priority,
                     persona=msg.personas[0] if msg.personas else "general",
                     channel=str(msg.channels[0]) if msg.channels else "all",
-                    key_message_id=msg.id,
-                    last_synced=house.last_synced,
+                    assertion_id=msg.id,
+                    last_synced=spec.last_synced,
                     content_tier=getattr(msg, "content_tier", None),
                 )
 
-            # 2. Embed and index message house positioning fields
+            # 2. Embed and index message spec positioning fields
             for field, st, priority in [
                 ("summary", "positioning", 1),
                 ("audience", "positioning", 1),
@@ -546,10 +546,10 @@ class GroundingEngine:
                 ("differentiation", "positioning", 2),
                 ("tagline", "headline", 1),
             ]:
-                text = getattr(house, field, "") or ""
+                text = getattr(spec, field, "") or ""
                 if text and text != "[Not found in source]":
                     vec = self._embed(text)
-                    str_id = f"field-{house_id}-{field}"
+                    str_id = f"field-{spec_id}-{field}"
                     uint_id = string_to_uint64(str_id)
 
                     vectors_to_add.append(vec)
@@ -557,19 +557,19 @@ class GroundingEngine:
 
                     self.store.upsert_vector_metadata(
                         id=str_id,
-                        message_house_id=house_id,
-                        house_name=house.name,
-                        house_summary=house.summary or "",
+                        spec_id=spec_id,
+                        spec_name=spec.name,
+                        spec_summary=spec.summary or "",
                         content=text,
                         section_type=st,
                         priority=priority,
                         persona="general",
                         channel="all",
-                        last_synced=house.last_synced,
+                        last_synced=spec.last_synced,
                     )
 
             # 3. Embed and index Know Your Market frame section
-            kym_path = Path("data/frames") / f"{house_id}.md"
+            kym_path = Path("data/frames") / f"{spec_id}.md"
             if kym_path.exists():
                 md = kym_path.read_text(encoding="utf-8")
                 if "## Know Your Market" in md:
@@ -579,7 +579,7 @@ class GroundingEngine:
                     if kym_text:
                         content_slice = kym_text[:1500]
                         vec = self._embed(content_slice)
-                        str_id = f"kym-{house_id}"
+                        str_id = f"kym-{spec_id}"
                         uint_id = string_to_uint64(str_id)
 
                         vectors_to_add.append(vec)
@@ -587,19 +587,19 @@ class GroundingEngine:
 
                         self.store.upsert_vector_metadata(
                             id=str_id,
-                            message_house_id=house_id,
-                            house_name=house.name,
-                            house_summary=house.summary or "",
+                            spec_id=spec_id,
+                            spec_name=spec.name,
+                            spec_summary=spec.summary or "",
                             content=content_slice,
                             section_type="know_your_market",
                             priority=1,
                             persona="general",
                             channel="all",
-                            last_synced=house.last_synced,
+                            last_synced=spec.last_synced,
                         )
 
             # 4. Chunk and index raw source markdown (high-fidelity proxy) if available
-            raw_source_path = Path("data/sources") / f"{house_id}.md"
+            raw_source_path = Path("data/sources") / f"{spec_id}.md"
             if raw_source_path.exists():
                 raw_md = raw_source_path.read_text(encoding="utf-8")
                 if raw_md.strip():
@@ -609,7 +609,7 @@ class GroundingEngine:
                     for chunk in md_chunks:
                         content = chunk["text"]
                         vec = self._embed(content)
-                        str_id = f"raw-{house_id}-{chunk['chunk_id']}"
+                        str_id = f"raw-{spec_id}-{chunk['chunk_id']}"
                         uint_id = string_to_uint64(str_id)
 
                         vectors_to_add.append(vec)
@@ -617,15 +617,15 @@ class GroundingEngine:
 
                         self.store.upsert_vector_metadata(
                             id=str_id,
-                            message_house_id=house_id,
-                            house_name=house.name,
-                            house_summary=house.summary or "",
+                            spec_id=spec_id,
+                            spec_name=spec.name,
+                            spec_summary=spec.summary or "",
                             content=content,
                             section_type="source_markdown",
                             priority=3,
                             persona="general",
                             channel="all",
-                            last_synced=house.last_synced,
+                            last_synced=spec.last_synced,
                         )
 
             # 5. Upsert to Turbovec IdMapIndex
@@ -645,12 +645,12 @@ class GroundingEngine:
 
         return len(vectors_to_add)
 
-    def delete_house_vectors(self, house_id: UUID) -> int:
-        """Delete all vectors and metadata for a house by ID."""
+    def delete_spec_vectors(self, spec_id: UUID) -> int:
+        """Delete all vectors and metadata for a spec by ID."""
         with self._lock:
             with self.store.session() as s:
                 records = s.query(VectorMetadataModel).filter(
-                    VectorMetadataModel.message_house_id == str(house_id)
+                    VectorMetadataModel.spec_id == str(spec_id)
                 ).all()
                 str_ids = [r.id for r in records]
 
@@ -667,7 +667,7 @@ class GroundingEngine:
                     log.debug("Vector %s not present or failed to remove: %s", sid, e)
 
             # Delete metadata from DB
-            self.store.delete_vector_metadata_for_house(house_id)
+            self.store.delete_vector_metadata_for_spec(spec_id)
 
             if deleted > 0:
                 self.save_index()

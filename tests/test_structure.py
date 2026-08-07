@@ -9,7 +9,7 @@ import pytest
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("PINECONE_API_KEY", "test-key")
 
-from src.pipeline.structure import HouseStructurer, StructuredHouse
+from src.pipeline.structure import SpecStructurer, StructuredSpec
 
 CANONICAL_MARKDOWN = """# Acme Cloud Security
 
@@ -77,7 +77,7 @@ Only platform with pre-deploy enforcement. No agent required. SOC2 certified.
 @pytest.fixture
 def structurer():
     with patch("src.pipeline.structure.OpenAI"):
-        s = HouseStructurer(openai_api_key="test-key")
+        s = SpecStructurer(openai_api_key="test-key")
     return s
 
 
@@ -85,46 +85,46 @@ def structurer():
 
 class TestParseMarkdown:
     def test_extracts_name(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "fallback")
-        assert house.name == "Acme Cloud Security"
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "fallback")
+        assert spec.name == "Acme Cloud Security"
 
     def test_extracts_summary(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "DevOps" in house.summary
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "DevOps" in spec.summary
 
     def test_extracts_audience(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "Security engineers" in house.audience
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "Security engineers" in spec.audience
 
     def test_extracts_positioning(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "policy-as-code" in house.positioning
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "policy-as-code" in spec.positioning
 
     def test_extracts_tagline(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "Ship fast" in house.tagline
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "Ship fast" in spec.tagline
 
     def test_extracts_differentiation(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "pre-deploy" in house.differentiation
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "pre-deploy" in spec.differentiation
 
     def test_extracts_know_your_market(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "Vision" in house.know_your_market or "Secure" in house.know_your_market
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "Vision" in spec.know_your_market or "Secure" in spec.know_your_market
 
     def test_fallback_name_when_no_h1(self, structurer):
         md = "## Summary\nSome summary"
-        house = structurer._parse_markdown(md, "My Source")
-        assert house.name == "My Source"
+        spec = structurer._parse_markdown(md, "My Source")
+        assert spec.name == "My Source"
 
     def test_missing_sections_detected(self, structurer):
         md = "# Minimal\n\n## Summary\nA summary\n"
-        house = structurer._parse_markdown(md, "x")
-        assert "tagline" in house.missing_sections or len(house.missing_sections) > 0
+        spec = structurer._parse_markdown(md, "x")
+        assert "tagline" in spec.missing_sections or len(spec.missing_sections) > 0
 
-    def test_returns_structured_house(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert isinstance(house, StructuredHouse)
+    def test_returns_structured_spec(self, structurer):
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert isinstance(spec, StructuredSpec)
 
 
 # ── _parse_key_messages ───────────────────────────────────────────────────────
@@ -220,45 +220,45 @@ class TestParsePersonasRegex:
 
 class TestMergeStructures:
     def test_single_chunk_returned_as_is(self, structurer):
-        h = StructuredHouse(name="X", summary="s", audience="a", brand_personality="b",
+        h = StructuredSpec(name="X", summary="s", audience="a", brand_personality="b",
                             positioning="p", tagline="t", differentiation="d",
-                            key_messages=[], personas=[])
+                            assertions=[], personas=[])
         result = structurer._merge_structures([h], "X")
         assert result.name == "X"
 
     def test_deduplicates_key_messages(self, structurer):
         msg = {"section_type": "benefit", "priority": 1, "content": "Reduce cost by 40%",
                "variants": {}, "personas": [], "channels": ["all"]}
-        h1 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+        h1 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[msg], personas=[])
-        h2 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+                             assertions=[msg], personas=[])
+        h2 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[msg], personas=[])
+                             assertions=[msg], personas=[])
         result = structurer._merge_structures([h1, h2], "A")
-        assert len(result.key_messages) == 1
+        assert len(result.assertions) == 1
 
     def test_merges_distinct_messages(self, structurer):
         m1 = {"section_type": "benefit", "priority": 1, "content": "Save time",
                "variants": {}, "personas": [], "channels": ["all"]}
         m2 = {"section_type": "benefit", "priority": 1, "content": "Cut costs",
                "variants": {}, "personas": [], "channels": ["all"]}
-        h1 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+        h1 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[m1], personas=[])
-        h2 = StructuredHouse(name="A", summary="s2", audience="a2", brand_personality="b2",
+                             assertions=[m1], personas=[])
+        h2 = StructuredSpec(name="A", summary="s2", audience="a2", brand_personality="b2",
                              positioning="p2", tagline="t2", differentiation="d2",
-                             key_messages=[m2], personas=[])
+                             assertions=[m2], personas=[])
         result = structurer._merge_structures([h1, h2], "A")
-        assert len(result.key_messages) == 2
+        assert len(result.assertions) == 2
 
     def test_takes_first_nonempty_fields(self, structurer):
-        h1 = StructuredHouse(name="", summary="", audience="a", brand_personality="b",
+        h1 = StructuredSpec(name="", summary="", audience="a", brand_personality="b",
                              positioning="p", tagline="", differentiation="d",
-                             key_messages=[], personas=[])
-        h2 = StructuredHouse(name="B", summary="s2", audience="a2", brand_personality="b2",
+                             assertions=[], personas=[])
+        h2 = StructuredSpec(name="B", summary="s2", audience="a2", brand_personality="b2",
                              positioning="p2", tagline="t2", differentiation="d2",
-                             key_messages=[], personas=[])
+                             assertions=[], personas=[])
         result = structurer._merge_structures([h1, h2], "fallback")
         assert result.summary == "s2"
         assert result.tagline == "t2"
@@ -266,12 +266,12 @@ class TestMergeStructures:
     def test_deduplicates_personas_by_name(self, structurer):
         p = {"name": "DevOps Lead", "description": "Lead", "pain_points": [],
               "buying_triggers": [], "objections": []}
-        h1 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+        h1 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[], personas=[p])
-        h2 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+                             assertions=[], personas=[p])
+        h2 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[], personas=[p])
+                             assertions=[], personas=[p])
         result = structurer._merge_structures([h1, h2], "A")
         assert len(result.personas) == 1
 
@@ -280,16 +280,16 @@ class TestMergeStructures:
 
 class TestToMarkdown:
     def test_roundtrip_preserves_name(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        md = structurer.to_markdown(house)
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        md = structurer.to_markdown(spec)
         assert "# Acme Cloud Security" in md
 
     def test_roundtrip_preserves_tagline(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        md = structurer.to_markdown(house)
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        md = structurer.to_markdown(spec)
         assert "Ship fast" in md
 
     def test_includes_key_messages(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        md = structurer.to_markdown(house)
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        md = structurer.to_markdown(spec)
         assert "## Key Messages" in md

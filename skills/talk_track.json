@@ -37,7 +37,7 @@
       "required": true
     }
   ],
-  "prompt_template": "Write a sales talk track for {house_name}.\n\nGrounded in: {positioning}\nKey differentiators: {key_messages}\nTarget persona: {persona}\n\nStructure:\n1. Call opener (30 seconds, hook the prospect immediately)\n2. 5-7 discovery questions that uncover pain points specific to this persona\n3. Value proposition statement (2-3 sentences tied to their likely pain points)\n4. Demo focus points (top 3 capabilities to show \u2014 ordered by persona priority)\n5. 4-5 common objections with specific, confident counter-responses\n6. Close / next steps (2 options for low-friction progression)\n\nTone: consultative, confident, not pushy. Ask questions before pitching.",
+  "prompt_template": "Write a sales talk track for {spec_name}.\n\nGrounded in: {positioning}\nKey differentiators: {assertions}\nTarget persona: {persona}\n\nStructure:\n1. Call opener (30 seconds, hook the prospect immediately)\n2. 5-7 discovery questions that uncover pain points specific to this persona\n3. Value proposition statement (2-3 sentences tied to their likely pain points)\n4. Demo focus points (top 3 capabilities to show \u2014 ordered by persona priority)\n5. 4-5 common objections with specific, confident counter-responses\n6. Close / next steps (2 options for low-friction progression)\n\nTone: consultative, confident, not pushy. Ask questions before pitching.",
   "prefab_template": "talk_track",
   "renderer": "html"
 }

@@ -27,7 +27,7 @@
       "required": false
     }
   ],
-  "prompt_template": "Write a comprehensive objection handler reference card for {house_name}.\n\nGrounded in: {positioning}\nKnown objections from personas: {objections}\n\nFor each objection:\n1. State the objection verbatim as a prospect would say it\n2. Identify the root cause (fear, misunderstanding, prior bad experience)\n3. Write a 2-3 sentence response: acknowledge \u2192 reframe \u2192 redirect\n4. Add a supporting proof point or stat where possible\n\nCover at least 8 objections across these categories:\n- Price / ROI objections\n- Complexity / implementation concerns\n- \"We already have a solution\" objections\n- Timing / priority objections\n- Trust / credibility objections\n\nTone: empathetic, factual, never defensive.",
+  "prompt_template": "Write a comprehensive objection handler reference card for {spec_name}.\n\nGrounded in: {positioning}\nKnown objections from personas: {objections}\n\nFor each objection:\n1. State the objection verbatim as a prospect would say it\n2. Identify the root cause (fear, misunderstanding, prior bad experience)\n3. Write a 2-3 sentence response: acknowledge \u2192 reframe \u2192 redirect\n4. Add a supporting proof point or stat where possible\n\nCover at least 8 objections across these categories:\n- Price / ROI objections\n- Complexity / implementation concerns\n- \"We already have a solution\" objections\n- Timing / priority objections\n- Trust / credibility objections\n\nTone: empathetic, factual, never defensive.",
   "prefab_template": "objection_handler",
   "renderer": "html"
 }

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("PINECONE_API_KEY", "test-key")
 
-from src.models import CanonDomain, GroundingType, DEPARTMENT_PRIMARY_GROUNDING
+from src.models import Spec, GroundingType, DEPARTMENT_PRIMARY_GROUNDING
 from src.auth import AuthContext
 from src.store import Store
 
@@ -22,7 +22,7 @@ def test_department_mappings():
 
 def test_domain_model_default_dept():
     """Verify department default is 'General' on models."""
-    d = CanonDomain(name="Test Domain")
+    d = Spec(name="Test Domain")
     assert d.department == "General"
 
 def test_auth_context_scoping():
@@ -75,18 +75,18 @@ def store_and_client(tmp_path):
     store.init()
 
     # Seed test domains
-    d1 = CanonDomain(
-        name="PMM House",
+    d1 = Spec(
+        name="PMM Spec",
         status="active",
         department="Product Marketing",
     )
-    d2 = CanonDomain(
-        name="Corp Narrative House",
+    d2 = Spec(
+        name="Corp Narrative Spec",
         status="active",
         department="Company Marketing",
     )
-    store.upsert_house(d1)
-    store.upsert_house(d2)
+    store.upsert_spec(d1)
+    store.upsert_spec(d2)
 
     # Patch the web app's store
     import src.store as store_module
@@ -147,7 +147,7 @@ def test_api_read_filtering(store_and_client):
         assert resp.status_code == 200
         items = resp.json()
         assert len(items) == 1
-        assert items[0]["name"] == "PMM House"
+        assert items[0]["name"] == "PMM Spec"
         assert items[0]["department"] == "Product Marketing"
 
         # Test listing with general key
@@ -198,7 +198,7 @@ def test_api_write_guarding(store_and_client):
 
 def test_mcp_list_departments(store_and_client):
     """Verify MCP list_departments tool returns grounding type and counts."""
-    from src.server import list_departments, list_canon_domains
+    from src.server import list_departments, list_specs
     import src.grounding.tools as gt_module
     store, client, d1, d2 = store_and_client
 
@@ -217,10 +217,10 @@ def test_mcp_list_departments(store_and_client):
         assert corp_dept["domain_count"] == 1
         assert corp_dept["primary_grounding_type"] == GroundingType.CORP_NARRATIVE.value
 
-        # Test list_canon_domains with department filter
-        res_all = list_canon_domains()
+        # Test list_specs with department filter
+        res_all = list_specs()
         assert len(res_all["domains"]) == 2
 
-        res_pmm = list_canon_domains(department="Product Marketing")
+        res_pmm = list_specs(department="Product Marketing")
         assert len(res_pmm["domains"]) == 1
-        assert res_pmm["domains"][0]["name"] == "PMM House"
+        assert res_pmm["domains"][0]["name"] == "PMM Spec"

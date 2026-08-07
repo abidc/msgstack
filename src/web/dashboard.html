@@ -11,7 +11,7 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Dashboard</div>
-                <div class="page-subtitle">Overview of your canon domains and generated assets</div>
+                <div class="page-subtitle">Overview of your specs and generated assets</div>
             </div>
             <div style="display:flex;gap:10px;">
                 <button class="btn btn-ghost" onclick="loadDashboard()">
@@ -32,7 +32,7 @@
             </div>
             <div class="stat">
                 <div class="stat-value" id="stat-entries">—</div>
-                <div class="stat-label">Canon Entrys</div>
+                <div class="stat-label">Spec Entrys</div>
             </div>
             <div class="stat">
                 <div class="stat-value" id="stat-artifacts">—</div>
@@ -44,7 +44,7 @@
             </div>
         </div>
 
-        <!-- Canon Health Score gauge -->
+        <!-- Spec Health Score gauge -->
         <div class="card" style="margin-bottom:24px;display:flex;flex-direction:row;align-items:center;gap:24px;">
             <div style="position:relative;display:flex;align-items:center;justify-content:center;width:110px;height:110px;flex-shrink:0;">
                 <svg style="width:100%;height:100%;transform:rotate(-90deg);">
@@ -55,7 +55,7 @@
                 <span style="position:absolute;font-size:24px;font-weight:700;font-family:var(--font-display);color:var(--text);">94%</span>
             </div>
             <div style="min-width:0;">
-                <h3 style="font-size:18px;font-weight:700;font-family:var(--font-display);margin-bottom:4px;color:var(--text);">Canon Health Score</h3>
+                <h3 style="font-size:18px;font-weight:700;font-family:var(--font-display);margin-bottom:4px;color:var(--text);">Spec Health Score</h3>
                 <p style="font-size:14px;color:var(--text-2);">Your organizational messaging has a high narrative coherence. 1 active alignment gap flagged in HR specifications.</p>
                 <button class="btn btn-ghost btn-xs" style="margin-top:12px;" onclick="showSection('graph')">Explore Graph Gaps</button>
             </div>
@@ -108,7 +108,7 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td><span class="doc-type-badge doc-type-message_house">Objection</span></td>
+                            <td><span class="doc-type-badge doc-type-spec">Objection</span></td>
                             <td><strong>Helix HR Solution</strong></td>
                             <td><span style="font-family:monospace;font-size:12px;">"SLA updated to 99.9% support availability"</span></td>
                             <td>PMM Team (Suggester)</td>
@@ -139,7 +139,7 @@
     <div class="page">
         <div class="page-header">
             <div>
-                <div class="page-title">Canon Domains</div>
+                <div class="page-title">Spec Domains</div>
                 <div class="page-subtitle">Your library of structured brand and product messaging</div>
             </div>
         </div>
@@ -166,14 +166,14 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Upload Source</div>
-                <div class="page-subtitle">Extract a canon domain from a PDF, DOCX, or TXT document</div>
+                <div class="page-subtitle">Extract a spec from a PDF, DOCX, or TXT document</div>
             </div>
         </div>
         <div class="card">
             <div class="form-group" style="margin-bottom:14px;">
                 <label class="form-label" for="uploadDocType">Document Type</label>
                 <select class="form-select" id="uploadDocType" style="max-width:320px;">
-                    <option value="canon_domain" selected>Canon Domain</option>
+                    <option value="spec" selected>Spec Domain</option>
                     <option value="brand_guide">Brand Guide</option>
                     <option value="competitive_brief">Competitive Brief</option>
                     <option value="corp_narrative">Corporate Narrative</option>
@@ -190,7 +190,7 @@
                     <option value="Enablement">Enablement</option>
                     <option value="Product Management">Product Management</option>
                 </select>
-                <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Associates this canon domain with a department and applies primary grounding defaults.</div>
+                <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Associates this spec with a department and applies primary grounding defaults.</div>
             </div>
             <div class="upload-zone" id="upload-zone">
                 <svg class="upload-zone-icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -336,7 +336,7 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Alignment Scoring</div>
-                <div class="page-subtitle">Evaluate arbitrary content against an approved canon domain</div>
+                <div class="page-subtitle">Evaluate arbitrary content against an approved spec</div>
             </div>
         </div>
         <div class="grid-2">
@@ -371,7 +371,7 @@
                 </div>
                 
                 <div id="scoring-missing-container" style="display:none;">
-                    <div style="font-weight:600;color:var(--warning);margin-bottom:8px;">Missing Canon Entrys</div>
+                    <div style="font-weight:600;color:var(--warning);margin-bottom:8px;">Missing Spec Entrys</div>
                     <ul id="scoring-missing" style="font-size:13px;color:var(--text-2);padding-left:20px;margin:0;"></ul>
                 </div>
             </div>
@@ -874,7 +874,7 @@
                     <div class="form-group" style="margin-bottom:10px;">
                         <label class="form-label" for="new-dept-grounding">Primary Grounding Type</label>
                         <select id="new-dept-grounding" class="form-select">
-                            <option value="message_house" selected>Message House</option>
+                            <option value="spec" selected>Message Spec</option>
                             <option value="brand_guide">Brand Guide</option>
                             <option value="competitive_brief">Competitive Brief</option>
                             <option value="corp_narrative">Corporate Narrative</option>
@@ -897,7 +897,7 @@
     <!-- Existing domain modal content -->
 </div>
 
-<!-- Floating Canon Navigator Button -->
+<!-- Floating Spec Navigator Button -->
 <div id="navigator-launcher" style="position:fixed;bottom:24px;right:24px;z-index:50;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);border-radius:50%;width:54px;height:54px;background:var(--primary);border:2px solid var(--border);"
      onclick="toggleNavigator()">
     <span style="color:#fff;font-size:22px;line-height:1;">✦</span>
@@ -908,14 +908,14 @@
     
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);background:var(--bg-2);border-radius:12px 12px 0 0;">
-        <h3 style="font-weight:700;font-family:var(--font-display);font-size:14px;color:var(--text);">Canon Navigator</h3>
+        <h3 style="font-weight:700;font-family:var(--font-display);font-size:14px;color:var(--text);">Spec Navigator</h3>
         <button style="font-size:13px;background:none;border:none;cursor:pointer;color:var(--text-3);padding:0;" onclick="toggleNavigator()">✕</button>
     </div>
 
     <!-- Messages Container -->
     <div id="chat-messages" style="flex:1;padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;background:var(--bg);">
         <div style="padding:12px;border-radius:8px;font-size:13px;background:var(--bg-2);color:var(--text-2);">
-            Hi! I'm the Canon Navigator super-agent. Ask me anything about your active brand specifications or narrative drift.
+            Hi! I'm the Spec Navigator super-agent. Ask me anything about your active brand specifications or narrative drift.
         </div>
     </div>
 
@@ -944,17 +944,17 @@
     let _dragSrcEl = null;
     let activeDept = 'All';
     const GROUNDING_LABELS = {
-        'message_house': 'Message House',
+        'spec': 'Message Spec',
         'corp_narrative': 'Corp Narrative',
         'persona_library': 'Persona Library',
         'competitive_brief': 'Competitive Brief'
     };
     let DEPT_PRIMARY_GROUNDING = {
-        "Product Marketing": "message_house",
+        "Product Marketing": "spec",
         "Company Marketing": "corp_narrative",
         "Enablement": "persona_library",
         "Product Management": "competitive_brief",
-        "General": "message_house"
+        "General": "spec"
     };
     function switchDept(dept) {
         activeDept = dept;
@@ -1006,7 +1006,7 @@
     // ── Routing ────────────────────────────────────────────────────────────────
 
     const DOC_TYPE_LABELS = {
-        'canon_domain':     'Canon Domain',
+        'spec':     'Spec Domain',
         'brand_guide':       'Brand Guide',
         'competitive_brief': 'Competitive Brief',
         'corp_narrative':    'Corp Narrative',
@@ -1065,7 +1065,7 @@
                 html += `<div style="font-weight:600;margin:10px 0 6px;">${esc(dri)} (${domains.length})</div>`;
                 html += domains.map(d => _driDomainRow(d)).join('');
             }
-            el.innerHTML = html || '<div style="color:var(--text-3);">No canon domains yet.</div>';
+            el.innerHTML = html || '<div style="color:var(--text-3);">No specs yet.</div>';
         } catch (e) {
             el.innerHTML = `<div style="color:var(--danger);">Failed to load DRI summary: ${esc(e.message)}</div>`;
         }
@@ -1181,7 +1181,7 @@
         try {
             const [data, domains, artifacts] = await Promise.all([
                 fetch(`${API}/stats`).then(r => r.json()),
-                fetch(`${API}/canon-domains`).then(r => r.json()),
+                fetch(`${API}/specs`).then(r => r.json()),
                 fetch(`${API}/recent-artifacts?limit=5`).then(r => r.json()),
             ]);
 
@@ -1238,7 +1238,7 @@
         const list = document.getElementById('domains-list');
         list.innerHTML = '<div style="grid-column:1/-1;color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
         try {
-            const domains = await fetch(`${API}/canon-domains`).then(r => r.json());
+            const domains = await fetch(`${API}/specs`).then(r => r.json());
             if (!domains.length) {
                 list.innerHTML = `<div style="grid-column:1/-1;" class="card"><div style="color:var(--text-3);font-size:14px;text-align:center;padding:32px 0;">No frameworks yet. <button class="btn btn-ghost btn-sm" onclick="showSection('upload')">Upload a document →</button></div></div>`;
                 return;
@@ -1287,8 +1287,8 @@
         detail.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span></div>';
         try {
             const [domain, pillars] = await Promise.all([
-                fetch(`${API}/canon-domains/${id}`).then(r => r.json()),
-                fetch(`${API}/canon-domains/${id}/pillars`).then(r => r.json()).catch(() => [])
+                fetch(`${API}/specs/${id}`).then(r => r.json()),
+                fetch(`${API}/specs/${id}/pillars`).then(r => r.json()).catch(() => [])
             ]);
             domain._pillars = pillars; // Attach pillars to domain for rendering
             _renderDomainDetail(domain);
@@ -1307,7 +1307,7 @@
         const hasPillars = pillars.length > 0;
 
         const grouped = {};
-        for (const m of (domain.canon_entries||[])) {
+        for (const m of (domain.assertions||[])) {
             const st = normST(m.section_type);
             if (!grouped[st]) grouped[st] = [];
             grouped[st].push(m);
@@ -1320,7 +1320,7 @@
                 pillarGrouped[p.id] = { name: p.name, entries: [] };
             }
             pillarGrouped['ungrouped'] = { name: 'Ungrouped', entries: [] };
-            for (const m of (domain.canon_entries||[])) {
+            for (const m of (domain.assertions||[])) {
                 const pid = m.pillar_id;
                 if (pid && pillarGrouped[pid]) {
                     pillarGrouped[pid].entries.push(m);
@@ -1332,7 +1332,7 @@
 
         const tabs = [
             {id:'overview',  label:'Overview'},
-            {id:'entries',  label:`Entries (${(domain.canon_entries||[]).length})`},
+            {id:'entries',  label:`Entries (${(domain.assertions||[]).length})`},
             {id:'personas',  label:`Personas (${(domain.personas||[]).length})`},
             {id:'history',   label:'Review Log'},
         ];
@@ -1373,7 +1373,7 @@
         <div id="domain-tab-entries" style="display:none;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
                 <div style="display:flex;align-items:center;gap:12px;">
-                    <span style="font-size:13px;color:var(--text-2);">${(domain.canon_entries||[]).length} entries</span>
+                    <span style="font-size:13px;color:var(--text-2);">${(domain.assertions||[]).length} entries</span>
                     ${hasPillars ? `<div id="msg-view-toggle" style="display:flex;background:var(--bg-2);border-radius:var(--radius);padding:2px;">
                         <button id="btn-view-sections" onclick="switchMsgView('sections')" style="padding:4px 10px;border:none;background:none;font-size:11px;font-weight:600;color:var(--primary);cursor:pointer;border-radius:4px;">By Section</button>
                         <button id="btn-view-pillars" onclick="switchMsgView('pillars')" style="padding:4px 10px;border:none;background:none;font-size:11px;font-weight:600;color:var(--text-3);cursor:pointer;border-radius:4px;">By Pillar</button>
@@ -1514,7 +1514,7 @@
 
     async function markDomainReviewedFromDetail(domainId) {
         try {
-            await apiFetch(`${API}/canon-domains/${domainId}/mark-reviewed`, { method: 'POST' });
+            await apiFetch(`${API}/specs/${domainId}/mark-reviewed`, { method: 'POST' });
             toast('Framework marked as reviewed', 'success');
             viewDomain(domainId);
         } catch(e) {
@@ -1527,7 +1527,7 @@
         if (!container) return;
         container.innerHTML = '<span class="spinner"></span> Loading review log...';
         try {
-            const logs = await apiFetch(`${API}/canon-domains/${domainId}/review-log`);
+            const logs = await apiFetch(`${API}/specs/${domainId}/review-log`);
             if (!logs || !logs.length) {
                 container.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:12px 0;">No review logs recorded yet. Changes and status updates will be logged here.</div>';
                 return;
@@ -1586,7 +1586,7 @@
         _dragSrcEl = null;
         const orderedIds = [...document.querySelectorAll('#entries-container .msg-row')].map(r=>r.dataset.id);
         try {
-            await fetch(`${API}/canon-domains/${domainId}/entries/reorder`, {
+            await fetch(`${API}/specs/${domainId}/entries/reorder`, {
                 method:'PATCH', headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({ordered_ids: orderedIds}),
             });
@@ -1602,12 +1602,12 @@
             if (el) data[f] = el.value;
         });
         try {
-            const res = await fetch(`${API}/canon-domains/${domainId}`, {
+            const res = await fetch(`${API}/specs/${domainId}`, {
                 method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data),
             });
             if (!res.ok) throw new Error(await res.text());
             toast('Saved', 'success');
-            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/specs/${domainId}`).then(r=>r.json());
             milestoneToast(domain.completeness_score||0, domain.name);
         } catch(e) { toast('Save failed: '+e.message, 'error'); }
     }
@@ -1617,14 +1617,14 @@
     function openAddEntry(domainId) {
         const opts = SECTION_ORDER.map(s=>`<option value="${s}">${SECTION_META[s]?.label||s}</option>`).join('');
         openModal(`<div style="padding:24px;">
-            <div style="font-weight:600;font-size:15px;margin-bottom:16px;">Add Canon Entry</div>
+            <div style="font-weight:600;font-size:15px;margin-bottom:16px;">Add Spec Entry</div>
             <div style="margin-bottom:12px;">
                 <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Section Type</label>
                 <select id="nm-type" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;">${opts}</select>
             </div>
             <div style="margin-bottom:16px;">
                 <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Content</label>
-                <textarea id="nm-content" rows="3" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;" placeholder="Enter the canon entry…"></textarea>
+                <textarea id="nm-content" rows="3" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;" placeholder="Enter the assertion…"></textarea>
             </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;">
                 <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
@@ -1639,10 +1639,10 @@
         if (!content) { toast('Content required','error'); return; }
         try {
             const res = await fetch(`${API}/entries`,{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({canon_domain_id:domainId,section_type,content,priority:3})});
+                body:JSON.stringify({spec_id:domainId,section_type,content,priority:3})});
             if (!res.ok) throw new Error(await res.text());
             closeModal(); toast('Entry added','success');
-            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/specs/${domainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('entries');
             milestoneToast(domain.completeness_score||0, domain.name);
         } catch(e) { toast('Failed: '+e.message,'error'); }
@@ -1654,7 +1654,7 @@
             const res = await fetch(`${API}/entries/${msgId}`,{method:'DELETE'});
             if (!res.ok) throw new Error(await res.text());
             toast('Deleted','success');
-            const domain = await fetch(`${API}/canon-domains/${currentDomainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/specs/${currentDomainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('entries');
         } catch(e) { toast('Delete failed: '+e.message,'error'); }
     }
@@ -1693,12 +1693,12 @@
         }).filter(r=>r.content);
         if (!rows.length) { toast('No valid rows found','error'); return; }
         try {
-            const res = await fetch(`${API}/canon-domains/${domainId}/entries/bulk-import`,{method:'POST',
+            const res = await fetch(`${API}/specs/${domainId}/entries/bulk-import`,{method:'POST',
                 headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})});
             if (!res.ok) throw new Error(await res.text());
             const result = await res.json();
             closeModal(); toast(`Imported ${result.created} entries`,'success');
-            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/specs/${domainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('entries');
         } catch(e) { toast('Import failed: '+e.message,'error'); }
     }
@@ -1729,10 +1729,10 @@
         if (!name) { toast('Name required','error'); return; }
         try {
             const res = await fetch(`${API}/personas`,{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({canon_domain_id:domainId,name,description})});
+                body:JSON.stringify({spec_id:domainId,name,description})});
             if (!res.ok) throw new Error(await res.text());
             closeModal(); toast('Persona added','success');
-            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/specs/${domainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('personas');
         } catch(e) { toast('Failed: '+e.message,'error'); }
     }
@@ -1742,10 +1742,10 @@
         if (!jobTitle) return;
         try {
             const res = await fetch(`${API}/generate-persona`,{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({canon_domain_id:domainId,job_title:jobTitle})});
+                body:JSON.stringify({spec_id:domainId,job_title:jobTitle})});
             if (!res.ok) throw new Error(await res.text());
             toast('Persona generated','success');
-            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/specs/${domainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('personas');
         } catch(e) { toast('Failed: '+e.message,'error'); }
     }
@@ -1756,7 +1756,7 @@
             const res = await fetch(`${API}/personas/${personaId}`,{method:'DELETE'});
             if (!res.ok) throw new Error(await res.text());
             toast('Deleted','success');
-            const domain = await fetch(`${API}/canon-domains/${currentDomainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/specs/${currentDomainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('personas');
         } catch(e) { toast('Delete failed: '+e.message,'error'); }
     }
@@ -1788,7 +1788,7 @@
     // ── Alignment Scoring ───────────────────────────────────────────────────────
     
     async function loadScoringDomains() {
-        const domains = await fetch(`${API}/canon-domains`).then(r=>r.json());
+        const domains = await fetch(`${API}/specs`).then(r=>r.json());
         const sel = document.getElementById('scoring-domain');
         sel.innerHTML = '<option value="">Select a framework…</option>' +
             domains.map(h => `<option value="${h.id}">${esc(h.name)}</option>`).join('');
@@ -1805,7 +1805,7 @@
         btn.disabled = true;
         
         try {
-            const data = await apiFetch(`${API}/canon-domains/${domainId}/score`, {
+            const data = await apiFetch(`${API}/specs/${domainId}/score`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ content })
@@ -1842,9 +1842,9 @@
             
             const missCon = document.getElementById('scoring-missing-container');
             const missUl = document.getElementById('scoring-missing');
-            if (data.missing_canon_entries && data.missing_canon_entries.length > 0) {
+            if (data.missing_assertions && data.missing_assertions.length > 0) {
                 missCon.style.display = 'block';
-                missUl.innerHTML = data.missing_canon_entries.map(m => `<li>${esc(m)}</li>`).join('');
+                missUl.innerHTML = data.missing_assertions.map(m => `<li>${esc(m)}</li>`).join('');
             } else {
                 missCon.style.display = 'none';
             }
@@ -1860,7 +1860,7 @@
     // ── Artifact generator ────────────────────────────────────────────────────────
 
     async function loadArtifactDomains() {
-        const domains = await fetch(`${API}/canon-domains`).then(r=>r.json());
+        const domains = await fetch(`${API}/specs`).then(r=>r.json());
         const sel = document.getElementById('artifact-domain');
         sel.innerHTML = '<option value="">Select a framework…</option>' +
             domains.map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join('');
@@ -1940,7 +1940,7 @@
         container.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span><span style="margin-left:12px;color:var(--text-2);">Generating with AI…</span></div>';
         const form = new FormData();
         form.append('skill_id', selectedSkillId);
-        form.append('canon_domain_id', domainId);
+        form.append('spec_id', domainId);
         if (Object.keys(context).length) {
             form.append('extra_context', JSON.stringify(context));
         }
@@ -2082,7 +2082,7 @@
                 if (artifactType === "one_pager_visual" || artifactType === "one_pager") {
                     data.visual_url = `${API.replace("/api", "")}/canvas?artifact_id=${data.id}`;
                 } else {
-                    data.visual_url = `${API.replace("/api", "")}/artifact/${artifactType}/${data.canon_domain_id}`;
+                    data.visual_url = `${API.replace("/api", "")}/artifact/${artifactType}/${data.spec_id}`;
                 }
             } else {
                 data.visual_url = null;
@@ -2408,7 +2408,7 @@
         const form = new FormData();
         form.append('file', file);
         form.append('source_name', file.name.replace(/\.[^.]+$/, ''));
-        form.append('document_type', document.getElementById('uploadDocType')?.value || 'canon_domain');
+        form.append('document_type', document.getElementById('uploadDocType')?.value || 'spec');
         form.append('department', document.getElementById('uploadDepartment')?.value || 'General');
 
         try {
@@ -2434,14 +2434,14 @@
         document.getElementById('upload-preview-card').style.display = 'none';
         document.getElementById('structure-preview').style.display = '';
         document.getElementById('preview-name').textContent = data.name || 'Untitled';
-        document.getElementById('preview-meta').textContent = `${data.word_count?.toLocaleString()||0} words · ${data.entry_count||data.canon_entries?.length||0} entries · ${data.persona_count||data.personas?.length||0} personas`;
+        document.getElementById('preview-meta').textContent = `${data.word_count?.toLocaleString()||0} words · ${data.entry_count||data.assertions?.length||0} entries · ${data.persona_count||data.personas?.length||0} personas`;
 
         const score = data.completeness_score || 0;
         document.getElementById('preview-completeness-fill').style.width = score + '%';
         document.getElementById('preview-completeness-label').textContent = `${score}% complete${data.missing_sections?.length ? ' — missing: '+data.missing_sections.join(', ') : ''}`;
 
         const sectionsEl = document.getElementById('preview-sections');
-        const msgs = data.canon_entries || [];
+        const msgs = data.assertions || [];
         const grouped = {};
         for (const m of msgs) {
             const st = normST(m.section_type||'headline');
@@ -2659,7 +2659,7 @@
 const NODE_COLORS = {
         // ATLAS constellation palette — muted atlas-family inks
         GroundingDocument: '#3E4E80',
-        MessagingPillar:   '#8A6A1F',
+        Pillar:   '#8A6A1F',
         GroundingChunk:    '#56673F',
         Persona:           '#5E6E8A',
         Channel:           '#4E6E6A',
@@ -2669,7 +2669,7 @@ const NODE_COLORS = {
     };
     const NODE_SIZES = {
         GroundingDocument: 42,
-        MessagingPillar:   30,
+        Pillar:   30,
         GroundingChunk:    18,
         Persona:           24,
         Channel:           22,
@@ -2820,7 +2820,7 @@ const NODE_COLORS = {
             if (!grouped[n.type]) grouped[n.type] = [];
             grouped[n.type].push(n);
         }
-        const order = ['GroundingDocument','MessagingPillar','GroundingChunk','Persona','PainPoint','BuyingTrigger','Objection','Channel'];
+        const order = ['GroundingDocument','Pillar','GroundingChunk','Persona','PainPoint','BuyingTrigger','Objection','Channel'];
         const types = order.filter(t => grouped[t]).concat(Object.keys(grouped).filter(t => !order.includes(t)));
         document.getElementById('graph-node-list').innerHTML = types.map(t => {
             const color = NODE_COLORS[t] || '#888';
@@ -2988,7 +2988,7 @@ const NODE_COLORS = {
                 <tbody>${data.files.map(f => {
                     const statusColor = f.sync_status === 'synced' ? 'var(--success)' : f.sync_status === 'error' ? 'var(--danger)' : 'var(--text-3)';
                     const synced = f.synced_at ? new Date(f.synced_at).toLocaleString() : '—';
-                    const domainLink = f.canon_domain_id ? `<a href="#" onclick="event.preventDefault();showDomainDetail('${f.canon_domain_id}')" style="color:var(--primary);">${f.canon_domain_id.slice(0,8)}…</a>` : '—';
+                    const domainLink = f.spec_id ? `<a href="#" onclick="event.preventDefault();showDomainDetail('${f.spec_id}')" style="color:var(--primary);">${f.spec_id.slice(0,8)}…</a>` : '—';
                     return `<tr style="border-top:1px solid var(--border);">
                         <td style="padding:5px 8px;">${f.file_name}</td>
                         <td style="padding:5px 8px;color:${statusColor};">${f.sync_status}${f.error_message ? ` — ${f.error_message.slice(0,60)}` : ''}</td>
@@ -3058,7 +3058,7 @@ const NODE_COLORS = {
             }
         }
         try {
-            await apiFetch(`${API}/canon-domains/${id}`, {method: 'DELETE'});
+            await apiFetch(`${API}/specs/${id}`, {method: 'DELETE'});
             showToast('Framework deleted', 'success');
             if (!card) showSection('frameworks');
         } catch(e) {
@@ -3186,7 +3186,7 @@ const NODE_COLORS = {
         const btn = document.getElementById('bulk-approve-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
         try {
-            const r = await apiFetch(`${API}/canon-domains/${currentDomainId}/entries/bulk-status`, {
+            const r = await apiFetch(`${API}/specs/${currentDomainId}/entries/bulk-status`, {
                 method: 'PATCH',
                 headers: {'Content-Type':'application/json'},
                 body: JSON.stringify({ entry_ids: [..._bulkSelected], status: 'approved', approved_by: 'admin' }),
@@ -3206,7 +3206,7 @@ const NODE_COLORS = {
 
     async function loadUsageStats(domainId) {
         try {
-            const rows = await apiFetch(`${API}/canon-domains/${domainId}/usage-stats`);
+            const rows = await apiFetch(`${API}/specs/${domainId}/usage-stats`);
             _usageStats = {};
             for (const r of rows) _usageStats[r.id] = r;
         } catch(_) { _usageStats = {}; }
@@ -3326,8 +3326,8 @@ const NODE_COLORS = {
         detail.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span></div>';
         try {
             const [domain, pillars] = await Promise.all([
-                fetch(`${API}/canon-domains/${id}`).then(r => r.json()),
-                fetch(`${API}/canon-domains/${id}/pillars`).then(r => r.json()).catch(() => []),
+                fetch(`${API}/specs/${id}`).then(r => r.json()),
+                fetch(`${API}/specs/${id}/pillars`).then(r => r.json()).catch(() => []),
             ]);
             await loadUsageStats(id);  // load heatmap data before render
             domain._pillars = pillars;
@@ -3353,7 +3353,7 @@ const NODE_COLORS = {
     async function markDomainReviewed(domainId, event) {
         if (event) event.stopPropagation();
         try {
-            await apiFetch(`${API}/canon-domains/${domainId}/mark-reviewed`, { method: 'POST' });
+            await apiFetch(`${API}/specs/${domainId}/mark-reviewed`, { method: 'POST' });
             toast('Framework marked as reviewed', 'success');
             loadDomains();
         } catch(e) {
@@ -3367,7 +3367,7 @@ const NODE_COLORS = {
         const list = document.getElementById('domains-list');
         list.innerHTML = '<div style="grid-column:1/-1;color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
         try {
-            const domains = await fetch(`${API}/canon-domains`).then(r => r.json());
+            const domains = await fetch(`${API}/specs`).then(r => r.json());
             
             // Build unique list of departments dynamically from existing domains and defaults
             const deptsSet = new Set(domains.map(h => h.department || "General"));
@@ -3384,7 +3384,7 @@ const NODE_COLORS = {
                         : domains.filter(h => (h.department || "General") === dept).length;
                     
                     const isSelected = activeDept === dept;
-                    const primaryGrounding = DEPT_PRIMARY_GROUNDING[dept] || "message_house";
+                    const primaryGrounding = DEPT_PRIMARY_GROUNDING[dept] || "spec";
                     const groundingLabel = GROUNDING_LABELS[primaryGrounding] || primaryGrounding.replace(/_/g, ' ');
                     const titleTip = dept === "All" ? "All Departments" : `Primary Grounding: ${groundingLabel}`;
                     
@@ -3400,11 +3400,11 @@ const NODE_COLORS = {
             const infoBanner = document.getElementById('dept-info-banner');
             if (infoBanner) {
                 if (activeDept !== 'All') {
-                    const primaryGrounding = DEPT_PRIMARY_GROUNDING[activeDept] || "message_house";
+                    const primaryGrounding = DEPT_PRIMARY_GROUNDING[activeDept] || "spec";
                     const groundingLabel = GROUNDING_LABELS[primaryGrounding] || primaryGrounding.replace(/_/g, ' ');
                     infoBanner.innerHTML = `<div style="background:var(--bg-1); border:1px solid var(--border); padding:10px 16px; border-radius:var(--radius); display:flex; align-items:center; gap:8px;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" width="16" height="16" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                        <span>Showing canon domains for <strong>${esc(activeDept)}</strong>. New domains created in this department default to the <strong>${esc(groundingLabel)}</strong> grounding type.</span>
+                        <span>Showing specs for <strong>${esc(activeDept)}</strong>. New domains created in this department default to the <strong>${esc(groundingLabel)}</strong> grounding type.</span>
                     </div>`;
                     infoBanner.style.display = 'block';
                 } else {
@@ -3781,7 +3781,7 @@ const NODE_COLORS = {
             
             document.getElementById('new-dept-name').value = '';
             document.getElementById('new-dept-desc').value = '';
-            document.getElementById('new-dept-grounding').value = 'message_house';
+            document.getElementById('new-dept-grounding').value = 'spec';
             
             await fetchDepartments();
             await loadSettingsDepartments();
@@ -3811,7 +3811,7 @@ const NODE_COLORS = {
         }
     }
 
-    // ── Canon Navigator Chat ──────────────────────────────────────────────────────
+    // ── Spec Navigator Chat ──────────────────────────────────────────────────────
 
     function toggleNavigator() {
         const panel = document.getElementById("navigator-panel");

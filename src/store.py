@@ -1,4 +1,4 @@
-"""SQLite / PostgreSQL-backed canon storage."""
+"""SQLite / PostgreSQL-backed spec graph storage."""
 
 import json
 from datetime import datetime, timedelta, timezone
@@ -32,9 +32,8 @@ from sqlalchemy.orm import (
 )
 
 from src.models import (
-    BrandSettings, Channel, ContentTier, DocumentType, DomainStatus, EntryStatus,
-    CanonDomain, CanonEntry, Persona, SectionType,
-    HouseStatus, KeyMessage, MessageHouse,  # Deprecated aliases
+    BrandSettings, Channel, ContentTier, GroundingType, SpecStatus, AssertionStatus,
+    Spec, Assertion, Persona, SectionType,
     InheritancePolicy, ArtifactEntryBinding,
 )
 
@@ -81,12 +80,10 @@ class ArtifactEntryBindingModel(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     artifact_id: Mapped[str] = mapped_column(String(36), ForeignKey("artifact_history.id", ondelete="CASCADE"), nullable=False)
-    canon_entry_id: Mapped[str] = mapped_column(String(36), ForeignKey("canon_entries.id", ondelete="CASCADE"), nullable=False)
+    assertion_id: Mapped[str] = mapped_column(String(36), ForeignKey("assertions.id", ondelete="CASCADE"), nullable=False)
     element_type: Mapped[str] = mapped_column(String(50), nullable=False)
     bound_text: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-
 
 
 class WorkspaceModel(Base):
@@ -140,7 +137,7 @@ class DepartmentModel(Base):
     __tablename__ = "departments"
 
     name: Mapped[str] = mapped_column(String(100), primary_key=True)
-    primary_grounding_type: Mapped[str] = mapped_column(String(50), nullable=False, default="message_house")
+    primary_grounding_type: Mapped[str] = mapped_column(String(50), nullable=False, default="spec")
     description: Mapped[str] = mapped_column(String(500), default="")
     workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
 
@@ -155,21 +152,21 @@ _DEFAULT_CHANNELS = [
     ("sales_deck", "Sales Deck", "Slide decks and pitch presentations", False),
 ]
 
-# Association table for CanonEntryModel and ChannelModel (many-to-many)
-canon_entry_channel_association = Table(
-    "canon_entry_channel_association",
+# Association table for AssertionModel and ChannelModel (many-to-many)
+assertion_channel_association = Table(
+    "assertion_channel_association",
     Base.metadata,
-    Column("canon_entry_id", String(36), ForeignKey("canon_entries.id", ondelete="CASCADE")),
+    Column("assertion_id", String(36), ForeignKey("assertions.id", ondelete="CASCADE")),
     Column("channel_id", String(50), ForeignKey("channels.id", ondelete="CASCADE")),
-    PrimaryKeyConstraint("canon_entry_id", "channel_id")
+    PrimaryKeyConstraint("assertion_id", "channel_id")
 )
 
 # Alias for backward compatibility
-key_message_channel_association = canon_entry_channel_association
+key_message_channel_association = assertion_channel_association
 
 
-class CanonDomainModel(Base):
-    __tablename__ = "canon_domains"
+class SpecModel(Base):
+    __tablename__ = "specs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
@@ -185,50 +182,35 @@ class CanonDomainModel(Base):
     differentiation: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="active")
     department: Mapped[str] = mapped_column(String(100), nullable=False, default="General", server_default="General")
-    parent_domain_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("canon_domains.id", ondelete="SET NULL"), nullable=True)
+    parent_domain_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("specs.id", ondelete="SET NULL"), nullable=True)
     inheritance_policy: Mapped[str] = mapped_column(String(50), default="full")
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_reviewed: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     dri: Mapped[str] = mapped_column(String(255), default="")
 
-    canon_entries: Mapped[list["CanonEntryModel"]] = relationship(
-        back_populates="canon_domain", cascade="all, delete-orphan"
+    assertions: Mapped[list["AssertionModel"]] = relationship(
+        back_populates="spec", cascade="all, delete-orphan"
     )
     personas: Mapped[list["PersonaModel"]] = relationship(
-        back_populates="canon_domain", cascade="all, delete-orphan"
+        back_populates="spec", cascade="all, delete-orphan"
     )
     pillars: Mapped[list["PillarModel"]] = relationship(
-        back_populates="canon_domain", cascade="all, delete-orphan"
+        back_populates="spec", cascade="all, delete-orphan"
     )
 
 
-HouseModel = CanonDomainModel  # Deprecated alias
+SpecModel = SpecModel  # Deprecated alias
 
 
 class PillarModel(Base):
     __tablename__ = "pillars"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    canon_domain_id: Mapped[str] = mapped_column(String(36), ForeignKey("canon_domains.id", ondelete="CASCADE"), nullable=False)
+    spec_id: Mapped[str] = mapped_column(String(36), ForeignKey("specs.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(String(1000), default="")
     display_order: Mapped[int] = mapped_column(Integer, default=0)
-    canon_domain: Mapped["CanonDomainModel"] = relationship(back_populates="pillars")
-
-    # Property alias for compatibility
-    @property
-    def house_id(self) -> str:
-        return self.canon_domain_id
-    @house_id.setter
-    def house_id(self, val: str) -> None:
-        self.canon_domain_id = val
-
-    @property
-    def message_house(self) -> "CanonDomainModel":
-        return self.canon_domain
-    @message_house.setter
-    def message_house(self, val: "CanonDomainModel") -> None:
-        self.canon_domain = val
+    spec: Mapped["SpecModel"] = relationship(back_populates="pillars")
 
 
 class PainPointModel(Base):
@@ -253,12 +235,12 @@ class ObjectionModel(Base):
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class CanonEntryModel(Base):
-    __tablename__ = "canon_entries"
+class AssertionModel(Base):
+    __tablename__ = "assertions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    canon_domain_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("canon_domains.id"), nullable=False
+    spec_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("specs.id"), nullable=False
     )
     pillar_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("pillars.id", ondelete="SET NULL"), nullable=True)
     section_type: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -271,38 +253,24 @@ class CanonEntryModel(Base):
     personas: Mapped[list] = mapped_column(JSON, default=list)
     # Many-to-many relationship with ChannelModel
     channels: Mapped[list["ChannelModel"]] = relationship(
-        secondary=canon_entry_channel_association,
-        backref="canon_entries"
+        secondary=assertion_channel_association,
+        backref="assertions"
     )
     source_chunk_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     content_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     dri: Mapped[str] = mapped_column(String(255), default="")
-    canon_domain: Mapped["CanonDomainModel"] = relationship(back_populates="canon_entries")
-
-    @property
-    def message_house_id(self) -> str:
-        return self.canon_domain_id
-    @message_house_id.setter
-    def message_house_id(self, val: str) -> None:
-        self.canon_domain_id = val
-
-    @property
-    def message_house(self) -> "CanonDomainModel":
-        return self.canon_domain
-    @message_house.setter
-    def message_house(self, val: "CanonDomainModel") -> None:
-        self.canon_domain = val
+    spec: Mapped["SpecModel"] = relationship(back_populates="assertions")
 
 
-KeyMessageModel = CanonEntryModel  # Deprecated alias
+KeyMessageModel = AssertionModel  # Deprecated alias
 
 
 class PersonaModel(Base):
     __tablename__ = "personas"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    canon_domain_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("canon_domains.id"), nullable=False
+    spec_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("specs.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(String(1000), default="")
@@ -313,63 +281,35 @@ class PersonaModel(Base):
     approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    canon_domain: Mapped["CanonDomainModel"] = relationship(back_populates="personas")
-
-    @property
-    def message_house_id(self) -> str:
-        return self.canon_domain_id
-    @message_house_id.setter
-    def message_house_id(self, val: str) -> None:
-        self.canon_domain_id = val
-
-    @property
-    def message_house(self) -> "CanonDomainModel":
-        return self.canon_domain
-    @message_house.setter
-    def message_house(self, val: "CanonDomainModel") -> None:
-        self.canon_domain = val
+    spec: Mapped["SpecModel"] = relationship(back_populates="personas")
 
 
 class SnapshotModel(Base):
     __tablename__ = "snapshots"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    canon_domain_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("canon_domains.id"), nullable=False
+    spec_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("specs.id"), nullable=False
     )
     label: Mapped[str] = mapped_column(String(255), default="")
     snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-    @property
-    def house_id(self) -> str:
-        return self.canon_domain_id
-    @house_id.setter
-    def house_id(self, val: str) -> None:
-        self.canon_domain_id = val
 
 
 class ArtifactHistoryModel(Base):
     __tablename__ = "artifact_history"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    canon_domain_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("canon_domains.id"), nullable=False
+    spec_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("specs.id"), nullable=False
     )
     skill_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    house_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    spec_name: Mapped[str] = mapped_column(String(255), nullable=False)
     sections_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     raw_content: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="draft")
     alignment_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-    @property
-    def house_id(self) -> str:
-        return self.canon_domain_id
-    @house_id.setter
-    def house_id(self, val: str) -> None:
-        self.canon_domain_id = val
 
 
 class ArtifactRatingModel(Base):
@@ -427,19 +367,12 @@ class SourceFileModel(Base):
     drive_file_id: Mapped[str] = mapped_column(String(255), nullable=False)
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(255), default="")
-    canon_domain_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    spec_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     drive_modified_at: Mapped[str] = mapped_column(String(50), default="")
     sync_status: Mapped[str] = mapped_column(String(30), default="pending")
     error_message: Mapped[str] = mapped_column(Text, default="")
     synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     connection: Mapped["SourceConnectionModel"] = relationship(back_populates="source_files")
-
-    @property
-    def house_id(self) -> str | None:
-        return self.canon_domain_id
-    @house_id.setter
-    def house_id(self, val: str | None) -> None:
-        self.canon_domain_id = val
 
 
 class BrandSettingsModel(Base):
@@ -476,94 +409,60 @@ class ReviewLogModel(Base):
     __tablename__ = "review_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    canon_domain_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("canon_domains.id", ondelete="CASCADE"), nullable=False
+    spec_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("specs.id", ondelete="CASCADE"), nullable=False
     )
-    canon_entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    assertion_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     action: Mapped[str] = mapped_column(String(50), nullable=False)
     performed_by: Mapped[str] = mapped_column(String(255), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
 
-    @property
-    def house_id(self) -> str:
-        return self.canon_domain_id
-    @house_id.setter
-    def house_id(self, val: str) -> None:
-        self.canon_domain_id = val
 
     @property
     def message_id(self) -> str | None:
-        return self.canon_entry_id
+        return self.assertion_id
     @message_id.setter
     def message_id(self, val: str | None) -> None:
-        self.canon_entry_id = val
+        self.assertion_id = val
 
 
 class VectorMetadataModel(Base):
     __tablename__ = "vector_metadata"
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)  # e.g., 'chunk-UUID', 'field-UUID-field', 'kym-UUID'
-    canon_domain_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    canon_domain_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    canon_domain_summary: Mapped[str] = mapped_column(Text, default="")
+    spec_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    spec_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    spec_summary: Mapped[str] = mapped_column(Text, default="")
     content: Mapped[str] = mapped_column(Text, nullable=False)
     section_type: Mapped[str] = mapped_column(String(30), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=3)
     persona: Mapped[str] = mapped_column(String(255), default="general")
     channel: Mapped[str] = mapped_column(String(255), default="all")
-    canon_entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    assertion_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     content_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
-    @property
-    def message_house_id(self) -> str:
-        return self.canon_domain_id
-    @message_house_id.setter
-    def message_house_id(self, val: str) -> None:
-        self.canon_domain_id = val
-
-    @property
-    def house_name(self) -> str:
-        return self.canon_domain_name
-    @house_name.setter
-    def house_name(self, val: str) -> None:
-        self.canon_domain_name = val
-
-    @property
-    def house_summary(self) -> str:
-        return self.canon_domain_summary
-    @house_summary.setter
-    def house_summary(self, val: str) -> None:
-        self.canon_domain_summary = val
-
-    @property
-    def key_message_id(self) -> str | None:
-        return self.canon_entry_id
-    @key_message_id.setter
-    def key_message_id(self, val: str | None) -> None:
-        self.canon_entry_id = val
-
 
 # Performance indexes on high-cardinality FK / filter columns
-Index("ix_km_house_id", CanonEntryModel.canon_domain_id)
-Index("ix_km_pillar_id", CanonEntryModel.pillar_id)
-Index("ix_persona_house_id", PersonaModel.canon_domain_id)
-Index("ix_snapshot_house_id", SnapshotModel.canon_domain_id)
-Index("ix_artifact_house_id", ArtifactHistoryModel.canon_domain_id)
+Index("ix_km_spec_id", AssertionModel.spec_id)
+Index("ix_km_pillar_id", AssertionModel.pillar_id)
+Index("ix_persona_spec_id", PersonaModel.spec_id)
+Index("ix_snapshot_spec_id", SnapshotModel.spec_id)
+Index("ix_artifact_spec_id", ArtifactHistoryModel.spec_id)
 Index("ix_token_usage_workspace", TokenUsageModel.workspace_id)
 Index("ix_api_key_workspace", ApiKeyModel.workspace_id)
-Index("ix_house_workspace", CanonDomainModel.workspace_id)
-Index("ix_pillar_house_id", PillarModel.canon_domain_id)
+Index("ix_spec_workspace", SpecModel.workspace_id)
+Index("ix_pillar_spec_id", PillarModel.spec_id)
 Index("ix_source_files_conn", SourceFileModel.connection_id)
 Index("ix_source_files_drive_id", SourceFileModel.drive_file_id)
-Index("ix_review_logs_house_id", ReviewLogModel.canon_domain_id)
+Index("ix_review_logs_spec_id", ReviewLogModel.spec_id)
 Index("ix_review_logs_timestamp", ReviewLogModel.timestamp)
 Index("ix_artifact_rating_artifact_id", ArtifactRatingModel.artifact_id)
 Index("ix_chunk_usage_chunk_id", ChunkUsageStatModel.chunk_id)
-Index("ix_vector_metadata_house_id", VectorMetadataModel.canon_domain_id)
+Index("ix_vector_metadata_spec_id", VectorMetadataModel.spec_id)
 Index("ix_binding_artifact", ArtifactEntryBindingModel.artifact_id)
-Index("ix_binding_entry", ArtifactEntryBindingModel.canon_entry_id)
+Index("ix_binding_entry", ArtifactEntryBindingModel.assertion_id)
 
 
 class Store:
@@ -589,105 +488,99 @@ class Store:
         insp = inspect(self.engine)
         tables = insp.get_table_names()
         with self.engine.connect() as conn:
-            # 1. Table renames
-            if "message_houses" in tables and "canon_domains" not in tables:
-                conn.execute(text("ALTER TABLE message_houses RENAME TO canon_domains"))
-                conn.commit()
-            if "key_messages" in tables and "canon_entries" not in tables:
-                conn.execute(text("ALTER TABLE key_messages RENAME TO canon_entries"))
-                conn.commit()
-            if "key_message_channel_association" in tables and "canon_entry_channel_association" not in tables:
-                conn.execute(text("ALTER TABLE key_message_channel_association RENAME TO canon_entry_channel_association"))
-                conn.commit()
+            # ── Historical schema migration ──────────────────────────────
+            # The string literals below are deliberately NOT the current
+            # vocabulary — they are the on-disk names of earlier generations
+            # that this code exists to migrate away from. Do not "fix" them
+            # to match the current models; a bulk rename over this block
+            # silently turns every step into a no-op.
+            #
+            #   gen-0  message_house era   (message_houses / key_messages)
+            #   gen-1  canon era           (canon_domains / canon_entries)
+            #   gen-2  spec era            (specs / assertions)   <- current
 
-            # Refresh inspector to reflect table renames
+            def _rename_tables(pairs):
+                nonlocal insp, tables
+                for old, new_name in pairs:
+                    if old in tables and new_name not in tables:
+                        conn.execute(text(f"ALTER TABLE {old} RENAME TO {new_name}"))
+                        conn.commit()
+                insp = inspect(self.engine)
+                tables = insp.get_table_names()
+
+            def _rename_columns(triples):
+                for tbl, old, new_col in triples:
+                    if tbl not in tables:
+                        continue
+                    cols = {c["name"] for c in insp.get_columns(tbl)}
+                    if old in cols and new_col not in cols:
+                        conn.execute(text(
+                            f"ALTER TABLE {tbl} RENAME COLUMN {old} TO {new_col}"))
+                        conn.commit()
+
+            _rename_tables([
+                ('message_houses', 'canon_domains'),
+                ('key_messages', 'canon_entries'),
+                ('key_message_channel_association', 'canon_entry_channel_association'),
+            ])
+            _rename_columns([
+                ('canon_entries', 'message_house_id', 'canon_domain_id'),
+                ('personas', 'message_house_id', 'canon_domain_id'),
+                ('pillars', 'house_id', 'canon_domain_id'),
+                ('snapshots', 'house_id', 'canon_domain_id'),
+                ('artifact_history', 'house_id', 'canon_domain_id'),
+                ('review_logs', 'house_id', 'canon_domain_id'),
+                ('review_logs', 'message_id', 'canon_entry_id'),
+                ('vector_metadata', 'message_house_id', 'canon_domain_id'),
+                ('vector_metadata', 'key_message_id', 'canon_entry_id'),
+                ('vector_metadata', 'house_name', 'canon_domain_name'),
+                ('vector_metadata', 'house_summary', 'canon_domain_summary'),
+                ('canon_entry_channel_association', 'key_message_id', 'canon_entry_id'),
+                ('source_files', 'house_id', 'canon_domain_id'),
+            ])
+            _rename_tables([
+                ('canon_domains', 'specs'),
+                ('canon_entries', 'assertions'),
+                ('canon_entry_channel_association', 'assertion_channel_association'),
+            ])
+            _rename_columns([
+                ('assertions', 'canon_domain_id', 'spec_id'),
+                ('personas', 'canon_domain_id', 'spec_id'),
+                ('pillars', 'canon_domain_id', 'spec_id'),
+                ('snapshots', 'canon_domain_id', 'spec_id'),
+                ('artifact_history', 'canon_domain_id', 'spec_id'),
+                ('review_logs', 'canon_domain_id', 'spec_id'),
+                ('review_logs', 'canon_entry_id', 'assertion_id'),
+                ('vector_metadata', 'canon_domain_id', 'spec_id'),
+                ('vector_metadata', 'canon_entry_id', 'assertion_id'),
+                ('vector_metadata', 'canon_domain_name', 'spec_name'),
+                ('vector_metadata', 'canon_domain_summary', 'spec_summary'),
+                ('assertion_channel_association', 'canon_entry_id', 'assertion_id'),
+                ('source_files', 'canon_domain_id', 'spec_id'),
+                ('artifact_entry_bindings', 'canon_entry_id', 'assertion_id'),
+            ])
             insp = inspect(self.engine)
             tables = insp.get_table_names()
 
-            # 2. Column renames
-            if "canon_entries" in tables:
-                cols = {c["name"] for c in insp.get_columns("canon_entries")}
-                if "message_house_id" in cols and "canon_domain_id" not in cols:
-                    conn.execute(text("ALTER TABLE canon_entries RENAME COLUMN message_house_id TO canon_domain_id"))
-                    conn.commit()
-            if "personas" in tables:
-                cols = {c["name"] for c in insp.get_columns("personas")}
-                if "message_house_id" in cols and "canon_domain_id" not in cols:
-                    conn.execute(text("ALTER TABLE personas RENAME COLUMN message_house_id TO canon_domain_id"))
-                    conn.commit()
-            if "pillars" in tables:
-                cols = {c["name"] for c in insp.get_columns("pillars")}
-                if "house_id" in cols and "canon_domain_id" not in cols:
-                    conn.execute(text("ALTER TABLE pillars RENAME COLUMN house_id TO canon_domain_id"))
-                    conn.commit()
-            if "snapshots" in tables:
-                cols = {c["name"] for c in insp.get_columns("snapshots")}
-                if "house_id" in cols and "canon_domain_id" not in cols:
-                    conn.execute(text("ALTER TABLE snapshots RENAME COLUMN house_id TO canon_domain_id"))
-                    conn.commit()
-            if "artifact_history" in tables:
-                cols = {c["name"] for c in insp.get_columns("artifact_history")}
-                if "house_id" in cols and "canon_domain_id" not in cols:
-                    conn.execute(text("ALTER TABLE artifact_history RENAME COLUMN house_id TO canon_domain_id"))
-                    conn.commit()
-            if "review_logs" in tables:
-                cols = {c["name"] for c in insp.get_columns("review_logs")}
-                if "house_id" in cols and "canon_domain_id" not in cols:
-                    conn.execute(text("ALTER TABLE review_logs RENAME COLUMN house_id TO canon_domain_id"))
-                    conn.commit()
-                if "message_id" in cols and "canon_entry_id" not in cols:
-                    conn.execute(text("ALTER TABLE review_logs RENAME COLUMN message_id TO canon_entry_id"))
-                    conn.commit()
-            if "vector_metadata" in tables:
-                cols = {c["name"] for c in insp.get_columns("vector_metadata")}
-                if "message_house_id" in cols and "canon_domain_id" not in cols:
-                    conn.execute(text("ALTER TABLE vector_metadata RENAME COLUMN message_house_id TO canon_domain_id"))
-                    conn.commit()
-                if "content_tier" not in cols:
-                    try:
-                        conn.execute(text("ALTER TABLE vector_metadata ADD COLUMN content_tier VARCHAR(20) DEFAULT NULL"))
-                        conn.commit()
-                    except Exception:
-                        pass
-                if "key_message_id" in cols and "canon_entry_id" not in cols:
-                    conn.execute(text("ALTER TABLE vector_metadata RENAME COLUMN key_message_id TO canon_entry_id"))
-                    conn.commit()
-                if "house_name" in cols and "canon_domain_name" not in cols:
-                    conn.execute(text("ALTER TABLE vector_metadata RENAME COLUMN house_name TO canon_domain_name"))
-                    conn.commit()
-                if "house_summary" in cols and "canon_domain_summary" not in cols:
-                    conn.execute(text("ALTER TABLE vector_metadata RENAME COLUMN house_summary TO canon_domain_summary"))
-                    conn.commit()
-            if "canon_entry_channel_association" in tables:
-                cols = {c["name"] for c in insp.get_columns("canon_entry_channel_association")}
-                if "key_message_id" in cols and "canon_entry_id" not in cols:
-                    conn.execute(text("ALTER TABLE canon_entry_channel_association RENAME COLUMN key_message_id TO canon_entry_id"))
-                    conn.commit()
-            if "source_files" in tables:
-                cols = {c["name"] for c in insp.get_columns("source_files")}
-                if "house_id" in cols and "canon_domain_id" not in cols:
-                    conn.execute(text("ALTER TABLE source_files RENAME COLUMN house_id TO canon_domain_id"))
-                    conn.commit()
-
             # 3. Additive migrations
-            if "canon_domains" in tables:
-                mh_cols = {c["name"] for c in insp.get_columns("canon_domains")}
+            if "specs" in tables:
+                mh_cols = {c["name"] for c in insp.get_columns("specs")}
                 if "document_type" not in mh_cols:
                     conn.execute(text(
-                        "ALTER TABLE canon_domains ADD COLUMN document_type VARCHAR(30) "
-                        "NOT NULL DEFAULT 'canon_domain'"
+                        "ALTER TABLE specs ADD COLUMN document_type VARCHAR(30) "
+                        "NOT NULL DEFAULT 'message_house'"
                     ))
                     conn.commit()
                 if "last_reviewed" not in mh_cols:
                     try:
-                        conn.execute(text("ALTER TABLE canon_domains ADD COLUMN last_reviewed DATETIME"))
+                        conn.execute(text("ALTER TABLE specs ADD COLUMN last_reviewed DATETIME"))
                         conn.commit()
                     except Exception:
                         pass
                 if "department" not in mh_cols:
                     try:
                         conn.execute(text(
-                            "ALTER TABLE canon_domains ADD COLUMN department VARCHAR(100) "
+                            "ALTER TABLE specs ADD COLUMN department VARCHAR(100) "
                             "NOT NULL DEFAULT 'General'"
                         ))
                         conn.commit()
@@ -695,19 +588,19 @@ class Store:
                         pass
                 if "parent_domain_id" not in mh_cols:
                     try:
-                        conn.execute(text("ALTER TABLE canon_domains ADD COLUMN parent_domain_id VARCHAR(36) REFERENCES canon_domains(id) ON DELETE SET NULL"))
+                        conn.execute(text("ALTER TABLE specs ADD COLUMN parent_domain_id VARCHAR(36) REFERENCES specs(id) ON DELETE SET NULL"))
                         conn.commit()
                     except Exception:
                         pass
                 if "inheritance_policy" not in mh_cols:
                     try:
-                        conn.execute(text("ALTER TABLE canon_domains ADD COLUMN inheritance_policy VARCHAR(50) DEFAULT 'full'"))
+                        conn.execute(text("ALTER TABLE specs ADD COLUMN inheritance_policy VARCHAR(50) DEFAULT 'full'"))
                         conn.commit()
                     except Exception:
                         pass
                 if "dri" not in mh_cols:
                     try:
-                        conn.execute(text("ALTER TABLE canon_domains ADD COLUMN dri VARCHAR(255) DEFAULT ''"))
+                        conn.execute(text("ALTER TABLE specs ADD COLUMN dri VARCHAR(255) DEFAULT ''"))
                         conn.commit()
                     except Exception:
                         pass
@@ -725,7 +618,7 @@ class Store:
                 conn.execute(text("""
                     CREATE TABLE pillars (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        canon_domain_id VARCHAR(36) NOT NULL REFERENCES canon_domains(id) ON DELETE CASCADE,
+                        spec_id VARCHAR(36) NOT NULL REFERENCES specs(id) ON DELETE CASCADE,
                         name TEXT NOT NULL,
                         description TEXT,
                         display_order INTEGER DEFAULT 0
@@ -733,23 +626,23 @@ class Store:
                 """))
                 conn.commit()
 
-            if "canon_entries" in tables:
-                km_cols = {c["name"] for c in insp.get_columns("canon_entries")}
+            if "assertions" in tables:
+                km_cols = {c["name"] for c in insp.get_columns("assertions")}
                 if "pillar_id" not in km_cols:
                     try:
-                        conn.execute(text("ALTER TABLE canon_entries ADD COLUMN pillar_id INTEGER REFERENCES pillars(id) ON DELETE SET NULL"))
+                        conn.execute(text("ALTER TABLE assertions ADD COLUMN pillar_id INTEGER REFERENCES pillars(id) ON DELETE SET NULL"))
                         conn.commit()
                     except Exception:
                         pass
                 if "content_tier" not in km_cols:
                     try:
-                        conn.execute(text("ALTER TABLE canon_entries ADD COLUMN content_tier VARCHAR(20) DEFAULT NULL"))
+                        conn.execute(text("ALTER TABLE assertions ADD COLUMN content_tier VARCHAR(20) DEFAULT NULL"))
                         conn.commit()
                     except Exception:
                         pass
                 if "dri" not in km_cols:
                     try:
-                        conn.execute(text("ALTER TABLE canon_entries ADD COLUMN dri VARCHAR(255) DEFAULT ''"))
+                        conn.execute(text("ALTER TABLE assertions ADD COLUMN dri VARCHAR(255) DEFAULT ''"))
                         conn.commit()
                     except Exception:
                         pass
@@ -760,7 +653,7 @@ class Store:
                 ):
                     if col not in km_cols:
                         try:
-                            conn.execute(text(f"ALTER TABLE canon_entries ADD COLUMN {col} {col_def}"))
+                            conn.execute(text(f"ALTER TABLE assertions ADD COLUMN {col} {col_def}"))
                             conn.commit()
                         except Exception:
                             pass
@@ -800,8 +693,8 @@ class Store:
                 conn.execute(text("""
                     CREATE TABLE review_logs (
                         id TEXT PRIMARY KEY,
-                        canon_domain_id TEXT NOT NULL REFERENCES canon_domains(id) ON DELETE CASCADE,
-                        canon_entry_id TEXT,
+                        spec_id TEXT NOT NULL REFERENCES specs(id) ON DELETE CASCADE,
+                        assertion_id TEXT,
                         action TEXT NOT NULL,
                         performed_by TEXT NOT NULL,
                         timestamp DATETIME NOT NULL,
@@ -829,7 +722,7 @@ class Store:
                     CREATE TABLE artifact_entry_bindings (
                         id VARCHAR(36) PRIMARY KEY,
                         artifact_id VARCHAR(36) NOT NULL REFERENCES artifact_history(id) ON DELETE CASCADE,
-                        canon_entry_id VARCHAR(36) NOT NULL REFERENCES canon_entries(id) ON DELETE CASCADE,
+                        assertion_id VARCHAR(36) NOT NULL REFERENCES assertions(id) ON DELETE CASCADE,
                         element_type VARCHAR(50) NOT NULL,
                         bound_text TEXT,
                         created_at DATETIME NOT NULL
@@ -865,7 +758,7 @@ class Store:
                         drive_file_id TEXT NOT NULL,
                         file_name TEXT NOT NULL,
                         mime_type TEXT DEFAULT '',
-                        canon_domain_id TEXT,
+                        spec_id TEXT,
                         drive_modified_at TEXT DEFAULT '',
                         sync_status TEXT DEFAULT 'pending',
                         error_message TEXT DEFAULT '',
@@ -960,41 +853,31 @@ class Store:
     def upsert_vector_metadata(
         self,
         id: str,
-        message_house_id: UUID,
-        house_name: str,
-        house_summary: str,
+        spec_id: UUID,
+        spec_name: str,
+        spec_summary: str,
         content: str,
         section_type: str,
         priority: int,
         persona: str,
         channel: str,
-        key_message_id: Optional[UUID] = None,
+        assertion_id: Optional[UUID] = None,
         last_synced: Optional[datetime] = None,
         content_tier: Optional[str] = None,
-        # Allow new naming parameters for compatibility
-        canon_domain_id: Optional[UUID] = None,
-        canon_domain_name: Optional[str] = None,
-        canon_domain_summary: Optional[str] = None,
-        canon_entry_id: Optional[UUID] = None,
     ) -> None:
-        actual_domain_id = canon_domain_id or message_house_id
-        actual_domain_name = canon_domain_name or house_name
-        actual_domain_summary = canon_domain_summary or house_summary
-        actual_entry_id = canon_entry_id or key_message_id
-
         with self.session() as s:
             existing = s.get(VectorMetadataModel, id)
             data = {
                 "id": id,
-                "canon_domain_id": str(actual_domain_id),
-                "canon_domain_name": actual_domain_name,
-                "canon_domain_summary": actual_domain_summary,
+                "spec_id": str(spec_id),
+                "spec_name": spec_name,
+                "spec_summary": spec_summary,
                 "content": content,
                 "section_type": section_type,
                 "priority": priority,
                 "persona": persona,
                 "channel": channel,
-                "canon_entry_id": str(actual_entry_id) if actual_entry_id else None,
+                "assertion_id": str(assertion_id) if assertion_id else None,
                 "last_synced": last_synced,
                 "content_tier": content_tier,
             }
@@ -1013,29 +896,26 @@ class Store:
                 s.delete(existing)
                 s.commit()
 
-    def delete_vector_metadata_for_house(self, house_id: UUID) -> int:
+    def delete_vector_metadata_for_spec(self, spec_id: UUID) -> int:
         with self.session() as s:
             deleted = s.query(VectorMetadataModel).filter(
-                VectorMetadataModel.canon_domain_id == str(house_id)
+                VectorMetadataModel.spec_id == str(spec_id)
             ).delete()
             s.commit()
             return deleted
 
     def list_vector_metadata_matching_filters(
         self,
-        message_houses: Optional[list[str]] = None,
+        specs: Optional[list[str]] = None,
         section_types: Optional[list[str]] = None,
         personas: Optional[list[str]] = None,
         channels: Optional[list[str]] = None,
         min_priority: Optional[int] = None,
-        # compatibility argument names
-        canon_domains: Optional[list[str]] = None,
     ) -> list[VectorMetadataModel]:
-        actual_domains = canon_domains or message_houses
         with self.session() as s:
             query = s.query(VectorMetadataModel)
-            if actual_domains:
-                query = query.filter(VectorMetadataModel.canon_domain_id.in_(actual_domains))
+            if specs:
+                query = query.filter(VectorMetadataModel.spec_id.in_(specs))
             if section_types:
                 query = query.filter(VectorMetadataModel.section_type.in_(section_types))
             if personas:
@@ -1046,9 +926,9 @@ class Store:
                 query = query.filter(VectorMetadataModel.priority <= min_priority)
             return query.all()
 
-    def upsert_canon_domain(self, domain: CanonDomain, workspace_id: str = "default") -> None:
+    def upsert_spec(self, domain: Spec, workspace_id: str = "default") -> None:
         with self.session() as s:
-            existing = s.get(CanonDomainModel, str(domain.id))
+            existing = s.get(SpecModel, str(domain.id))
             if existing:
                 for k, v in _to_db(domain.model_dump()).items():
                     if k != "id":
@@ -1056,44 +936,44 @@ class Store:
             else:
                 data = _to_db(domain.model_dump())
                 data["workspace_id"] = workspace_id
-                s.add(CanonDomainModel(**data))
+                s.add(SpecModel(**data))
             s.commit()
         _invalidate_graph()
 
-    upsert_house = upsert_canon_domain  # Deprecated alias
+    upsert_spec = upsert_spec  # Deprecated alias
 
-    def get_canon_domain(self, domain_id: UUID) -> CanonDomain | None:
+    def get_spec(self, domain_id: UUID) -> Spec | None:
         with self.session() as s:
-            row = s.get(CanonDomainModel, str(domain_id))
+            row = s.get(SpecModel, str(domain_id))
             if not row:
                 return None
             return _domain_from_row(row)
 
-    get_house = get_canon_domain  # Deprecated alias
+    get_spec = get_spec  # Deprecated alias
 
-    def get_house_workspace_id(self, domain_id: UUID) -> str | None:
+    def get_spec_workspace_id(self, domain_id: UUID) -> str | None:
         with self.session() as s:
-            row = s.get(CanonDomainModel, str(domain_id))
+            row = s.get(SpecModel, str(domain_id))
             return row.workspace_id if row else None
 
-    def get_canon_domain_by_name(self, name: str) -> CanonDomain | None:
+    def get_spec_by_name(self, name: str) -> Spec | None:
         with self.session() as s:
             # 1. Try exact match first
-            row = s.query(CanonDomainModel).filter(CanonDomainModel.name == name).first()
+            row = s.query(SpecModel).filter(SpecModel.name == name).first()
             # 2. Try case-insensitive exact match
             if not row:
-                row = s.query(CanonDomainModel).filter(CanonDomainModel.name.ilike(name)).first()
+                row = s.query(SpecModel).filter(SpecModel.name.ilike(name)).first()
             # 3. Try partial substring match (case-insensitive)
             if not row:
-                row = s.query(CanonDomainModel).filter(CanonDomainModel.name.ilike(f"%{name}%")).first()
+                row = s.query(SpecModel).filter(SpecModel.name.ilike(f"%{name}%")).first()
             
             if not row:
                 return None
             return _domain_from_row(row)
 
-    get_house_by_name = get_canon_domain_by_name  # Deprecated alias
+    get_spec_by_name = get_spec_by_name  # Deprecated alias
 
-    def upsert_canon_entry(self, entry: CanonEntry) -> None:
+    def upsert_assertion(self, entry: Assertion) -> None:
         with self.session() as s:
             channel_models = []
             if entry.channels:
@@ -1103,7 +983,7 @@ class Store:
                     if ch_model:
                         channel_models.append(ch_model)
 
-            existing = s.get(CanonEntryModel, str(entry.id))
+            existing = s.get(AssertionModel, str(entry.id))
             data = _to_db(entry.model_dump())
             data.pop("channels", None)
 
@@ -1118,7 +998,7 @@ class Store:
                         setattr(existing, k, v)
                 existing.channels = channel_models
             else:
-                db_entry = CanonEntryModel(**data)
+                db_entry = AssertionModel(**data)
                 db_entry.channels = channel_models
                 s.add(db_entry)
             
@@ -1127,18 +1007,18 @@ class Store:
             # Active Binding Propagation Trigger
             if content_changed:
                 bindings = s.query(ArtifactEntryBindingModel).filter(
-                    ArtifactEntryBindingModel.canon_entry_id == str(entry.id)
+                    ArtifactEntryBindingModel.assertion_id == str(entry.id)
                 ).all()
                 for b in bindings:
                     # Log review trace
                     log_model = ReviewLogModel(
                         id=str(uuid4()),
-                        canon_domain_id=str(entry.canon_domain_id),
-                        canon_entry_id=str(entry.id),
+                        spec_id=str(entry.spec_id),
+                        assertion_id=str(entry.id),
                         action="propagation_drift",
                         performed_by="system_bindings",
                         timestamp=datetime.now(),
-                        notes=f"Deliverable {b.artifact_id} flags drift due to update in canon entry {entry.id}."
+                        notes=f"Deliverable {b.artifact_id} flags drift due to update in assertion {entry.id}."
                     )
                     s.add(log_model)
                     
@@ -1150,11 +1030,11 @@ class Store:
 
         _invalidate_graph()
 
-    upsert_key_message = upsert_canon_entry  # Deprecated alias
+    upsert_key_message = upsert_assertion  # Deprecated alias
 
-    def get_canon_entries(self, domain_id: UUID, include_unapproved: bool = False) -> list[CanonEntry]:
+    def get_assertions(self, domain_id: UUID, include_unapproved: bool = False) -> list[Assertion]:
         # 1. Fetch target child domain to check inheritance policy
-        domain = self.get_canon_domain(domain_id)
+        domain = self.get_spec(domain_id)
         if not domain:
             return []
 
@@ -1162,10 +1042,10 @@ class Store:
 
         # 2. Base query: fetch entries directly in this child domain
         with self.session() as s:
-            query = s.query(CanonEntryModel).filter(CanonEntryModel.canon_domain_id == str(domain_id))
+            query = s.query(AssertionModel).filter(AssertionModel.spec_id == str(domain_id))
             if not include_unapproved:
-                query = query.filter(CanonEntryModel.status.in_(["approved", "locked"]))
-            child_rows = query.order_by(CanonEntryModel.priority).all()
+                query = query.filter(AssertionModel.status.in_(["approved", "locked"]))
+            child_rows = query.order_by(AssertionModel.priority).all()
             child_entries = [_entry_from_row(r) for r in child_rows]
 
         # If policy is autonomous, do not fetch parents
@@ -1173,7 +1053,7 @@ class Store:
             return child_entries
 
         # 3. Recursively fetch parent entries
-        parent_entries = self.get_canon_entries(domain.parent_domain_id, include_unapproved=include_unapproved)
+        parent_entries = self.get_assertions(domain.parent_domain_id, include_unapproved=include_unapproved)
 
         # 4. Merge based on policy type
         if policy == "full":
@@ -1210,14 +1090,14 @@ class Store:
 
         return child_entries
 
-    get_key_messages = get_canon_entries  # Deprecated alias
+    get_key_messages = get_assertions  # Deprecated alias
 
-    def get_canon_entry(self, entry_id: UUID) -> CanonEntry | None:
+    def get_assertion(self, entry_id: UUID) -> Assertion | None:
         with self.session() as s:
-            row = s.get(CanonEntryModel, str(entry_id))
+            row = s.get(AssertionModel, str(entry_id))
             return _entry_from_row(row) if row else None
 
-    get_key_message = get_canon_entry  # Deprecated alias
+    get_key_message = get_assertion  # Deprecated alias
 
     def get_persona(self, persona_id: UUID) -> Persona | None:
         with self.session() as s:
@@ -1237,12 +1117,12 @@ class Store:
         _invalidate_graph()
 
     def get_personas(self, domain_id: UUID) -> list[Persona]:
-        domain = self.get_canon_domain(domain_id)
+        domain = self.get_spec(domain_id)
         if not domain:
             return []
         
         with self.session() as s:
-            rows = s.query(PersonaModel).filter(PersonaModel.canon_domain_id == str(domain_id)).all()
+            rows = s.query(PersonaModel).filter(PersonaModel.spec_id == str(domain_id)).all()
             child_personas = [_persona_from_row(r) for r in rows]
 
         if not domain.parent_domain_id or domain.inheritance_policy == "autonomous":
@@ -1261,7 +1141,7 @@ class Store:
         with self.session() as s:
             row = (
                 s.query(PersonaModel)
-                .filter(PersonaModel.canon_domain_id == str(domain_id), PersonaModel.name == name)
+                .filter(PersonaModel.spec_id == str(domain_id), PersonaModel.name == name)
                 .first()
             )
             return _persona_from_row(row) if row else None
@@ -1310,7 +1190,7 @@ class Store:
 
     def update_chunk_links(self, chunk_id: str, pain_point_ids: list[int], objection_ids: list[int]) -> None:
         with self.session() as s:
-            row = s.get(CanonEntryModel, chunk_id)
+            row = s.get(AssertionModel, chunk_id)
             if row:
                 row.pain_point_ids = pain_point_ids
                 row.objection_ids = objection_ids
@@ -1328,9 +1208,9 @@ class Store:
         with self.session() as s:
             return s.query(BuyingTriggerModel).filter(BuyingTriggerModel.persona_id == persona_id).all()
 
-    def delete_canon_domain(self, domain_id: UUID) -> bool:
+    def delete_spec(self, domain_id: UUID) -> bool:
         with self.session() as s:
-            row = s.get(CanonDomainModel, str(domain_id))
+            row = s.get(SpecModel, str(domain_id))
             if row:
                 s.delete(row)
                 s.commit()
@@ -1338,7 +1218,7 @@ class Store:
                 return True
             return False
 
-    delete_house = delete_canon_domain  # Deprecated alias
+    delete_spec = delete_spec  # Deprecated alias
 
     # --- Review Logs ---
 
@@ -1350,17 +1230,17 @@ class Store:
         entry_id: Optional[UUID] = None,
         notes: str = "",
         # Compatibility arguments
-        house_id: Optional[UUID] = None,
+        spec_id: Optional[UUID] = None,
         message_id: Optional[UUID] = None,
     ) -> None:
         """Append a review action to the audit trail."""
-        actual_domain_id = domain_id or house_id
+        actual_domain_id = domain_id or spec_id
         actual_entry_id = entry_id or message_id
         with self.session() as s:
             s.add(ReviewLogModel(
                 id=str(_uuid.uuid4()),
-                canon_domain_id=str(actual_domain_id),
-                canon_entry_id=str(actual_entry_id) if actual_entry_id else None,
+                spec_id=str(actual_domain_id),
+                assertion_id=str(actual_entry_id) if actual_entry_id else None,
                 action=action,
                 performed_by=performed_by,
                 timestamp=_now(),
@@ -1373,17 +1253,17 @@ class Store:
         with self.session() as s:
             rows = (
                 s.query(ReviewLogModel)
-                .filter(ReviewLogModel.canon_domain_id == str(domain_id))
+                .filter(ReviewLogModel.spec_id == str(domain_id))
                 .order_by(ReviewLogModel.timestamp.desc())
                 .all()
             )
             return [
                 {
                     "id": r.id,
-                    "domain_id": r.canon_domain_id,
-                    "house_id": r.canon_domain_id,
-                    "entry_id": r.canon_entry_id,
-                    "message_id": r.canon_entry_id,
+                    "domain_id": r.spec_id,
+                    "spec_id": r.spec_id,
+                    "entry_id": r.assertion_id,
+                    "message_id": r.assertion_id,
                     "action": r.action,
                     "performed_by": r.performed_by,
                     "timestamp": r.timestamp.isoformat(),
@@ -1393,21 +1273,21 @@ class Store:
             ]
 
     def get_entry_review_trail(self, entry_id: str) -> list[dict]:
-        """Return all review log entries for a specific canon entry, newest first."""
+        """Return all review log entries for a specific assertion, newest first."""
         with self.session() as s:
             rows = (
                 s.query(ReviewLogModel)
-                .filter(ReviewLogModel.canon_entry_id == entry_id)
+                .filter(ReviewLogModel.assertion_id == entry_id)
                 .order_by(ReviewLogModel.timestamp.desc())
                 .all()
             )
             return [
                 {
                     "id": r.id,
-                    "domain_id": r.canon_domain_id,
-                    "house_id": r.canon_domain_id,
-                    "entry_id": r.canon_entry_id,
-                    "message_id": r.canon_entry_id,
+                    "domain_id": r.spec_id,
+                    "spec_id": r.spec_id,
+                    "entry_id": r.assertion_id,
+                    "message_id": r.assertion_id,
                     "action": r.action,
                     "performed_by": r.performed_by,
                     "timestamp": r.timestamp.isoformat(),
@@ -1418,18 +1298,18 @@ class Store:
 
     get_message_review_trail = get_entry_review_trail  # Deprecated alias
 
-    def update_house_last_reviewed(self, domain_id: UUID) -> None:
+    def update_spec_last_reviewed(self, domain_id: UUID) -> None:
         """Set last_reviewed=now on a domain."""
         with self.session() as s:
-            row = s.get(CanonDomainModel, str(domain_id))
+            row = s.get(SpecModel, str(domain_id))
             if row:
                 row.last_reviewed = _now()
                 s.commit()
 
-    def delete_canon_domains_by_source_id(self, source_id: str) -> int:
+    def delete_specs_by_source_id(self, source_id: str) -> int:
         """Delete all domains with the given source_id. Returns count deleted."""
         with self.session() as s:
-            rows = s.query(CanonDomainModel).filter(CanonDomainModel.source_id == source_id).all()
+            rows = s.query(SpecModel).filter(SpecModel.source_id == source_id).all()
             count = len(rows)
             for row in rows:
                 s.delete(row)
@@ -1438,11 +1318,11 @@ class Store:
                 _invalidate_graph()
             return count
 
-    delete_houses_by_source_id = delete_canon_domains_by_source_id  # Deprecated alias
+    delete_specs_by_source_id = delete_specs_by_source_id  # Deprecated alias
 
-    def delete_canon_entry(self, entry_id: UUID) -> bool:
+    def delete_assertion(self, entry_id: UUID) -> bool:
         with self.session() as s:
-            row = s.get(CanonEntryModel, str(entry_id))
+            row = s.get(AssertionModel, str(entry_id))
             if row:
                 s.delete(row)
                 s.commit()
@@ -1450,7 +1330,7 @@ class Store:
                 return True
             return False
 
-    delete_key_message = delete_canon_entry  # Deprecated alias
+    delete_key_message = delete_assertion  # Deprecated alias
 
     def delete_persona(self, persona_id: UUID) -> bool:
         with self.session() as s:
@@ -1468,7 +1348,7 @@ class Store:
         """Insert a new pillar, return its id."""
         with self.session() as s:
             row = PillarModel(
-                canon_domain_id=str(domain_id),
+                spec_id=str(domain_id),
                 name=name,
                 description=description or "",
                 display_order=display_order,
@@ -1483,7 +1363,7 @@ class Store:
         with self.session() as s:
             rows = (
                 s.query(PillarModel)
-                .filter(PillarModel.canon_domain_id == str(domain_id))
+                .filter(PillarModel.spec_id == str(domain_id))
                 .order_by(PillarModel.display_order, PillarModel.name)
                 .all()
             )
@@ -1503,7 +1383,7 @@ class Store:
             return True
 
     def delete_pillar(self, pillar_id: int) -> bool:
-        """Delete pillar; SET NULL cascades to canon_entries. Returns True if found."""
+        """Delete pillar; SET NULL cascades to assertions. Returns True if found."""
         with self.session() as s:
             row = s.get(PillarModel, pillar_id)
             if not row:
@@ -1514,9 +1394,9 @@ class Store:
             return True
 
     def assign_chunk_to_pillar(self, chunk_id: UUID, pillar_id: int | None) -> bool:
-        """Set canon_entries.pillar_id. Pass None to unassign."""
+        """Set assertions.pillar_id. Pass None to unassign."""
         with self.session() as s:
-            row = s.get(CanonEntryModel, str(chunk_id))
+            row = s.get(AssertionModel, str(chunk_id))
             if not row:
                 return False
             row.pillar_id = pillar_id
@@ -1527,10 +1407,10 @@ class Store:
     # --- Snapshots ---
 
     def create_snapshot(self, domain_id: UUID, label: str = "") -> dict:
-        domain = self.get_canon_domain(domain_id)
+        domain = self.get_spec(domain_id)
         if not domain:
             raise ValueError(f"Domain {domain_id} not found")
-        entries = self.get_canon_entries(domain_id, include_unapproved=True)
+        entries = self.get_assertions(domain_id, include_unapproved=True)
         personas = self.get_personas(domain_id)
         snapshot_data = {
             "domain": {
@@ -1547,7 +1427,7 @@ class Store:
                 "department": domain.department,
             },
             # Compatibility key:
-            "house": {
+            "spec": {
                 "id": str(domain.id),
                 "name": domain.name,
                 "source": domain.source,
@@ -1602,27 +1482,27 @@ class Store:
         with self.session() as s:
             s.add(SnapshotModel(
                 id=snap_id,
-                canon_domain_id=str(domain_id),
+                spec_id=str(domain_id),
                 label=label or f"Snapshot {now.strftime('%Y-%m-%d %H:%M')}",
                 snapshot_json=snapshot_data,
                 created_at=now,
             ))
             s.commit()
-        return {"id": snap_id, "domain_id": str(domain_id), "house_id": str(domain_id), "label": label, "created_at": now.isoformat()}
+        return {"id": snap_id, "domain_id": str(domain_id), "spec_id": str(domain_id), "label": label, "created_at": now.isoformat()}
 
     def list_snapshots(self, domain_id: UUID) -> list[dict]:
         with self.session() as s:
             rows = (
                 s.query(SnapshotModel)
-                .filter(SnapshotModel.canon_domain_id == str(domain_id))
+                .filter(SnapshotModel.spec_id == str(domain_id))
                 .order_by(SnapshotModel.created_at.desc())
                 .all()
             )
             return [
                 {
                     "id": r.id,
-                    "domain_id": r.canon_domain_id,
-                    "house_id": r.canon_domain_id,
+                    "domain_id": r.spec_id,
+                    "spec_id": r.spec_id,
                     "label": r.label,
                     "created_at": r.created_at.isoformat(),
                     "entry_count": len(r.snapshot_json.get("entries", [])),
@@ -1639,8 +1519,8 @@ class Store:
                 return None
             return {
                 "id": row.id,
-                "domain_id": row.canon_domain_id,
-                "house_id": row.canon_domain_id,
+                "domain_id": row.spec_id,
+                "spec_id": row.spec_id,
                 "label": row.label,
                 "created_at": row.created_at.isoformat(),
                 "snapshot_json": row.snapshot_json,
@@ -1662,17 +1542,17 @@ class Store:
             raise ValueError(f"Snapshot {snapshot_id} not found")
 
         snap_data = snap["snapshot_json"]
-        domain_id = UUID(snap_data.get("domain", snap_data.get("house"))["id"])
+        domain_id = UUID(snap_data.get("domain", snap_data.get("spec"))["id"])
 
-        current_domain = self.get_canon_domain(domain_id)
+        current_domain = self.get_spec(domain_id)
         if not current_domain:
             raise ValueError("Domain no longer exists")
 
-        current_entries = self.get_canon_entries(domain_id, include_unapproved=True)
+        current_entries = self.get_assertions(domain_id, include_unapproved=True)
         current_personas = self.get_personas(domain_id)
 
         field_changes = {}
-        snap_domain = snap_data.get("domain", snap_data.get("house"))
+        snap_domain = snap_data.get("domain", snap_data.get("spec"))
         for field in ("name", "summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"):
             snap_val = snap_domain.get(field, "")
             curr_val = getattr(current_domain, field, "") or ""
@@ -1713,7 +1593,7 @@ class Store:
             "snapshot_label": snap["label"],
             "snapshot_created_at": snap["created_at"],
             "domain_id": str(domain_id),
-            "house_id": str(domain_id),
+            "spec_id": str(domain_id),
             "field_changes": field_changes,
             "entries": {
                 "added": added_entries,
@@ -1735,39 +1615,39 @@ class Store:
 
     # --- Artifact History ---
 
-    def save_artifact(self, house_id: UUID, skill_id: str, house_name: str,
+    def save_artifact(self, spec_id: UUID, skill_id: str, spec_name: str,
                        sections: dict, raw_content: str = "", alignment_score: int | None = None) -> dict:
         art_id = str(uuid4())
         now = _now()
         with self.session() as s:
             s.add(ArtifactHistoryModel(
                 id=art_id,
-                canon_domain_id=str(house_id),
+                spec_id=str(spec_id),
                 skill_id=skill_id,
-                house_name=house_name,
+                spec_name=spec_name,
                 sections_json=sections,
                 raw_content=raw_content,
                 alignment_score=alignment_score,
                 created_at=now,
             ))
             s.commit()
-        return {"id": art_id, "domain_id": str(house_id), "house_id": str(house_id), "skill_id": skill_id, "alignment_score": alignment_score, "created_at": now.isoformat()}
+        return {"id": art_id, "domain_id": str(spec_id), "spec_id": str(spec_id), "skill_id": skill_id, "alignment_score": alignment_score, "created_at": now.isoformat()}
 
     def list_artifacts(self, domain_id: UUID) -> list[dict]:
         with self.session() as s:
             rows = (
                 s.query(ArtifactHistoryModel)
-                .filter(ArtifactHistoryModel.canon_domain_id == str(domain_id))
+                .filter(ArtifactHistoryModel.spec_id == str(domain_id))
                 .order_by(ArtifactHistoryModel.created_at.desc())
                 .all()
             )
             return [
                 {
                     "id": r.id,
-                    "domain_id": r.canon_domain_id,
-                    "house_id": r.canon_domain_id,
+                    "domain_id": r.spec_id,
+                    "spec_id": r.spec_id,
                     "skill_id": r.skill_id,
-                    "house_name": r.house_name,
+                    "spec_name": r.spec_name,
                     "created_at": r.created_at.isoformat(),
                     "section_count": len(r.sections_json),
                     "alignment_score": getattr(r, "alignment_score", None),
@@ -1786,10 +1666,10 @@ class Store:
             return [
                 {
                     "id": r.id,
-                    "domain_id": r.canon_domain_id,
-                    "house_id": r.canon_domain_id,
+                    "domain_id": r.spec_id,
+                    "spec_id": r.spec_id,
                     "skill_id": r.skill_id,
-                    "house_name": r.house_name,
+                    "spec_name": r.spec_name,
                     "created_at": r.created_at.isoformat(),
                     "alignment_score": getattr(r, "alignment_score", None),
                 }
@@ -1803,10 +1683,10 @@ class Store:
                 return None
             return {
                 "id": row.id,
-                "domain_id": row.canon_domain_id,
-                "house_id": row.canon_domain_id,
+                "domain_id": row.spec_id,
+                "spec_id": row.spec_id,
                 "skill_id": row.skill_id,
-                "house_name": row.house_name,
+                "spec_name": row.spec_name,
                 "sections": row.sections_json,
                 "raw_content": row.raw_content,
                 "status": row.status,
@@ -1929,7 +1809,7 @@ class Store:
 
     def get_chunk_usage_heatmap(self, domain_id: UUID) -> dict:
         """Get usage heatmap: how many times each chunk was used, with which ratings."""
-        entries = self.get_canon_entries(domain_id, include_unapproved=True)
+        entries = self.get_assertions(domain_id, include_unapproved=True)
         entry_id_to_entry = {str(e.id): e for e in entries}
 
         with self.session() as s:
@@ -1937,7 +1817,7 @@ class Store:
             # Get all ratings for artifacts in this domain
             artifact_rows = (
                 s.query(ArtifactHistoryModel)
-                .filter(ArtifactHistoryModel.canon_domain_id == str(domain_id))
+                .filter(ArtifactHistoryModel.spec_id == str(domain_id))
                 .all()
             )
             artifact_ids = [r.id for r in artifact_rows]
@@ -1971,7 +1851,7 @@ class Store:
 
         return {
             "domain_id": str(domain_id),
-            "house_id": str(domain_id),
+            "spec_id": str(domain_id),
             "chunks": list(heatmap.values()),
             "total_chunks_used": len(heatmap),
             "avg_boost": round(
@@ -1979,9 +1859,9 @@ class Store:
             ),
         }
 
-    def get_canon_domain_coverage(self, domain_id: UUID) -> dict:
-        """Which parts of the canon domain are used most vs ignored."""
-        entries = self.get_canon_entries(domain_id, include_unapproved=True)
+    def get_spec_coverage(self, domain_id: UUID) -> dict:
+        """Which parts of the spec are used most vs ignored."""
+        entries = self.get_assertions(domain_id, include_unapproved=True)
         personas = self.get_personas(domain_id)
 
         with self.session() as s:
@@ -2012,7 +1892,7 @@ class Store:
 
         return {
             "domain_id": str(domain_id),
-            "house_id": str(domain_id),
+            "spec_id": str(domain_id),
             "by_section": by_section,
             "most_used": [
                 {"chunk_id": cid, "times_used": times, "content": entry_map.get(cid, "")}
@@ -2032,7 +1912,7 @@ class Store:
             },
         }
 
-    get_message_house_coverage = get_canon_domain_coverage  # Deprecated alias
+    get_spec_coverage = get_spec_coverage  # Deprecated alias
 
     # --- Workspaces ---
 
@@ -2488,62 +2368,62 @@ class Store:
         from sqlalchemy import select, func
         with self.session() as s:
             result = s.execute(
-                select(func.count()).select_from(canon_entry_channel_association).where(
-                    canon_entry_channel_association.c.channel_id == channel_id
+                select(func.count()).select_from(assertion_channel_association).where(
+                    assertion_channel_association.c.channel_id == channel_id
                 )
             ).scalar()
             return result or 0
 
     # --- Workspace-scoped domain list ---
 
-    def list_canon_domains(self, workspace_id: str | None = None) -> list[CanonDomain]:
+    def list_specs(self, workspace_id: str | None = None) -> list[Spec]:
         with self.session() as s:
-            q = s.query(CanonDomainModel)
+            q = s.query(SpecModel)
             if workspace_id and workspace_id != "all":
-                q = q.filter(CanonDomainModel.workspace_id == workspace_id)
+                q = q.filter(SpecModel.workspace_id == workspace_id)
             rows = q.all()
             return [_domain_from_row(r) for r in rows]
 
-    list_houses = list_canon_domains  # Deprecated alias
+    list_specs = list_specs  # Deprecated alias
 
-    def list_canon_domains_with_counts(self, workspace_id: str | None = None) -> list[dict]:
+    def list_specs_with_counts(self, workspace_id: str | None = None) -> list[dict]:
         """Return domains with pre-aggregated entry/persona counts — avoids N+1."""
         from sqlalchemy import func
         with self.session() as s:
             entry_counts = (
-                s.query(CanonEntryModel.canon_domain_id, func.count().label("cnt"))
-                .group_by(CanonEntryModel.canon_domain_id)
+                s.query(AssertionModel.spec_id, func.count().label("cnt"))
+                .group_by(AssertionModel.spec_id)
                 .subquery()
             )
             persona_counts = (
-                s.query(PersonaModel.canon_domain_id, func.count().label("cnt"))
-                .group_by(PersonaModel.canon_domain_id)
+                s.query(PersonaModel.spec_id, func.count().label("cnt"))
+                .group_by(PersonaModel.spec_id)
                 .subquery()
             )
             q = (
                 s.query(
-                    CanonDomainModel,
+                    SpecModel,
                     func.coalesce(entry_counts.c.cnt, 0).label("entry_count"),
                     func.coalesce(persona_counts.c.cnt, 0).label("persona_count"),
                 )
-                .outerjoin(entry_counts, CanonDomainModel.id == entry_counts.c.canon_domain_id)
-                .outerjoin(persona_counts, CanonDomainModel.id == persona_counts.c.canon_domain_id)
+                .outerjoin(entry_counts, SpecModel.id == entry_counts.c.spec_id)
+                .outerjoin(persona_counts, SpecModel.id == persona_counts.c.spec_id)
             )
             if workspace_id and workspace_id != "all":
-                q = q.filter(CanonDomainModel.workspace_id == workspace_id)
+                q = q.filter(SpecModel.workspace_id == workspace_id)
             return [
                 {
                     "domain": _domain_from_row(row),
                     "entry_count": int(ec),
                     "persona_count": int(pc),
                     # Backward-compat keys
-                    "house": _domain_from_row(row),
+                    "spec": _domain_from_row(row),
                     "message_count": int(ec),
                 }
                 for row, ec, pc in q.all()
             ]
 
-    list_houses_with_counts = list_canon_domains_with_counts  # Deprecated alias
+    list_specs_with_counts = list_specs_with_counts  # Deprecated alias
 
     # --- Source Connections ---
 
@@ -2616,7 +2496,7 @@ class Store:
         file_name: str,
         mime_type: str = "",
         drive_modified_at: str = "",
-        house_id: str | None = None,
+        spec_id: str | None = None,
         sync_status: str = "synced",
         error_message: str = "",
     ) -> None:
@@ -2637,8 +2517,8 @@ class Store:
                 row.sync_status = sync_status
                 row.error_message = error_message
                 row.synced_at = now
-                if house_id is not None:
-                    row.canon_domain_id = house_id
+                if spec_id is not None:
+                    row.spec_id = spec_id
             else:
                 s.add(SourceFileModel(
                     id=str(uuid4()),
@@ -2646,7 +2526,7 @@ class Store:
                     drive_file_id=drive_file_id,
                     file_name=file_name,
                     mime_type=mime_type,
-                    canon_domain_id=house_id,
+                    spec_id=spec_id,
                     drive_modified_at=drive_modified_at,
                     sync_status=sync_status,
                     error_message=error_message,
@@ -2693,12 +2573,12 @@ class Store:
     # ── Phase 3: Entry Approval Workflow ────────────────────────────────────
 
     def update_entry_status(self, entry_id: str, status: str, approved_by: str = "", notes: str = "") -> dict | None:
-        """Update canon entry status and log the action to review_logs."""
+        """Update assertion status and log the action to review_logs."""
         valid = {"draft", "in_review", "approved", "outdated", "locked"}
         if status not in valid:
             raise ValueError(f"Invalid status. Must be one of: {valid}")
         with self.session() as s:
-            entry = s.get(CanonEntryModel, entry_id)
+            entry = s.get(AssertionModel, entry_id)
             if not entry:
                 return None
             # Promotion gate: content_tier must be set before approving or locking
@@ -2710,8 +2590,8 @@ class Store:
                 entry.approved_at = _now()
             log = ReviewLogModel(
                 id=str(uuid4()),
-                canon_domain_id=entry.canon_domain_id,
-                canon_entry_id=entry_id,
+                spec_id=entry.spec_id,
+                assertion_id=entry_id,
                 action=status,
                 performed_by=approved_by or "admin",
                 timestamp=_now(),
@@ -2724,19 +2604,19 @@ class Store:
     update_message_status = update_entry_status  # Deprecated alias
 
     def update_entry_tier(self, entry_id: str, tier: str | None) -> dict | None:
-        """Set or clear the content tier on a canon entry."""
+        """Set or clear the content tier on a assertion."""
         valid_tiers = {"tier_1_locked", "tier_2_structured", "tier_3_grounded", None}
         if tier is not None and tier not in valid_tiers:
             raise ValueError(f"Invalid tier. Must be one of: tier_1_locked, tier_2_structured, tier_3_grounded")
         with self.session() as s:
-            entry = s.get(CanonEntryModel, entry_id)
+            entry = s.get(AssertionModel, entry_id)
             if not entry:
                 return None
             entry.content_tier = tier
             log = ReviewLogModel(
                 id=str(uuid4()),
-                canon_domain_id=entry.canon_domain_id,
-                canon_entry_id=entry_id,
+                spec_id=entry.spec_id,
+                assertion_id=entry_id,
                 action="tier_update",
                 performed_by="admin",
                 timestamp=_now(),
@@ -2748,15 +2628,15 @@ class Store:
 
     def set_domain_dri(self, domain_id: str, dri: str, performed_by: str = "admin") -> dict | None:
         with self.session() as s:
-            dom = s.get(CanonDomainModel, domain_id)
+            dom = s.get(SpecModel, domain_id)
             if not dom:
                 return None
             old_dri = dom.dri or "(unassigned)"
             dom.dri = dri
             s.add(ReviewLogModel(
                 id=str(uuid4()),
-                canon_domain_id=domain_id,
-                canon_entry_id=None,
+                spec_id=domain_id,
+                assertion_id=None,
                 action="dri_transfer",
                 performed_by=performed_by,
                 timestamp=_now(),
@@ -2767,15 +2647,15 @@ class Store:
 
     def set_entry_dri(self, entry_id: str, dri: str, performed_by: str = "admin") -> dict | None:
         with self.session() as s:
-            entry = s.get(CanonEntryModel, entry_id)
+            entry = s.get(AssertionModel, entry_id)
             if not entry:
                 return None
             old_dri = entry.dri or "(unassigned)"
             entry.dri = dri
             s.add(ReviewLogModel(
                 id=str(uuid4()),
-                canon_domain_id=entry.canon_domain_id,
-                canon_entry_id=entry_id,
+                spec_id=entry.spec_id,
+                assertion_id=entry_id,
                 action="dri_transfer",
                 performed_by=performed_by,
                 timestamp=_now(),
@@ -2786,12 +2666,12 @@ class Store:
 
     def get_effective_dri(self, entry_id: str) -> str:
         with self.session() as s:
-            entry = s.get(CanonEntryModel, entry_id)
+            entry = s.get(AssertionModel, entry_id)
             if not entry:
                 return ""
             if entry.dri:
                 return entry.dri
-            dom = s.get(CanonDomainModel, entry.canon_domain_id)
+            dom = s.get(SpecModel, entry.spec_id)
             return dom.dri if dom else ""
 
     def get_dri_summary(self) -> dict:
@@ -2801,12 +2681,12 @@ class Store:
         neither it nor its domain has a DRI.
         """
         with self.session() as s:
-            domains = s.query(CanonDomainModel).all()
+            domains = s.query(SpecModel).all()
             by_dri: dict[str, list[dict]] = {}
             unowned: list[dict] = []
             for dom in domains:
-                entry_rows = s.query(CanonEntryModel).filter(
-                    CanonEntryModel.canon_domain_id == dom.id
+                entry_rows = s.query(AssertionModel).filter(
+                    AssertionModel.spec_id == dom.id
                 ).all()
                 unowned_entries = (
                     [str(e.id) for e in entry_rows if not e.dri] if not dom.dri else []
@@ -2847,11 +2727,11 @@ class Store:
 
     bulk_update_message_status = bulk_update_entry_status  # Deprecated alias
 
-    def get_review_log(self, house_id: str, limit: int = 50) -> list[dict]:
+    def get_review_log(self, spec_id: str, limit: int = 50) -> list[dict]:
         with self.session() as s:
             rows = (
                 s.query(ReviewLogModel)
-                .filter(ReviewLogModel.canon_domain_id == str(house_id))
+                .filter(ReviewLogModel.spec_id == str(spec_id))
                 .order_by(ReviewLogModel.timestamp.desc())
                 .limit(limit)
                 .all()
@@ -2859,8 +2739,8 @@ class Store:
             return [
                 {
                     "id": r.id,
-                    "message_id": r.canon_entry_id,
-                    "entry_id": r.canon_entry_id,
+                    "message_id": r.assertion_id,
+                    "entry_id": r.assertion_id,
                     "action": r.action,
                     "performed_by": r.performed_by,
                     "timestamp": r.timestamp.isoformat(),
@@ -2876,45 +2756,45 @@ class Store:
     def mark_domain_reviewed(self, domain_id: str, reviewed_by: str = "admin") -> dict | None:
         """Set last_reviewed = now() and append a review log entry."""
         with self.session() as s:
-            domain = s.get(CanonDomainModel, str(domain_id))
+            domain = s.get(SpecModel, str(domain_id))
             if not domain:
                 return None
             domain.last_reviewed = _now()
             log = ReviewLogModel(
                 id=str(uuid4()),
-                canon_domain_id=str(domain_id),
-                canon_entry_id=None,
+                spec_id=str(domain_id),
+                assertion_id=None,
                 action="reviewed",
                 performed_by=reviewed_by,
                 timestamp=_now(),
-                notes="Canon domain marked as reviewed",
+                notes="Spec domain marked as reviewed",
             )
             s.add(log)
             s.commit()
-            return {"domain_id": str(domain_id), "house_id": str(domain_id), "last_reviewed": domain.last_reviewed.isoformat()}
+            return {"domain_id": str(domain_id), "spec_id": str(domain_id), "last_reviewed": domain.last_reviewed.isoformat()}
 
-    mark_house_reviewed = mark_domain_reviewed  # Deprecated alias
+    mark_spec_reviewed = mark_domain_reviewed  # Deprecated alias
 
     def get_stale_domains(self, days: int = 90) -> list[dict]:
         """Return domains not reviewed in the last `days` days."""
         from datetime import timedelta
         cutoff = _now() - timedelta(days=days)
         with self.session() as s:
-            rows = s.query(CanonDomainModel).filter(
-                (CanonDomainModel.last_reviewed == None) | (CanonDomainModel.last_reviewed < cutoff)  # noqa: E711
+            rows = s.query(SpecModel).filter(
+                (SpecModel.last_reviewed == None) | (SpecModel.last_reviewed < cutoff)  # noqa: E711
             ).all()
             return [
                 {
                     "id": r.id,
                     "domain_id": r.id,
-                    "house_id": r.id,
+                    "spec_id": r.id,
                     "name": r.name,
                     "last_reviewed": r.last_reviewed.isoformat() if r.last_reviewed else None,
                 }
                 for r in rows
             ]
 
-    get_stale_houses = get_stale_domains  # Deprecated alias
+    get_stale_specs = get_stale_domains  # Deprecated alias
 
     # ── Phase 5: Feedback Loop ────────────────────────────────────────────────
 
@@ -2957,10 +2837,10 @@ class Store:
             return {"id": rating_row.id, "artifact_id": artifact_id, "rating": rating, "tag": tag}
 
     def get_entry_usage_stats(self, domain_id: str) -> list[dict]:
-        """Return canon entries with usage stats for the heatmap, sorted by times_used desc."""
+        """Return assertions with usage stats for the heatmap, sorted by times_used desc."""
         with self.session() as s:
-            entries = s.query(CanonEntryModel).filter(
-                CanonEntryModel.canon_domain_id == str(domain_id)
+            entries = s.query(AssertionModel).filter(
+                AssertionModel.spec_id == str(domain_id)
             ).all()
             result = []
             for e in entries:
@@ -2987,7 +2867,7 @@ class Store:
         model = ArtifactEntryBindingModel(
             id=binding_id,
             artifact_id=str(artifact_id),
-            canon_entry_id=str(entry_id),
+            assertion_id=str(entry_id),
             element_type=element_type,
             bound_text=text,
             created_at=_now()
@@ -3006,19 +2886,19 @@ class Store:
                 {
                     "id": UUID(m.id),
                     "artifact_id": UUID(m.artifact_id),
-                    "canon_entry_id": UUID(m.canon_entry_id),
+                    "assertion_id": UUID(m.assertion_id),
                     "element_type": m.element_type,
                     "bound_text": m.bound_text
                 }
                 for m in models
             ]
 
-    def check_framework_completeness(self, domain_id: UUID) -> dict:
-        domain = self.get_canon_domain(domain_id)
+    def check_spec_completeness(self, domain_id: UUID) -> dict:
+        domain = self.get_spec(domain_id)
         if not domain:
             return {"score": 0, "missing_sections": [], "error": "Domain not found"}
 
-        entries = self.get_canon_entries(domain_id, include_unapproved=True)
+        entries = self.get_assertions(domain_id, include_unapproved=True)
         present_sections = {str(e.section_type) for e in entries if e.section_type}
         from src.models import SectionType
         all_section_types = [st.value for st in SectionType
@@ -3083,8 +2963,8 @@ def _source_file_to_dict(row: "SourceFileModel") -> dict:
         "drive_file_id": row.drive_file_id,
         "file_name": row.file_name,
         "mime_type": row.mime_type,
-        "domain_id": row.canon_domain_id,
-        "house_id": row.canon_domain_id,
+        "domain_id": row.spec_id,
+        "spec_id": row.spec_id,
         "drive_modified_at": row.drive_modified_at,
         "sync_status": row.sync_status,
         "error_message": row.error_message,
@@ -3115,20 +2995,20 @@ def _invalidate_graph() -> None:
         pass
 
 
-def _domain_from_row(row: CanonDomainModel) -> CanonDomain:
-    return CanonDomain(
+def _domain_from_row(row: SpecModel) -> Spec:
+    return Spec(
         id=UUID(row.id),
         name=row.name,
         source=row.source,
         source_id=row.source_id,
-        document_type=row.document_type if row.document_type and row.document_type != "canon_domain" else "message_house",
+        grounding_type=row.document_type or "message_house",
         summary=row.summary,
         audience=row.audience,
         brand_personality=row.brand_personality,
         positioning=row.positioning,
         tagline=row.tagline,
         differentiation=row.differentiation,
-        status=DomainStatus(row.status),
+        status=SpecStatus(row.status),
         department=row.department,
         last_synced=row.last_synced,
         last_reviewed=row.last_reviewed,
@@ -3139,18 +3019,18 @@ def _domain_from_row(row: CanonDomainModel) -> CanonDomain:
     )
 
 
-_house_from_row = _domain_from_row  # Deprecated alias
+_spec_from_row = _domain_from_row  # Deprecated alias
 
 
-def _entry_from_row(row: CanonEntryModel) -> CanonEntry:
-    return CanonEntry(
+def _entry_from_row(row: AssertionModel) -> Assertion:
+    return Assertion(
         id=UUID(row.id),
-        canon_domain_id=UUID(row.canon_domain_id),
+        spec_id=UUID(row.spec_id),
         pillar_id=row.pillar_id,
         section_type=_safe_section_type(row.section_type),
         priority=row.priority,
         content=row.content,
-        status=EntryStatus(row.status) if row.status else EntryStatus.DRAFT,
+        status=AssertionStatus(row.status) if row.status else AssertionStatus.DRAFT,
         approved_by=row.approved_by,
         approved_at=row.approved_at,
         content_tier=ContentTier(row.content_tier) if row.content_tier else None,
@@ -3168,13 +3048,13 @@ _msg_from_row = _entry_from_row  # Deprecated alias
 def _persona_from_row(row: PersonaModel) -> Persona:
     return Persona(
         id=UUID(row.id),
-        canon_domain_id=UUID(row.canon_domain_id),
+        spec_id=UUID(row.spec_id),
         name=row.name,
         description=row.description,
         pain_points=row.pain_points or [],
         buying_triggers=row.buying_triggers or [],
         objections=row.objections or [],
-        status=EntryStatus(row.status) if row.status else EntryStatus.DRAFT,
+        status=AssertionStatus(row.status) if row.status else AssertionStatus.DRAFT,
         approved_by=row.approved_by,
         approved_at=row.approved_at,
     )
@@ -3184,7 +3064,7 @@ def _pillar_from_row(row: PillarModel) -> "Pillar":
     from src.models import Pillar
     return Pillar(
         id=row.id,
-        canon_domain_id=row.canon_domain_id,
+        spec_id=row.spec_id,
         name=row.name,
         description=row.description,
         display_order=row.display_order,

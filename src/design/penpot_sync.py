@@ -3,12 +3,12 @@
 from typing import Optional
 from uuid import UUID
 
-from src.models import MessageHouse, KeyMessage, Persona, SectionType
+from src.models import Spec, Assertion, Persona, SectionType
 from src.store import Store, get_store
 
 
-def _extract_brand_colors(house: MessageHouse) -> dict[str, str]:
-    """Extract brand colors from house data."""
+def _extract_brand_colors(spec: Spec) -> dict[str, str]:
+    """Extract brand colors from spec data."""
     colors = {
         "primary": "#1a73e8",
         "secondary": "#34a853",
@@ -16,7 +16,7 @@ def _extract_brand_colors(house: MessageHouse) -> dict[str, str]:
         "text": "#202124",
         "background": "#ffffff",
     }
-    personality = (house.brand_personality or "").lower()
+    personality = (spec.brand_personality or "").lower()
     if "bold" in personality or "strong" in personality:
         colors["primary"] = "#d93025"
     elif "calm" in personality or "trust" in personality:
@@ -78,16 +78,16 @@ def get_or_create_penpot_project(workspace_id: str, workspace_name: str, team_id
     return existing
 
 
-def sync_brand_tokens_to_penpot(workspace_id: str, house: MessageHouse) -> dict:
+def sync_brand_tokens_to_penpot(workspace_id: str, spec: Spec) -> dict:
     """Sync MsgStack brand tokens to Penpot design tokens."""
     store = get_store()
     project_id = store.get_penpot_project(workspace_id)
 
     results = {
         "workspace_id": workspace_id,
-        "house_name": house.name,
-        "brand_colors": _extract_brand_colors(house),
-        "font_family": _map_personality_to_font(house.brand_personality),
+        "spec_name": spec.name,
+        "brand_colors": _extract_brand_colors(spec),
+        "font_family": _map_personality_to_font(spec.brand_personality),
         "project_id": project_id,
         "actions": [],
     }
@@ -98,7 +98,7 @@ def sync_brand_tokens_to_penpot(workspace_id: str, house: MessageHouse) -> dict:
             "tool": "penpot_create_project",
             "params": {
                 "teamId": "default",
-                "name": f"MsgStack - {house.name}",
+                "name": f"MsgStack - {spec.name}",
             },
         })
     else:
@@ -107,14 +107,14 @@ def sync_brand_tokens_to_penpot(workspace_id: str, house: MessageHouse) -> dict:
             "tool": "penpot_create_file",
             "params": {
                 "projectId": project_id,
-                "name": f"Brand: {house.name}",
+                "name": f"Brand: {spec.name}",
             },
         })
 
     return results
 
 
-def export_artifact_to_penpot(artifact_id: str, workspace_id: str, house: MessageHouse) -> dict:
+def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -> dict:
     """Export a MsgStack artifact to a Penpot file.
 
     Returns a dict with the file details and instructions for creating
@@ -126,7 +126,7 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, house: Messag
     results = {
         "artifact_id": artifact_id,
         "workspace_id": workspace_id,
-        "house_name": house.name,
+        "spec_name": spec.name,
         "project_id": project_id,
         "edit_url": None,
         "file_id": None,
@@ -141,21 +141,21 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, house: Messag
             "tool": "penpot_create_project",
             "params": {
                 "teamId": "default",
-                "name": f"MsgStack - {house.name}",
+                "name": f"MsgStack - {spec.name}",
             },
         }
         return results
 
     # Build design specification
-    brand_colors = _extract_brand_colors(house)
-    font_family = _map_personality_to_font(house.brand_personality)
+    brand_colors = _extract_brand_colors(spec)
+    font_family = _map_personality_to_font(spec.brand_personality)
 
     design_spec = {
         "file": {
             "tool": "penpot_create_file",
             "params": {
                 "projectId": project_id,
-                "name": f"Artifact: {house.name}",
+                "name": f"Artifact: {spec.name}",
             },
         },
         "steps": [],
@@ -169,7 +169,7 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, house: Messag
     steps.append({
         "tool": "penpot_create_frame",
         "params": {
-            "name": f"Artifact - {house.name}",
+            "name": f"Artifact - {spec.name}",
             "width": 1200,
             "height": 1600,
             "fillColor": "#ffffff",
@@ -179,12 +179,12 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, house: Messag
     y_offset = 40
 
     # Add headline
-    if house.tagline:
+    if spec.tagline:
         steps.append({
             "tool": "penpot_create_text",
             "params": {
                 "name": "Headline",
-                "text": house.tagline,
+                "text": spec.tagline,
                 "x": 40,
                 "y": y_offset,
                 "fontSize": 32,
@@ -196,12 +196,12 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, house: Messag
         y_offset += 60
 
     # Add positioning
-    if house.positioning:
+    if spec.positioning:
         steps.append({
             "tool": "penpot_create_text",
             "params": {
                 "name": "Positioning",
-                "text": house.positioning[:200],
+                "text": spec.positioning[:200],
                 "x": 40,
                 "y": y_offset,
                 "fontSize": 16,
@@ -228,7 +228,7 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, house: Messag
     y_offset += 50
 
     # Add key messages
-    messages = store.get_key_messages(house.id)
+    messages = store.get_key_messages(spec.id)
     for i, msg in enumerate(messages[:10]):
         steps.append({
             "tool": "penpot_create_text",

@@ -12,7 +12,7 @@ from src.design.schema_v2 import DesignSpec, Zone, PageSpec, PagePreset, ZoneTyp
 def validate_and_fill_design_spec(
     raw_json: str,
     template_zones: list[Zone],
-    house_data: dict,
+    spec_data: dict,
     template_page_spec: Optional[dict] = None,
 ) -> DesignSpec:
     """
@@ -68,17 +68,17 @@ def validate_and_fill_design_spec(
             # Construct default Zone dict
             zone_dict = tz.model_dump()
             # Try to resolve placeholders in default content
-            zone_dict["text_content"] = _resolve_placeholder(tz.text_content, house_data)
-            zone_dict["list_items"] = [_resolve_placeholder(item, house_data) for item in tz.list_items]
+            zone_dict["text_content"] = _resolve_placeholder(tz.text_content, spec_data)
+            zone_dict["list_items"] = [_resolve_placeholder(item, spec_data) for item in tz.list_items]
             zones_out.append(zone_dict)
             existing_zones[tz.id] = zone_dict
         else:
             # Zone exists, apply constraint truncation and resolve placeholders
             z_dict = existing_zones[tz.id]
             if "text_content" in z_dict and isinstance(z_dict["text_content"], str):
-                z_dict["text_content"] = _resolve_placeholder(z_dict["text_content"], house_data)[:1000]
+                z_dict["text_content"] = _resolve_placeholder(z_dict["text_content"], spec_data)[:1000]
             if "list_items" in z_dict and isinstance(z_dict["list_items"], list):
-                z_dict["list_items"] = [_resolve_placeholder(str(item), house_data)[:500] for item in z_dict["list_items"]]
+                z_dict["list_items"] = [_resolve_placeholder(str(item), spec_data)[:500] for item in z_dict["list_items"]]
 
     parsed["zones"] = zones_out
 
@@ -100,48 +100,48 @@ def validate_and_fill_design_spec(
     # Validate and return
     return DesignSpec(**parsed)
 
-def _resolve_placeholder(text: str, house_data: dict) -> str:
-    """Helper to resolve placeholders like {positioning} from house_data."""
+def _resolve_placeholder(text: str, spec_data: dict) -> str:
+    """Helper to resolve placeholders like {positioning} from spec_data."""
     if not text:
         return text
     res = text
     
-    # Safely get key_messages
-    key_messages_raw = house_data.get("structured_key_messages") or house_data.get("key_messages") or []
-    key_messages = []
+    # Safely get assertions
+    key_messages_raw = spec_data.get("structured_key_messages") or spec_data.get("assertions") or []
+    assertions = []
     if isinstance(key_messages_raw, list):
         for m in key_messages_raw:
             if isinstance(m, dict):
-                key_messages.append(m)
+                assertions.append(m)
             elif hasattr(m, "section_type") and hasattr(m, "content"):
-                key_messages.append({"section_type": str(m.section_type), "content": m.content})
+                assertions.append({"section_type": str(m.section_type), "content": m.content})
     
     # Safely get proof point
-    proof_points = [m["content"] for m in key_messages if isinstance(m, dict) and str(m.get("section_type")).split(".")[-1].lower() == "proof_point"]
+    proof_points = [m["content"] for m in assertions if isinstance(m, dict) and str(m.get("section_type")).split(".")[-1].lower() == "proof_point"]
     first_proof = proof_points[0] if proof_points else ""
-    if not first_proof and isinstance(house_data.get("primary_message"), str):
-        first_proof = house_data.get("primary_message")
+    if not first_proof and isinstance(spec_data.get("primary_message"), str):
+        first_proof = spec_data.get("primary_message")
 
     placeholders = {
-        "{house_name}": house_data.get("house_name") or house_data.get("name") or "",
-        "{tagline}": house_data.get("tagline") or "",
-        "{positioning}": house_data.get("positioning") or "",
-        "{differentiation}": house_data.get("differentiation") or "",
+        "{spec_name}": spec_data.get("spec_name") or spec_data.get("name") or "",
+        "{tagline}": spec_data.get("tagline") or "",
+        "{positioning}": spec_data.get("positioning") or "",
+        "{differentiation}": spec_data.get("differentiation") or "",
         "{proof_point}": first_proof,
-        "{competitor}": house_data.get("competitor") or "Competitor",
+        "{competitor}": spec_data.get("competitor") or "Competitor",
     }
     
     # Handlers for list item placeholders
-    benefits = house_data.get("benefits") or []
+    benefits = spec_data.get("benefits") or []
     if not benefits:
-        benefits = [m["content"] for m in key_messages if isinstance(m, dict) and str(m.get("section_type")).split(".")[-1].lower() in ("benefit", "benefit_list")]
+        benefits = [m["content"] for m in assertions if isinstance(m, dict) and str(m.get("section_type")).split(".")[-1].lower() in ("benefit", "benefit_list")]
     for i in range(1, 6):
         placeholders[f"{{benefit_{i}}}"] = benefits[i-1] if i-1 < len(benefits) else ""
 
-    objections = house_data.get("objections") or []
+    objections = spec_data.get("objections") or []
     if not objections:
         # try to get from personas
-        personas_raw = house_data.get("personas") or []
+        personas_raw = spec_data.get("personas") or []
         for p in personas_raw:
             objs = p.get("objections") if isinstance(p, dict) else getattr(p, "objections", [])
             for ob in (objs or []):
@@ -152,7 +152,7 @@ def _resolve_placeholder(text: str, house_data: dict) -> str:
     for i in range(1, 6):
         placeholders[f"{{objection_{i}}}"] = objections[i-1] if i-1 < len(objections) else ""
 
-    pillars = house_data.get("pillars") or []
+    pillars = spec_data.get("pillars") or []
     for i in range(1, 6):
         desc = ""
         if i-1 < len(pillars):
@@ -160,7 +160,7 @@ def _resolve_placeholder(text: str, house_data: dict) -> str:
             desc = p.get("description") if isinstance(p, dict) else getattr(p, "description", str(p))
         placeholders[f"{{pillar_{i}}}"] = desc
 
-    personas = house_data.get("personas") or []
+    personas = spec_data.get("personas") or []
     for i in range(1, 6):
         p_name = ""
         if i-1 < len(personas):

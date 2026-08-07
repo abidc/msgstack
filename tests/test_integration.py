@@ -1,4 +1,4 @@
-"""Integration tests for /api/extract and search_messaging with mocks."""
+"""Integration tests for /api/extract and search_assertions with mocks."""
 
 import io
 import json
@@ -82,7 +82,7 @@ def client(tmp_path):
 
     with patch("src.pipeline.structure.OpenAI") as mock_oai_cls, \
          patch("src.grounding.search.GroundingEngine.ensure_index"), \
-         patch("src.grounding.search.GroundingEngine.index_house", return_value=5):
+         patch("src.grounding.search.GroundingEngine.index_spec", return_value=5):
 
         mock_client_instance = MagicMock()
         mock_oai_cls.return_value = mock_client_instance
@@ -102,8 +102,8 @@ def client(tmp_path):
         web_app_module.store = Store(str(tmp_path / "test.db"))
         web_app_module.store.init()
 
-        from src.pipeline.structure import HouseStructurer
-        web_app_module.structurer = HouseStructurer(openai_api_key="test-key")
+        from src.pipeline.structure import SpecStructurer
+        web_app_module.structurer = SpecStructurer(openai_api_key="test-key")
         web_app_module.structurer._client = mock_client_instance
         web_app_module.structurer.model = "gpt-4o-mini"
 
@@ -113,7 +113,7 @@ def client(tmp_path):
         yield tc
 
 
-def test_extract_endpoint_returns_house(client):
+def test_extract_endpoint_returns_spec(client):
     with open(client._doc_path, "rb") as f:
         resp = client.post("/api/extract", files={"file": ("test.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
     assert resp.status_code == 200
@@ -149,7 +149,7 @@ def test_preview_structure_endpoint(client):
     data = resp.json()
     assert data["status"] == "preview"
     assert "preview_token" in data
-    assert "key_messages" in data
+    assert "assertions" in data
     assert "personas" in data
 
 
@@ -171,29 +171,29 @@ def test_confirm_structure_bad_token(client):
     assert resp.status_code == 400
 
 
-# ── search_messaging with mock Pinecone ──────────────────────────────────────
+# ── search_assertions with mock Pinecone ──────────────────────────────────────
 
 @pytest.fixture
 def mock_engine(tmp_path):
     """GroundingEngine with mocked Pinecone and a real Store."""
     from src.store import Store
-    from src.models import MessageHouse, KeyMessage, SectionType, HouseStatus
+    from src.models import Spec, Assertion, SectionType, SpecStatus
     from datetime import datetime, timezone
 
     store = Store(str(tmp_path / "search_test.db"))
     store.init()
-    house = MessageHouse(
-        name="Search Test House",
+    spec = Spec(
+        name="Search Test Spec",
         summary="A test product for search",
         positioning="For teams who need speed",
         tagline="Ship fast",
         differentiation="Only automated solution",
-        status=HouseStatus.ACTIVE,
+        status=SpecStatus.ACTIVE,
         last_synced=datetime.now(timezone.utc).replace(tzinfo=None),
     )
-    store.upsert_house(house)
-    msg = KeyMessage(
-        message_house_id=house.id,
+    store.upsert_spec(spec)
+    msg = Assertion(
+        spec_id=spec.id,
         section_type=SectionType.BENEFIT,
         priority=1,
         content="Reduce deployment time by 60%",
@@ -207,13 +207,13 @@ def mock_engine(tmp_path):
         engine.index = None  # Force fallback search
         engine.namespace = "default"
 
-    return engine, house
+    return engine, spec
 
 
 def test_fallback_search_returns_results(mock_engine):
     from src.models import SearchFilters
-    engine, house = mock_engine
-    filters = SearchFilters(message_houses=[str(house.id)], include_drafts=True)
+    engine, spec = mock_engine
+    filters = SearchFilters(specs=[str(spec.id)], include_drafts=True)
     resp = engine._fallback_search("deployment time", filters)
     assert len(resp.results) > 0
 
@@ -249,8 +249,8 @@ def test_rerank_top_k_respected(mock_engine):
 
 def test_min_confidence_warning_added(mock_engine):
     from src.models import SearchFilters
-    engine, house = mock_engine
-    filters = SearchFilters(message_houses=[str(house.id)], min_confidence=0.99)
+    engine, spec = mock_engine
+    filters = SearchFilters(specs=[str(spec.id)], min_confidence=0.99)
     resp = engine._fallback_search("deployment time", filters)
     # Fallback scores are 0.5–0.9, so min_confidence=0.99 triggers warning
     # (min_confidence check is in search(), not _fallback_search — verify it's threaded through)

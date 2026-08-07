@@ -26,7 +26,7 @@ TIER_CONTRACT_PREAMBLE = (
 from openai import OpenAI
 from pydantic import BaseModel
 
-from src.models import MessageHouse, KeyMessage, Persona
+from src.models import Spec, Assertion, Persona
 from src.store import Store
 from src.pipeline.skills import SkillManager
 from src.design.validators import DesignSpec, validate_and_fill_design_spec
@@ -35,7 +35,7 @@ from src.rendering.renderer import get_renderer, RenderOutput
 
 class ArtifactRequest(BaseModel):
     skill_id: str
-    house_id: str
+    spec_id: str
     context: dict = {}
 
 
@@ -43,8 +43,8 @@ class GeneratedArtifact(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     skill_id: str
-    house_id: str
-    house_name: str
+    spec_id: str
+    spec_name: str
     sections: dict
     raw_content: str
     grounded_messages: list[str]
@@ -107,16 +107,16 @@ class ArtifactGenerator:
         self.client = OpenAI(api_key=openai_api_key or os.environ.get("OPENAI_API_KEY"))
         self.model = model
 
-    def generate(self, skill_id: str, house_id: str, custom_context: dict = None) -> GeneratedArtifact:
+    def generate(self, skill_id: str, spec_id: str, custom_context: dict = None) -> GeneratedArtifact:
         skill = self.skills.get_skill(skill_id)
         if not skill:
             raise ValueError(f"Skill {skill_id} not found")
 
-        house = self.store.get_house(UUID(house_id))
-        if not house:
-            raise ValueError(f"House {house_id} not found")
+        spec = self.store.get_spec(UUID(spec_id))
+        if not spec:
+            raise ValueError(f"Spec {spec_id} not found")
 
-        messages = self.store.get_key_messages(house.id, include_unapproved=True)
+        messages = self.store.get_key_messages(spec.id, include_unapproved=True)
         # Approval gating: skip non-Approved messages by default, unless include_drafts is true
         include_drafts = False
         if custom_context and (custom_context.get("include_drafts") in (True, "true", "1", 1)):
@@ -136,13 +136,13 @@ class ArtifactGenerator:
 
         messages = messages_to_use
 
-        personas = self.store.get_personas(house.id)
+        personas = self.store.get_personas(spec.id)
 
         # Check if this is a visual artifact type
         artifact_type = skill.get("prefab_template") or skill_id
         is_visual = skill.get("renderer") == "fabric"
 
-        context = self._build_context(house, messages, personas, custom_context or {})
+        context = self._build_context(spec, messages, personas, custom_context or {})
 
         # Tonal sliders mapping:
         tone_register = ""
@@ -164,7 +164,7 @@ class ArtifactGenerator:
             template = self._get_template(artifact_type)
             if template:
                 visual_context = self._build_visual_context(
-                    house_id, template, artifact_type, house, messages, personas
+                    spec_id, template, artifact_type, spec, messages, personas
                 )
                 context["visual_context"] = visual_context
                 context["template_zones"] = template.get("zones", [])
@@ -225,7 +225,7 @@ class ArtifactGenerator:
         
         try:
             from src.pipeline.vocabulary import apply_controlled_vocabulary
-            raw = apply_controlled_vocabulary(raw, house.id, self.store)
+            raw = apply_controlled_vocabulary(raw, spec.id, self.store)
             # Re-parse sections after sweeping
             sections = self._parse_sections(raw, skill)
         except Exception as e:
@@ -264,8 +264,8 @@ class ArtifactGenerator:
         renderer = get_renderer(renderer_type)
         render_output = None
         
-        # Get house_name for context
-        render_context = {"house_name": house.name}
+        # Get spec_name for context
+        render_context = {"spec_name": spec.name}
         render_context.update(context)
         
         if renderer_type == "html":
@@ -281,13 +281,13 @@ class ArtifactGenerator:
         if tier_violations:
             log.warning(
                 "Artifact %s/%s has %d Tier 1 verbatim violation(s)",
-                skill_id, house_id, len(tier_violations),
+                skill_id, spec_id, len(tier_violations),
             )
 
         return GeneratedArtifact(
             skill_id=skill_id,
-            house_id=house_id,
-            house_name=house.name,
+            spec_id=spec_id,
+            spec_name=spec.name,
             sections=sections,
             raw_content=raw,
             grounded_messages=grounded,
@@ -322,15 +322,15 @@ class ArtifactGenerator:
 
     def _build_visual_context(
         self,
-        house_id: str,
+        spec_id: str,
         template: dict,
         artifact_type: str,
-        house: MessageHouse,
-        messages: list[KeyMessage],
+        spec: Spec,
+        messages: list[Assertion],
         personas: list[Persona],
     ) -> dict:
         """
-        Pre-assign messaging house content to template zones BEFORE the LLM call.
+        Pre-assign messaging spec content to template zones BEFORE the LLM call.
         Maps:
         - tagline → hero.text_content
         - positioning → hero.body
@@ -364,20 +364,20 @@ class ArtifactGenerator:
 
             if zone_type == "hero":
                 # Map tagline → hero.text_content
-                if house.tagline:
-                    content["text"] = house.tagline[:max_chars]
+                if spec.tagline:
+                    content["text"] = spec.tagline[:max_chars]
                 # Also map positioning → hero.body if there's a body sub-zone
-                if zone_id.endswith("_body") and house.positioning:
-                    content["text"] = house.positioning[:max_chars]
+                if zone_id.endswith("_body") and spec.positioning:
+                    content["text"] = spec.positioning[:max_chars]
 
             elif zone_type == "positioning":
-                if house.positioning:
-                    content["text"] = house.positioning[:max_chars]
+                if spec.positioning:
+                    content["text"] = spec.positioning[:max_chars]
 
             elif zone_type == "pillar_grid" or zone_type == "differentiation":
                 # Map differentiation → pillar_grid
-                if house.differentiation:
-                    items = [item.strip() for item in house.differentiation.split(".") if item.strip()][:capacity]
+                if spec.differentiation:
+                    items = [item.strip() for item in spec.differentiation.split(".") if item.strip()][:capacity]
                     content["items"] = items
 
             elif zone_type == "message_list":
@@ -469,8 +469,8 @@ class ArtifactGenerator:
 
     def _build_context(
         self,
-        house: MessageHouse,
-        messages: list[KeyMessage],
+        spec: Spec,
+        messages: list[Assertion],
         personas: list[Persona],
         custom: dict,
     ) -> dict:
@@ -479,7 +479,7 @@ class ArtifactGenerator:
         # Unset tier blocks *promotion* (update_entry_status), not generation.
         tier_order = {"tier_1_locked": 0, "tier_2_structured": 1, "tier_3_grounded": 2}
         # Group ALL messages by section type, sorted by tier then priority within each group
-        by_section: dict[str, list[KeyMessage]] = {}
+        by_section: dict[str, list[Assertion]] = {}
         for m in messages:
             key = str(m.section_type)
             by_section.setdefault(key, []).append(m)
@@ -516,12 +516,12 @@ class ArtifactGenerator:
         personas_str = "\n\n".join(persona_blocks)
 
         context_block = (
-            f"## {house.name}\n\n"
-            f"**Positioning:** {house.positioning or '(not set)'}\n"
-            f"**Tagline:** {house.tagline or '(not set)'}\n"
-            f"**Differentiation:** {house.differentiation or '(not set)'}\n"
-            f"**Audience:** {house.audience or '(not set)'}\n"
-            f"**Brand Personality:** {house.brand_personality or '(not set)'}\n\n"
+            f"## {spec.name}\n\n"
+            f"**Positioning:** {spec.positioning or '(not set)'}\n"
+            f"**Tagline:** {spec.tagline or '(not set)'}\n"
+            f"**Differentiation:** {spec.differentiation or '(not set)'}\n"
+            f"**Audience:** {spec.audience or '(not set)'}\n"
+            f"**Brand Personality:** {spec.brand_personality or '(not set)'}\n\n"
             f"## Key Messages ({len(messages)} total, all sections)\n\n"
             f"{key_messages_str}\n\n"
             f"## Personas ({len(personas)} total)\n\n"
@@ -546,18 +546,18 @@ class ArtifactGenerator:
                     all_objections.append(ob.get("statement", str(ob)) or "")
                 else:
                     all_objections.append(str(ob))
-        pillars_list = [{"name": pl.name, "description": pl.description} for pl in (getattr(house, "pillars", []) or [])]
+        pillars_list = [{"name": pl.name, "description": pl.description} for pl in (getattr(spec, "pillars", []) or [])]
         personas_list = [{"name": p.name, "description": p.description, "objections": p.objections} for p in personas]
         structured_km = [{"section_type": str(m.section_type).split(".")[-1].lower(), "content": m.content} for m in messages]
 
         context = {
-            "house_name": house.name,
-            "positioning": house.positioning or "",
-            "tagline": house.tagline or "",
-            "differentiation": house.differentiation or "",
-            "audience": house.audience or "",
-            "brand_personality": house.brand_personality or "",
-            "key_messages": key_messages_str,
+            "spec_name": spec.name,
+            "positioning": spec.positioning or "",
+            "tagline": spec.tagline or "",
+            "differentiation": spec.differentiation or "",
+            "audience": spec.audience or "",
+            "brand_personality": spec.brand_personality or "",
+            "assertions": key_messages_str,
             "personas_detail": personas_str,
             "context": context_block,
             "primary_message": messages[0].content if messages else "",

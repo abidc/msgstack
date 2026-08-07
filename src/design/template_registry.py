@@ -78,7 +78,7 @@ def build_datasheet_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
-            text_content="{house_name} | {tagline}",
+            text_content="{spec_name} | {tagline}",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -118,7 +118,7 @@ def build_battlecard_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
-            text_content="{house_name} vs {competitor}",
+            text_content="{spec_name} vs {competitor}",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -140,7 +140,7 @@ def build_battlecard_template() -> Template:
         ),
         Zone(
             id="cta_footer", type=ZoneType.CTA_FOOTER, row=4, col=0, colspan=3,
-            text_content="Choose {house_name} — the smarter choice.",
+            text_content="Choose {spec_name} — the smarter choice.",
             text_style=TextStyle.BODY, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -158,7 +158,7 @@ def build_social_card_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=4,
-            text_content="{house_name}",
+            text_content="{spec_name}",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -193,7 +193,7 @@ def build_executive_summary_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
-            text_content="{house_name} | Executive Summary",
+            text_content="{spec_name} | Executive Summary",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -221,7 +221,7 @@ def build_executive_summary_template() -> Template:
         ),
         Zone(
             id="cta_footer", type=ZoneType.CTA_FOOTER, row=5, col=0, colspan=3,
-            text_content="Learn more at {house_name}.com",
+            text_content="Learn more at {spec_name}.com",
             text_style=TextStyle.BODY, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -239,7 +239,7 @@ def build_product_tearsheet_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
-            text_content="{house_name} | Product Tear-Sheet",
+            text_content="{spec_name} | Product Tear-Sheet",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -285,7 +285,7 @@ def build_capability_brief_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
-            text_content="{house_name} | Capability Brief",
+            text_content="{spec_name} | Capability Brief",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -326,7 +326,7 @@ def build_roi_one_pager_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
-            text_content="{house_name} | Business Value & ROI",
+            text_content="{spec_name} | Business Value & ROI",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -389,7 +389,7 @@ def build_persona_profile_template() -> Template:
         ),
         Zone(
             id="cta_footer", type=ZoneType.CTA_FOOTER, row=4, col=0, colspan=4,
-            text_content="Back to {house_name} Brand Center",
+            text_content="Back to {spec_name} Brand Center",
             text_style=TextStyle.BODY, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -407,7 +407,7 @@ def build_feature_release_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=4,
-            text_content="{house_name} | Feature Release Announcement",
+            text_content="{spec_name} | Feature Release Announcement",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -442,7 +442,7 @@ def build_case_study_template() -> Template:
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=3,
-            text_content="{house_name} | Customer Case Study",
+            text_content="{spec_name} | Customer Case Study",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),

@@ -7,8 +7,8 @@ os.environ.setdefault("PINECONE_API_KEY", "test-key")
 
 import pytest
 from src.models import (
-    CanonDomain, CanonEntry, CanonDomain, SectionType, EntryStatus,
-    ContentTier, DomainStatus, SearchFilters,
+    Spec, Assertion, Spec, SectionType, AssertionStatus,
+    ContentTier, SpecStatus, SearchFilters,
 )
 from src.store import Store
 
@@ -23,26 +23,26 @@ def store(tmp_path):
 
 @pytest.fixture
 def seeded_domain(store):
-    domain = CanonDomain(
+    domain = Spec(
         name="Tiering Test Domain",
         summary="A domain for content tiering tests.",
         positioning="Positioning for tiering tests.",
-        status=DomainStatus.ACTIVE,
+        status=SpecStatus.ACTIVE,
     )
-    store.upsert_canon_domain(domain)
+    store.upsert_spec(domain)
     return domain
 
 
-def _create_entry(store, domain, content, status=EntryStatus.DRAFT, section_type=SectionType.HEADLINE, priority=1, content_tier=None):
-    entry = CanonEntry(
-        canon_domain_id=domain.id,
+def _create_entry(store, domain, content, status=AssertionStatus.DRAFT, section_type=SectionType.HEADLINE, priority=1, content_tier=None):
+    entry = Assertion(
+        spec_id=domain.id,
         section_type=section_type,
         priority=priority,
         content=content,
         status=status,
         content_tier=content_tier,
     )
-    store.upsert_canon_entry(entry)
+    store.upsert_assertion(entry)
     return entry
 
 
@@ -56,30 +56,30 @@ class TestContentTierEnum:
 
 
 class TestContentTierOnEntry:
-    """Content tier stored and retrieved on CanonEntry."""
+    """Content tier stored and retrieved on Assertion."""
 
     def test_create_entry_with_tier(self, store, seeded_domain):
         entry = _create_entry(store, seeded_domain, "T1 entry", content_tier=ContentTier.TIER_1_LOCKED)
-        fetched = store.get_canon_entry(entry.id)
+        fetched = store.get_assertion(entry.id)
         assert fetched is not None
         assert fetched.content_tier == "tier_1_locked"
 
     def test_create_entry_without_tier(self, store, seeded_domain):
         entry = _create_entry(store, seeded_domain, "No tier entry", content_tier=None)
-        fetched = store.get_canon_entry(entry.id)
+        fetched = store.get_assertion(entry.id)
         assert fetched is not None
         assert fetched.content_tier is None
 
     def test_update_entry_tier(self, store, seeded_domain):
         entry = _create_entry(store, seeded_domain, "Upgradeable", content_tier=ContentTier.TIER_3_GROUNDED)
         store.update_entry_tier(str(entry.id), "tier_1_locked")
-        fetched = store.get_canon_entry(entry.id)
+        fetched = store.get_assertion(entry.id)
         assert fetched.content_tier == "tier_1_locked"
 
     def test_clear_entry_tier(self, store, seeded_domain):
         entry = _create_entry(store, seeded_domain, "Clearable", content_tier=ContentTier.TIER_2_STRUCTURED)
         store.update_entry_tier(str(entry.id), None)
-        fetched = store.get_canon_entry(entry.id)
+        fetched = store.get_assertion(entry.id)
         assert fetched.content_tier is None
 
     def test_update_tier_nonexistent_entry(self, store):
@@ -125,13 +125,13 @@ class TestPromotionGate:
 
 
 class TestTierOnRetrievedEntries:
-    """get_canon_entries includes content_tier."""
+    """get_assertions includes content_tier."""
 
     def test_entries_include_tier(self, store, seeded_domain):
-        _create_entry(store, seeded_domain, "T1", content_tier=ContentTier.TIER_1_LOCKED, status=EntryStatus.APPROVED)
-        _create_entry(store, seeded_domain, "T2", content_tier=ContentTier.TIER_2_STRUCTURED, status=EntryStatus.APPROVED)
-        _create_entry(store, seeded_domain, "No tier", status=EntryStatus.APPROVED)
-        entries = store.get_canon_entries(seeded_domain.id)
+        _create_entry(store, seeded_domain, "T1", content_tier=ContentTier.TIER_1_LOCKED, status=AssertionStatus.APPROVED)
+        _create_entry(store, seeded_domain, "T2", content_tier=ContentTier.TIER_2_STRUCTURED, status=AssertionStatus.APPROVED)
+        _create_entry(store, seeded_domain, "No tier", status=AssertionStatus.APPROVED)
+        entries = store.get_assertions(seeded_domain.id)
         assert len(entries) == 3
         tiers = {e.content_tier for e in entries}
         assert "tier_1_locked" in tiers
@@ -150,51 +150,51 @@ class TestGeneratorTierGrounding:
         from src.pipeline.generator import ArtifactGenerator
         with patch("src.pipeline.generator.OpenAI"):
             gen = ArtifactGenerator(store, "test-key")
-        return gen._build_context(seeded_domain, store.get_canon_entries(seeded_domain.id), [], {})
+        return gen._build_context(seeded_domain, store.get_assertions(seeded_domain.id), [], {})
 
     def test_untierd_entries_are_included(self, store, seeded_domain):
         """A domain whose entries ALL have NULL tier must still ground generation."""
-        _create_entry(store, seeded_domain, "Legacy entry one", status=EntryStatus.APPROVED)
-        _create_entry(store, seeded_domain, "Legacy entry two", status=EntryStatus.APPROVED)
+        _create_entry(store, seeded_domain, "Legacy entry one", status=AssertionStatus.APPROVED)
+        _create_entry(store, seeded_domain, "Legacy entry two", status=AssertionStatus.APPROVED)
         context = self._build(store, seeded_domain)
-        assert "Legacy entry one" in context["key_messages"]
-        assert "Legacy entry two" in context["key_messages"]
+        assert "Legacy entry one" in context["assertions"]
+        assert "Legacy entry two" in context["assertions"]
 
     def test_mixed_tiers_all_included(self, store, seeded_domain):
-        _create_entry(store, seeded_domain, "T1 msg", content_tier=ContentTier.TIER_1_LOCKED, status=EntryStatus.APPROVED)
-        _create_entry(store, seeded_domain, "T2 msg", content_tier=ContentTier.TIER_2_STRUCTURED, status=EntryStatus.APPROVED)
-        _create_entry(store, seeded_domain, "No tier msg", status=EntryStatus.APPROVED)
+        _create_entry(store, seeded_domain, "T1 msg", content_tier=ContentTier.TIER_1_LOCKED, status=AssertionStatus.APPROVED)
+        _create_entry(store, seeded_domain, "T2 msg", content_tier=ContentTier.TIER_2_STRUCTURED, status=AssertionStatus.APPROVED)
+        _create_entry(store, seeded_domain, "No tier msg", status=AssertionStatus.APPROVED)
         context = self._build(store, seeded_domain)
-        assert "T1 msg" in context["key_messages"]
-        assert "T2 msg" in context["key_messages"]
-        assert "No tier msg" in context["key_messages"]
+        assert "T1 msg" in context["assertions"]
+        assert "T2 msg" in context["assertions"]
+        assert "No tier msg" in context["assertions"]
 
     def test_tier1_verbatim_directive_present(self, store, seeded_domain):
-        _create_entry(store, seeded_domain, "Locked tagline text", content_tier=ContentTier.TIER_1_LOCKED, status=EntryStatus.APPROVED)
+        _create_entry(store, seeded_domain, "Locked tagline text", content_tier=ContentTier.TIER_1_LOCKED, status=AssertionStatus.APPROVED)
         context = self._build(store, seeded_domain)
-        km = context["key_messages"]
+        km = context["assertions"]
         assert "TIER 1 — LOCKED" in km
         assert "VERBATIM" in km
         assert "Locked tagline text" in km
 
     def test_tier2_directive_present(self, store, seeded_domain):
-        _create_entry(store, seeded_domain, "Structured claim", content_tier=ContentTier.TIER_2_STRUCTURED, status=EntryStatus.APPROVED)
+        _create_entry(store, seeded_domain, "Structured claim", content_tier=ContentTier.TIER_2_STRUCTURED, status=AssertionStatus.APPROVED)
         context = self._build(store, seeded_domain)
-        assert "TIER 2" in context["key_messages"]
+        assert "TIER 2" in context["assertions"]
 
     def test_untierd_entries_carry_no_directive(self, store, seeded_domain):
-        _create_entry(store, seeded_domain, "Plain legacy entry", status=EntryStatus.APPROVED)
+        _create_entry(store, seeded_domain, "Plain legacy entry", status=AssertionStatus.APPROVED)
         context = self._build(store, seeded_domain)
-        assert "TIER 1" not in context["key_messages"]
-        assert "TIER 2" not in context["key_messages"]
+        assert "TIER 1" not in context["assertions"]
+        assert "TIER 2" not in context["assertions"]
 
 
 class TestTier1VerbatimValidation:
     """Post-generation verbatim check for Tier 1 entries."""
 
     def _entry(self, content, tier=ContentTier.TIER_1_LOCKED):
-        return CanonEntry(
-            canon_domain_id=uuid4(),
+        return Assertion(
+            spec_id=uuid4(),
             section_type=SectionType.HEADLINE,
             priority=1,
             content=content,
@@ -243,7 +243,7 @@ class TestTierMigration:
         s.init()
         from sqlalchemy import inspect
         insp = inspect(s.engine)
-        cols = {c["name"] for c in insp.get_columns("canon_entries")}
+        cols = {c["name"] for c in insp.get_columns("assertions")}
         assert "content_tier" in cols
 
     def test_migration_adds_vector_column(self, tmp_path):
