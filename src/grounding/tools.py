@@ -2,7 +2,6 @@
 
 import logging
 import os
-import time
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -98,7 +97,6 @@ def search_messaging(
     engine = _get_engine(workspace_id)
     session = get_session()
 
-    _t0 = time.monotonic()
     response = engine.search(
         query=query,
         filters=filters,
@@ -107,51 +105,7 @@ def search_messaging(
     )
 
     session.update_from_search(response.results, response.grounding_context)
-    _log_search_query(
-        query=query,
-        response=response,
-        tool="search_canon",
-        workspace_id=workspace_id,
-        latency_ms=(time.monotonic() - _t0) * 1000,
-    )
     return response
-
-
-def _log_search_query(
-    query: str,
-    response: GroundingResponse,
-    tool: str,
-    workspace_id: Optional[str] = None,
-    latency_ms: float = 0.0,
-    caller: str = "mcp-session",
-    surface: str = "mcp",
-) -> None:
-    """Write a query-audit row for a grounding search. Never raises — a
-    logging failure must not fail or slow the query."""
-    try:
-        from src.models import QueryAuditLog
-
-        store = _get_store()
-        results = getattr(response, "results", None) or []
-        entry_ids = [r.chunk_id for r in results]
-        domain_ids = sorted({
-            str(r.source.get("house_id"))
-            for r in results
-            if isinstance(r.source, dict) and r.source.get("house_id")
-        })
-        top_confidence = max((r.confidence for r in results), default=0.0)
-        store.log_query(QueryAuditLog(
-            workspace_id=workspace_id or "default",
-            user_id=caller,
-            query_text=query,
-            entries_used=entry_ids,
-            domain_ids=domain_ids,
-            top_confidence=top_confidence,
-            latency_ms=round(latency_ms, 1),
-            source=f"{surface}:{tool}",
-        ))
-    except Exception as e:
-        log.warning("Query audit logging failed (non-blocking): %s", e)
 
 
 def set_active_house(house_id: str) -> dict:

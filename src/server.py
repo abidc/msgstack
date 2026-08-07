@@ -987,33 +987,6 @@ def list_departments() -> dict:
     return {"departments": result}
 
 
-@mcp.tool()
-def get_query_audit_log(
-    limit: int = 100,
-    source: Optional[str] = None,
-    caller: Optional[str] = None,
-    domain_id: Optional[str] = None,
-) -> dict:
-    """Retrieve a log of all grounding query activity for auditing and compliance.
-
-    Returns the most recent queries submitted through the system, including
-    the query text, entries returned, domains touched, top confidence, and
-    latency. Use this tool to review usage patterns, verify compliance, or
-    debug retrieval issues.
-
-    Args:
-        limit: Maximum number of log entries to return (default 100, max 1000).
-        source: Filter by source (e.g. 'mcp:search_canon', 'web:chat'). All sources if omitted.
-        caller: Filter by caller identity (API-key name, 'mcp-session', 'web').
-        domain_id: Filter to queries whose results touched this canon domain.
-    """
-    store = get_store()
-    log = store.get_query_log(
-        limit=min(limit, 1000), source=source, caller=caller, domain_id=domain_id
-    )
-    return {"entries": log, "count": len(log)}
-
-
 # ── MCP Prompts ──────────────────────────────────────────────────────────────
 # Clients that support prompts/list (OpenWebUI, Claude Desktop, etc.) will
 # discover these and can inject them as system messages automatically.

@@ -33,10 +33,9 @@ from sqlalchemy.orm import (
 
 from src.models import (
     BrandSettings, Channel, ContentTier, DocumentType, DomainStatus, EntryStatus,
-    CanonDomain, CanonEntry, Persona, SectionType, QueryAuditLog,
+    CanonDomain, CanonEntry, Persona, SectionType,
     HouseStatus, KeyMessage, MessageHouse,  # Deprecated aliases
-    UserRole, InheritancePolicy, UserProfile, ElementPermission,
-    ArtifactEntryBinding, TemporaryCanonOverlay
+    InheritancePolicy, ArtifactEntryBinding,
 )
 
 
@@ -77,27 +76,6 @@ class Base(DeclarativeBase):
     pass
 
 
-class UserModel(Base):
-    __tablename__ = "users"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    department: Mapped[str] = mapped_column(String(100), nullable=False, default="General")
-    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-
-class ElementPermissionModel(Base):
-    __tablename__ = "element_permissions"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    target_id: Mapped[str] = mapped_column(String(36), nullable=False)  # Domain or Entry UUID
-    role: Mapped[str] = mapped_column(String(30), nullable=False, default="viewer")
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-
 class ArtifactEntryBindingModel(Base):
     __tablename__ = "artifact_entry_bindings"
 
@@ -109,35 +87,6 @@ class ArtifactEntryBindingModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
-class TemporaryCanonOverlayModel(Base):
-    __tablename__ = "temporary_canon_overlays"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    priority: Mapped[int] = mapped_column(Integer, default=1)
-    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-
-class QueryAuditLogModel(Base):
-    __tablename__ = "query_audit_log"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
-    session_id: Mapped[str] = mapped_column(String(255), default="")
-    user_id: Mapped[str] = mapped_column(String(255), default="")
-    query_text: Mapped[str] = mapped_column(Text, nullable=False)
-    model_used: Mapped[str] = mapped_column(String(255), default="")
-    artifacts_used: Mapped[str] = mapped_column(Text, default="[]")
-    entries_used: Mapped[str] = mapped_column(Text, default="[]")
-    domain_ids: Mapped[str] = mapped_column(Text, default="[]")
-    top_confidence: Mapped[float] = mapped_column(Float, default=0.0)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
-    tokens_used: Mapped[int] = mapped_column(Integer, default=0)
-    source: Mapped[str] = mapped_column(String(50), default="")
 
 
 class WorkspaceModel(Base):
@@ -412,7 +361,6 @@ class ArtifactHistoryModel(Base):
     sections_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     raw_content: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="draft")
-    is_gold_standard: Mapped[bool] = mapped_column(Boolean, default=False)
     alignment_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
@@ -614,11 +562,8 @@ Index("ix_review_logs_timestamp", ReviewLogModel.timestamp)
 Index("ix_artifact_rating_artifact_id", ArtifactRatingModel.artifact_id)
 Index("ix_chunk_usage_chunk_id", ChunkUsageStatModel.chunk_id)
 Index("ix_vector_metadata_house_id", VectorMetadataModel.canon_domain_id)
-Index("ix_permission_user", ElementPermissionModel.user_id)
-Index("ix_permission_target", ElementPermissionModel.target_id)
 Index("ix_binding_artifact", ArtifactEntryBindingModel.artifact_id)
 Index("ix_binding_entry", ArtifactEntryBindingModel.canon_entry_id)
-Index("ix_overlay_workspace", TemporaryCanonOverlayModel.workspace_id)
 
 
 class Store:
@@ -776,19 +721,6 @@ class Store:
                     except Exception:
                         pass
 
-            if "query_audit_log" in tables:
-                qal_cols = {c["name"] for c in insp.get_columns("query_audit_log")}
-                for col, col_def in (
-                    ("domain_ids", "TEXT DEFAULT '[]'"),
-                    ("top_confidence", "FLOAT DEFAULT 0.0"),
-                ):
-                    if col not in qal_cols:
-                        try:
-                            conn.execute(text(f"ALTER TABLE query_audit_log ADD COLUMN {col} {col_def}"))
-                            conn.commit()
-                        except Exception:
-                            pass
-
             if "pillars" not in tables:
                 conn.execute(text("""
                     CREATE TABLE pillars (
@@ -892,38 +824,6 @@ class Store:
                         conn.commit()
                     except Exception:
                         pass
-                if "is_gold_standard" not in ah_cols:
-                    try:
-                        conn.execute(text("ALTER TABLE artifact_history ADD COLUMN is_gold_standard BOOLEAN DEFAULT 0"))
-                        conn.commit()
-                    except Exception:
-                        pass
-
-            if "users" not in tables:
-                conn.execute(text("""
-                    CREATE TABLE users (
-                        id VARCHAR(36) PRIMARY KEY,
-                        email VARCHAR(255) UNIQUE NOT NULL,
-                        name VARCHAR(255) NOT NULL,
-                        department VARCHAR(100) NOT NULL DEFAULT 'General',
-                        is_admin BOOLEAN DEFAULT 0,
-                        created_at DATETIME NOT NULL
-                    )
-                """))
-                conn.commit()
-
-            if "element_permissions" not in tables:
-                conn.execute(text("""
-                    CREATE TABLE element_permissions (
-                        id VARCHAR(36) PRIMARY KEY,
-                        user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                        target_id VARCHAR(36) NOT NULL,
-                        role VARCHAR(30) NOT NULL DEFAULT 'viewer',
-                        created_at DATETIME NOT NULL
-                    )
-                """))
-                conn.commit()
-
             if "artifact_entry_bindings" not in tables:
                 conn.execute(text("""
                     CREATE TABLE artifact_entry_bindings (
@@ -932,20 +832,6 @@ class Store:
                         canon_entry_id VARCHAR(36) NOT NULL REFERENCES canon_entries(id) ON DELETE CASCADE,
                         element_type VARCHAR(50) NOT NULL,
                         bound_text TEXT,
-                        created_at DATETIME NOT NULL
-                    )
-                """))
-                conn.commit()
-
-            if "temporary_canon_overlays" not in tables:
-                conn.execute(text("""
-                    CREATE TABLE temporary_canon_overlays (
-                        id VARCHAR(36) PRIMARY KEY,
-                        workspace_id VARCHAR(36) NOT NULL DEFAULT 'default',
-                        content TEXT NOT NULL,
-                        priority INTEGER DEFAULT 1,
-                        created_by VARCHAR(255) NOT NULL,
-                        expires_at DATETIME NOT NULL,
                         created_at DATETIME NOT NULL
                     )
                 """))
@@ -2985,72 +2871,6 @@ class Store:
 
     # ── Query Audit Log ──────────────────────────────────────────────────────
 
-    def log_query(self, entry: QueryAuditLog) -> None:
-        with self.session() as s:
-            s.add(QueryAuditLogModel(
-                id=str(entry.id),
-                workspace_id=entry.workspace_id,
-                session_id=entry.session_id,
-                user_id=entry.user_id,
-                query_text=entry.query_text,
-                model_used=entry.model_used,
-                artifacts_used=json.dumps(entry.artifacts_used) if entry.artifacts_used else "[]",
-                entries_used=json.dumps(entry.entries_used) if entry.entries_used else "[]",
-                domain_ids=json.dumps(entry.domain_ids) if entry.domain_ids else "[]",
-                top_confidence=entry.top_confidence,
-                timestamp=entry.timestamp,
-                latency_ms=entry.latency_ms,
-                tokens_used=entry.tokens_used,
-                source=entry.source,
-            ))
-            s.commit()
-
-    def get_query_log(
-        self,
-        limit: int = 100,
-        source: str | None = None,
-        caller: str | None = None,
-        domain_id: str | None = None,
-        since: datetime | None = None,
-    ) -> list[dict]:
-        with self.session() as s:
-            q = s.query(QueryAuditLogModel).order_by(QueryAuditLogModel.timestamp.desc())
-            if source:
-                q = q.filter(QueryAuditLogModel.source == source)
-            if caller:
-                q = q.filter(QueryAuditLogModel.user_id == caller)
-            if domain_id:
-                q = q.filter(QueryAuditLogModel.domain_ids.contains(str(domain_id)))
-            if since:
-                q = q.filter(QueryAuditLogModel.timestamp >= since)
-            rows = q.limit(limit).all()
-            return [
-                {
-                    "id": r.id,
-                    "workspace_id": r.workspace_id,
-                    "session_id": r.session_id,
-                    "user_id": r.user_id,
-                    "query_text": r.query_text,
-                    "model_used": r.model_used,
-                    "artifacts_used": json.loads(r.artifacts_used or "[]"),
-                    "entries_used": json.loads(r.entries_used or "[]"),
-                    "domain_ids": json.loads(r.domain_ids or "[]"),
-                    "top_confidence": r.top_confidence,
-                    "timestamp": r.timestamp.isoformat(),
-                    "latency_ms": r.latency_ms,
-                    "tokens_used": r.tokens_used,
-                    "source": r.source,
-                }
-                for r in rows
-            ]
-
-    def clean_query_log(self, older_than_days: int = 90) -> int:
-        cutoff = _now() - timedelta(days=older_than_days)
-        with self.session() as s:
-            deleted = s.query(QueryAuditLogModel).filter(QueryAuditLogModel.timestamp < cutoff).delete()
-            s.commit()
-            return deleted
-
     # ── Phase 4: Staleness / Last Reviewed ───────────────────────────────────
 
     def mark_domain_reviewed(self, domain_id: str, reviewed_by: str = "admin") -> dict | None:
@@ -3160,72 +2980,6 @@ class Store:
     get_message_usage_stats = get_entry_usage_stats  # Deprecated alias
 
     # ==========================================
-    # User Profile Helpers
-    # ==========================================
-    def create_user(self, email: str, name: str, department: str = "General", is_admin: bool = False) -> dict:
-        user_id = str(uuid4())
-        model = UserModel(
-            id=user_id,
-            email=email,
-            name=name,
-            department=department,
-            is_admin=is_admin,
-            created_at=_now()
-        )
-        with self.session_factory() as session:
-            session.add(model)
-            session.commit()
-        return {"id": user_id, "email": email, "name": name, "department": department, "is_admin": is_admin}
-
-    def get_user_by_email(self, email: str) -> Optional[dict]:
-        with self.session_factory() as session:
-            model = session.query(UserModel).filter(UserModel.email == email).first()
-            if not model:
-                return None
-            return {
-                "id": UUID(model.id),
-                "email": model.email,
-                "name": model.name,
-                "department": model.department,
-                "is_admin": model.is_admin
-            }
-
-    # ==========================================
-    # Element Permissions Helpers
-    # ==========================================
-    def add_element_permission(self, user_id: str | UUID, target_id: str | UUID, role: str) -> str:
-        perm_id = str(uuid4())
-        model = ElementPermissionModel(
-            id=perm_id,
-            user_id=str(user_id),
-            target_id=str(target_id),
-            role=role,
-            created_at=_now()
-        )
-        with self.session_factory() as session:
-            session.add(model)
-            session.commit()
-        return perm_id
-
-    def check_permission(self, user_id: str | UUID, target_id: str | UUID, required_role: str) -> bool:
-        # Hierarchy: owner > collaborator > suggester > viewer
-        role_hierarchy = {"owner": 4, "collaborator": 3, "suggester": 2, "viewer": 1}
-        with self.session_factory() as session:
-            # Check user role on targets
-            perm = session.query(ElementPermissionModel).filter(
-                ElementPermissionModel.user_id == str(user_id),
-                ElementPermissionModel.target_id == str(target_id)
-            ).first()
-            if not perm:
-                # Admins have full access
-                user = session.query(UserModel).filter(UserModel.id == str(user_id)).first()
-                return user.is_admin if user else False
-            
-            user_rank = role_hierarchy.get(perm.role, 0)
-            req_rank = role_hierarchy.get(required_role, 0)
-            return user_rank >= req_rank
-
-    # ==========================================
     # Artifact Entry Bindings Helpers
     # ==========================================
     def bind_artifact_entry(self, artifact_id: str | UUID, entry_id: str | UUID, element_type: str, text: str) -> str:
@@ -3255,44 +3009,6 @@ class Store:
                     "canon_entry_id": UUID(m.canon_entry_id),
                     "element_type": m.element_type,
                     "bound_text": m.bound_text
-                }
-                for m in models
-            ]
-
-    # ==========================================
-    # Temporary Overlay Helpers
-    # ==========================================
-    def add_temporary_overlay(self, workspace_id: str, content: str, priority: int, expires_at: datetime, created_by: str) -> str:
-        overlay_id = str(uuid4())
-        model = TemporaryCanonOverlayModel(
-            id=overlay_id,
-            workspace_id=workspace_id,
-            content=content,
-            priority=priority,
-            created_by=created_by,
-            expires_at=expires_at,
-            created_at=_now()
-        )
-        with self.session_factory() as session:
-            session.add(model)
-            session.commit()
-        return overlay_id
-
-    def get_active_overlays(self, workspace_id: str) -> list[dict]:
-        now = datetime.now()
-        with self.session_factory() as session:
-            models = session.query(TemporaryCanonOverlayModel).filter(
-                TemporaryCanonOverlayModel.workspace_id == workspace_id,
-                TemporaryCanonOverlayModel.expires_at > now
-            ).order_by(TemporaryCanonOverlayModel.priority.desc()).all()
-            return [
-                {
-                    "id": UUID(m.id),
-                    "workspace_id": m.workspace_id,
-                    "content": m.content,
-                    "priority": m.priority,
-                    "created_by": m.created_by,
-                    "expires_at": m.expires_at
                 }
                 for m in models
             ]

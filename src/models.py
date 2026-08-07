@@ -93,13 +93,6 @@ class ArtifactStatus(str, Enum):
     APPROVED = "approved"
 
 
-class UserRole(str, Enum):
-    OWNER = "owner"
-    COLLABORATOR = "collaborator"
-    SUGGESTER = "suggester"
-    VIEWER = "viewer"
-
-
 class InheritancePolicy(str, Enum):
     FULL = "full"
     SELECTIVE_OVERRIDE = "selective_override"
@@ -513,21 +506,6 @@ class SearchFilters(BaseModel):
         self.canon_domains = value
 
 
-class UserProfile(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
-    email: str
-    name: str
-    department: str
-    is_admin: bool = False
-
-
-class ElementPermission(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
-    user_id: UUID
-    target_id: UUID  # References CanonDomain or CanonEntry ID
-    role: UserRole
-
-
 class ArtifactEntryBinding(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     artifact_id: UUID
@@ -536,27 +514,3 @@ class ArtifactEntryBinding(BaseModel):
     bound_text: str
 
 
-class TemporaryCanonOverlay(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
-    workspace_id: UUID
-    content: str
-    priority: int = 1
-    created_by: str
-    expires_at: datetime
-
-
-class QueryAuditLog(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
-    workspace_id: str = "default"
-    session_id: str = ""
-    user_id: str = ""  # caller identity: API-key name, "mcp-session", or "web"
-    query_text: str
-    model_used: str = ""
-    artifacts_used: list[str] = Field(default_factory=list)
-    entries_used: list[str] = Field(default_factory=list)
-    domain_ids: list[str] = Field(default_factory=list)
-    top_confidence: float = 0.0
-    timestamp: datetime = Field(default_factory=datetime.now)
-    latency_ms: float = 0.0
-    tokens_used: int = 0
-    source: str = ""  # e.g. "mcp:search_canon", "web:chat"

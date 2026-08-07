@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
 from src.models import (
     ArtifactStatus, Channel, GroundingType, DocumentType, DomainStatus, EntryStatus,
-    CanonEntry, CanonDomain, Persona, SectionType, QueryAuditLog,
+    CanonEntry, CanonDomain, Persona, SectionType,
     HouseStatus, KeyMessage, MessageHouse, MessageStatus  # Deprecated aliases
 )
 from src.store import init_store, get_store
@@ -111,15 +111,6 @@ async def startup_event():
         log.info("Default templates seeded successfully")
     except Exception as e:
         log.warning("Default templates seeding failed: %s", e)
-
-    # Query audit log retention prune (QUERY_LOG_RETENTION_DAYS, default 90)
-    try:
-        from src.config import settings as _settings
-        deleted = store.clean_query_log(older_than_days=_settings.query_log_retention_days)
-        if deleted:
-            log.info("Query audit log: pruned %d rows older than %d days", deleted, _settings.query_log_retention_days)
-    except Exception as e:
-        log.warning("Query audit log prune failed: %s", e)
 
 def _check_token_budget(workspace_id: str) -> None:
     """Raise HTTP 402 if workspace token budget is exhausted."""
@@ -4092,26 +4083,6 @@ def api_chat_stream(req: ChatRequest, auth: AuthContext = Depends(get_auth_conte
     except Exception as e:
         raise HTTPException(500, f"Streaming connection failed: {e}")
 
-
-# ── Query Audit Log ─────────────────────────────────────────────────────────
-
-@app.get("/api/query-log")
-def get_query_log(
-    limit: int = Query(100, ge=1, le=1000),
-    source: Optional[str] = Query(None),
-    caller: Optional[str] = Query(None),
-    domain_id: Optional[str] = Query(None),
-    since: Optional[datetime] = Query(None),
-):
-    return store.get_query_log(
-        limit=limit, source=source, caller=caller, domain_id=domain_id, since=since
-    )
-
-
-@app.delete("/api/query-log/cleanup")
-def clean_query_log(older_than_days: int = Query(90, ge=1)):
-    deleted = store.clean_query_log(older_than_days=older_than_days)
-    return {"ok": True, "deleted": deleted}
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse)
