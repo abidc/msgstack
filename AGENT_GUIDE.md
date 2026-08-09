@@ -10,7 +10,7 @@ Use MsgStack to ground any content, code, or answers you generate. Never invent 
 
 MsgStack is organized into **Specs**. A domain represents a department's or product's source of truth:
 - **Product specifications, capabilities, and release facts** (owned by Product teams, covering sub-domains like core specs, API documentation, developer guidelines, and release notes)
-- **Marketing positioning, pillars, taglines, and audiences** (owned by Product Marketing SMEs)
+- **Capabilities, interface contracts, constraints, and SLAs** (owned by the team that runs the service)
 - **Approved disclosures, legal boundaries, and trademarks** (owned by Legal SMEs)
 - **Company policies, benefits summaries, and values** (owned by HR SMEs)
 - **Security standards, SOC 2 compliance facts, and data retention rules** (owned by Security SMEs)
@@ -24,7 +24,7 @@ Within each domain, content is stored in structured **Assertions** (approved sta
 When interacting with MsgStack, you must adhere to the following architectural guidelines:
 
 1. **Vocabulary**: **Spec** and **Assertion** are the canonical terms. The pre-v2 terms *canon domain*, *canon entry*, *message house* and *key message* are retired; `canon_*` field names are accepted for one more version.
-2. **First Wedge & Expansion**: Product marketing is the initial wedge. However, you should actively support expansion into technical, operational, and compliance domains.
+2. **Audience**: Product and engineering teams, and people wiring agents into their own stacks. Assertions describe services — constraints, SLAs, deprecations, interface contracts — not marketing copy.
 3. **Product Org Sub-domains**: The Product department represents a family of distinct specs (e.g., core specs, API rules, developer policies, release metadata) owned by different engineering and product owners.
 4. **Scope Guards (What MsgStack is NOT)**: MsgStack is not a comms engine, notification pipeline, or content manager. It does not send email, SMS, push notifications, or schedule social media. It is strictly an **authoritative grounding and alignment layer**.
 

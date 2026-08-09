@@ -184,7 +184,7 @@ Stakeholders like sales reps, regional teams, and external writers do not need t
 
 | Type | Status | Department | Schema Focus |
 |------|--------|------------|--------------|
-| `engineering_spec` | **ACTIVE** | Product Marketing | Brand pillars, SLAs, audiences, objection handlers |
+| `engineering_spec` | **ACTIVE** | Engineering | Capabilities, interface contracts, constraints, version policy |
 | `engineering_spec` | **PLANNED — v1.0** | Engineering | API constraints, system SLAs, versioning policy, deprecation notices |
 | `policy_shield` | **PLANNED — v1.0** | Legal & Compliance | Legal disclaimers, privacy rules, compliance assertions, approved responses |
 | `brand_guide` | BACKLOG | Brand / Design | Voice, tone, visual identity, approved terminology |
@@ -472,7 +472,7 @@ A generated artifact is considered "grounded" if:
 - Design System Foundation: brand settings, templates registry.
 - Canvas Renderer: Fabric.js, Reveal.js, Penpot integrations.
 
-### v0.9 — Spec graph Governance Layer
+### v0.9 — Retrieval & Tiering
 - Alignment Scoring: continuous scoring and drift reports; soft vs. hard conflict classification; third-party export interface.
 - Suggestion Workflows: suggestion routing, element-level RBAC (4 permission levels), and conflict review set routing.
 - Deliverable custom inputs: brand voice tonal sliders and controlled vocabulary checks.

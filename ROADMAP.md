@@ -8,7 +8,7 @@
 
 MsgStack is the **graph layer** for the organization. Departments own their domains of truth. AI tools and content workflows ground on that graph. When graph changes, downstream outputs stay aligned.
 
-MsgStack begins with product marketing because that is the highest-value first wedge. However, the underlying model is designed as an spec graph layer. This roadmap maps the path to full cross-department specs owned by SMEs in Product (including core spec, API, and technical document owners), Marketing, Legal, HR, Support, and Security.
+MsgStack is a memory layer for agents: facts about your services stored as typed nodes in a graph, queried over MCP, and invalidated when a dependency changes. This roadmap maps what shipped and what is next. The v2 repositioning (2026-08) is documented in `STRATEGY_V2.md` — governance features listed in older milestones below were removed, not deferred.
 
 ### Grounding Types — The Multi-Department Vision
 
@@ -16,7 +16,7 @@ Each department gets a **Grounding Type**: a schema that defines how their knowl
 
 | Grounding Type | Department | Status |
 |----------------|------------|--------|
-| **Specs** | Product Marketing | ACTIVE — flagship schema, fully implemented |
+| **Specs** | Engineering | ACTIVE — default schema, fully implemented |
 | **Engineering Spec** | Engineering | PLANNED — v1.0 |
 | **Policy Shield** | Legal & Compliance | PLANNED — v1.0 |
 
@@ -315,9 +315,9 @@ The current canvas app renders basic zones. This stream rebuilds the renderer to
 
 ---
 
-## v0.9 — Spec graph Governance Layer
+## v0.9 — Retrieval & Tiering
 
-**Goal:** Turn MsgStack into the spec graph governance layer, not just a generation tool. This milestone introduces the features that give compliance and brand owners a reason to open MsgStack every week — ensuring all content is verified against approved truth.
+**Goal:** Make retrieval trustworthy — content tiers with verbatim enforcement for locked facts, and alignment scoring for drafts. (The governance features once planned here were cut in v2; see `STRATEGY_V2.md` §5.)
 
 ### Alignment Scoring
 The core governance capability. Evaluates any piece of content against the structured specs and returns a per-section alignment report. Possible only because the graph is machine-readable and semantically indexed.
@@ -405,7 +405,7 @@ Replaces the static 90-day staleness flag with a per-domain operational contract
 - [x] **Bindings Layer:** `ArtifactEntryBinding` maps assertions to downstream artifacts; entry updates flag bound artifacts via `propagation_drift` events.
 
 ### Multi-Domain Dependency Graph
-- [ ] **`INFORMS` / `DEPENDS_ON` Edges:** Define explicit graph relationships between different specs (e.g., Product Specifications `INFORMS` Product Marketing Messaging, which `INFORMS` Sales Objection Handlers, which `INFORMS` Legal Disclosures).
+- [ ] **`INFORMS` / `DEPENDS_ON` Edges:** Define explicit graph relationships between different specs (e.g. `gateway-config` `INFORMS` `payments-api`, which `INFORMS` `integration-guide`).
 - [ ] **Cascade Drift Detection:** When a parent assertion is updated, all downstream messaging and generated battlecards are automatically flagged as "Outdated" and trigger alerts to respective owners.
 
 ### Content CI/CD Promotion Pipeline
