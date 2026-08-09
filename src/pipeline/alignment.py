@@ -42,7 +42,7 @@ class AlignmentEngine:
         # We only want to score against Approved messages, as per the v0.9 spec
         all_msgs = self.store.get_key_messages(spec_id)
         messages = [m for m in all_msgs if m.status in ("approved", "locked")]
-        personas = self.store.get_personas(spec_id)
+        audiences = self.store.get_audiences(spec_id)
 
         # Build context
         context = []
@@ -51,15 +51,15 @@ class AlignmentEngine:
         if spec.differentiation: context.append(f"DIFFERENTIATION: {spec.differentiation}")        
         if spec.audience: context.append(f"TARGET AUDIENCE: {spec.audience}")
 
-        if personas:
+        if audiences:
             context.append("APPROVED PERSONAS:")
-            for p in personas:
-                context.append(f"- {p.name}: {p.pain_points}")
+            for p in audiences:
+                context.append(f"- {p.name}: {p.qa_pairs}")
 
         if messages:
             context.append("APPROVED KEY MESSAGES:")
             for m in messages:
-                stype = getattr(m, "section_type", "message")
+                stype = getattr(m, "assertion_type", "message")
                 tier = getattr(m, "content_tier", None)
                 tier_tag = " | TIER 1 — VERBATIM ONLY" if tier == "tier_1_locked" else ""
                 context.append(f"- [{stype}{tier_tag}] {m.content}")
@@ -81,7 +81,7 @@ class AlignmentEngine:
                             "sentence": sentence,
                             "matched_content": r.content,
                             "confidence": r.confidence,
-                            "section_type": r.section_type
+                            "assertion_type": r.assertion_type
                         })
         except Exception as e:
             # Non-blocking: log vector search warning but proceed with direct comparison
@@ -93,7 +93,7 @@ class AlignmentEngine:
             for vm in vector_matches:
                 vector_alignment_ctx.append(
                     f"- Content fragment: '{vm['sentence']}' matches approved message: '{vm['matched_content']}' "
-                    f"({vm['section_type']}) with semantic confidence {vm['confidence']:.2f}."       
+                    f"({vm['assertion_type']}) with semantic confidence {vm['confidence']:.2f}."       
                 )
             vector_alignment_str = "\n".join(vector_alignment_ctx)
 
@@ -177,7 +177,7 @@ def score_alignment(
     def _entry_line(e) -> str:
         tier = getattr(e, "content_tier", None)
         tier_tag = " | TIER 1 — VERBATIM ONLY" if tier == "tier_1_locked" else ""
-        return f"- [{e.section_type}{tier_tag}] {e.content}"
+        return f"- [{e.assertion_type}{tier_tag}] {e.content}"
 
     reference_context = "\n".join(_entry_line(e) for e in assertions)
 

@@ -7,7 +7,7 @@ os.environ.setdefault("PINECONE_API_KEY", "test-key")
 
 import pytest
 from src.models import (
-    Spec, Assertion, Spec, SectionType, AssertionStatus,
+    Spec, Assertion, Spec, AssertionType, AssertionStatus,
     ContentTier, SpecStatus, SearchFilters,
 )
 from src.store import Store
@@ -33,10 +33,10 @@ def seeded_domain(store):
     return domain
 
 
-def _create_entry(store, domain, content, status=AssertionStatus.DRAFT, section_type=SectionType.HEADLINE, priority=1, content_tier=None):
+def _create_entry(store, domain, content, status=AssertionStatus.DRAFT, assertion_type=AssertionType.CAPABILITY, priority=1, content_tier=None):
     entry = Assertion(
         spec_id=domain.id,
-        section_type=section_type,
+        assertion_type=assertion_type,
         priority=priority,
         content=content,
         status=status,
@@ -195,7 +195,7 @@ class TestTier1VerbatimValidation:
     def _entry(self, content, tier=ContentTier.TIER_1_LOCKED):
         return Assertion(
             spec_id=uuid4(),
-            section_type=SectionType.HEADLINE,
+            assertion_type=AssertionType.CAPABILITY,
             priority=1,
             content=content,
             content_tier=tier,

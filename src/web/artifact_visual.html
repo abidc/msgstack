@@ -121,19 +121,19 @@
     .msg-text { font-size: 13px; color: var(--text-2); line-height: 1.55; }
 
     /* ── Personas ── */
-    .persona-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
-    .persona-card {
+    .audience-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+    .audience-card {
       background: var(--bg-2); border: 1px solid var(--border);
       border-radius: 10px; padding: 18px;
     }
-    .persona-avatar {
+    .audience-avatar {
       width: 36px; height: 36px; border-radius: 10px;
       background: #3E4E80;
       display: flex; align-items: center; justify-content: center;
       color: #fff; font-weight: 800; font-size: 13px; margin-bottom: 10px;
     }
-    .persona-name { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
-    .persona-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; margin-bottom: 10px; }
+    .audience-name { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .audience-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; margin-bottom: 10px; }
     .pain-tag {
       display: inline-block; background: rgba(201,123,108,.14); color: #C97B6C;
       font-size: 10px; font-weight: 500; padding: 2px 7px;
@@ -164,7 +164,7 @@
       .card { background: #EFEADD; border-color: #DAD2BE; page-break-inside: avoid; }
       .prose { color: #5F594A; }
       .msg-text { color: #5F594A; }
-      .persona-card { background: #EFEADD; border-color: #DAD2BE; }
+      .audience-card { background: #EFEADD; border-color: #DAD2BE; }
       .pain-tag { background: rgba(158,59,46,.10); color: #9E3B2E; }
     }
   </style>
@@ -188,7 +188,7 @@
     <div class="hero-pills">
       {% if domain.audience %}<span class="hero-pill">{{ domain.audience[:60] }}</span>{% endif %}
       <span class="hero-pill">{{ entry_count }} entries</span>
-      {% if persona_count > 0 %}<span class="hero-pill">{{ persona_count }} personas</span>{% endif %}
+      {% if audience_count > 0 %}<span class="hero-pill">{{ audience_count }} audiences</span>{% endif %}
     </div>
   </div>
 
@@ -247,16 +247,16 @@
   {% endif %}
 
   <!-- Personas -->
-  {% if personas %}
+  {% if audiences %}
   <div class="card">
-    <div class="card-label">Target Personas &nbsp;·&nbsp; {{ personas|length }} defined</div>
-    <div class="persona-grid">
-      {% for p in personas %}
-      <div class="persona-card">
-        <div class="persona-avatar">{{ p.name[:2]|upper }}</div>
-        <div class="persona-name">{{ p.name }}</div>
-        {% if p.description %}<div class="persona-desc">{{ p.description[:140] }}</div>{% endif %}
-        {% for pp in p.pain_points[:3] %}<span class="pain-tag">{{ pp[:50] }}</span>{% endfor %}
+    <div class="card-label">Target Personas &nbsp;·&nbsp; {{ audiences|length }} defined</div>
+    <div class="audience-grid">
+      {% for p in audiences %}
+      <div class="audience-card">
+        <div class="audience-avatar">{{ p.name[:2]|upper }}</div>
+        <div class="audience-name">{{ p.name }}</div>
+        {% if p.description %}<div class="audience-desc">{{ p.description[:140] }}</div>{% endif %}
+        {% for pp in p.qa_pairs[:3] %}<span class="pain-tag">{{ pp[:50] }}</span>{% endfor %}
       </div>
       {% endfor %}
     </div>

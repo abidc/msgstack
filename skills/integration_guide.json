@@ -1,0 +1,36 @@
+{
+  "id": "integration_guide",
+  "name": "Integration Guide",
+  "description": "A guide for a team integrating with this service: contract, limits, auth, failure modes.",
+  "channels": [
+    "all"
+  ],
+  "sections": [
+    {
+      "key": "overview",
+      "label": "Overview",
+      "required": true
+    },
+    {
+      "key": "interface_contract",
+      "label": "Interface Contract",
+      "required": true
+    },
+    {
+      "key": "limits_and_quotas",
+      "label": "Limits And Quotas",
+      "required": false
+    },
+    {
+      "key": "authentication",
+      "label": "Authentication",
+      "required": false
+    },
+    {
+      "key": "failure_modes",
+      "label": "Failure Modes",
+      "required": false
+    }
+  ],
+  "prompt_template": "You are writing a integration guide for the service described by this spec.\n\n{grounding_context}\n\nUse ONLY the assertions above. Every claim must trace to one. If a required fact is absent, write '[not specified in spec]' rather than inventing it. Reproduce any assertion marked Tier 1 verbatim.\n\nProduce these sections: overview, interface_contract, limits_and_quotas, authentication, failure_modes."
+}

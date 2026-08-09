@@ -1,6 +1,7 @@
 """SQLite / PostgreSQL-backed spec graph storage."""
 
 import json
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,11 +34,15 @@ from sqlalchemy.orm import (
 )
 
 from src.models import (
-    BrandSettings, Channel, ContentTier, GroundingType, SpecStatus, AssertionStatus,
-    Spec, Assertion, Persona, SectionType,
+    BrandSettings, Channel, ContentTier, SchemaType, SpecStatus, AssertionStatus,
+    Spec, Assertion, Audience, AssertionType,
     InheritancePolicy, ArtifactEntryBinding,
     Entity, Edge, NodeType, RelType, PROPAGATING_RELS,
+    LEGACY_SECTION_TYPE_MAP,
 )
+
+
+log = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -68,7 +73,7 @@ def init_store(db_url: str | None = None) -> "Store":
 def _to_db(data: dict) -> dict:
     res = {}
     for k, v in data.items():
-        key = "document_type" if k == "grounding_type" else k
+        key = k
         res[key] = str(v) if isinstance(v, UUID) else v
     return res
 
@@ -194,7 +199,7 @@ class DepartmentModel(Base):
     __tablename__ = "departments"
 
     name: Mapped[str] = mapped_column(String(100), primary_key=True)
-    primary_grounding_type: Mapped[str] = mapped_column(String(50), nullable=False, default="spec")
+    primary_schema_type: Mapped[str] = mapped_column(String(50), nullable=False, default="engineering_spec")
     description: Mapped[str] = mapped_column(String(500), default="")
     workspace_id: Mapped[str] = mapped_column(String(36), nullable=False, default="default")
 
@@ -230,7 +235,7 @@ class SpecModel(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str] = mapped_column(String(50), default="manual")
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    document_type: Mapped[str] = mapped_column(String(30), nullable=False, default="message_house", server_default="message_house")
+    schema_type: Mapped[str] = mapped_column("schema_type", String(30), nullable=False, default="engineering_spec", server_default="engineering_spec")
     summary: Mapped[str] = mapped_column(Text, default="")
     audience: Mapped[str] = mapped_column(Text, default="")
     brand_personality: Mapped[str] = mapped_column(Text, default="")
@@ -248,7 +253,7 @@ class SpecModel(Base):
     assertions: Mapped[list["AssertionModel"]] = relationship(
         back_populates="spec", cascade="all, delete-orphan"
     )
-    personas: Mapped[list["PersonaModel"]] = relationship(
+    audiences: Mapped[list["AudienceModel"]] = relationship(
         back_populates="spec", cascade="all, delete-orphan"
     )
     pillars: Mapped[list["PillarModel"]] = relationship(
@@ -270,24 +275,10 @@ class PillarModel(Base):
     spec: Mapped["SpecModel"] = relationship(back_populates="pillars")
 
 
-class PainPointModel(Base):
-    __tablename__ = "pain_points"
+class QAPairModel(Base):
+    __tablename__ = "qa_pairs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    persona_id: Mapped[str] = mapped_column(String(36), ForeignKey("personas.id", ondelete="CASCADE"), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-
-
-class BuyingTriggerModel(Base):
-    __tablename__ = "buying_triggers"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    persona_id: Mapped[str] = mapped_column(String(36), ForeignKey("personas.id", ondelete="CASCADE"), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-
-
-class ObjectionModel(Base):
-    __tablename__ = "objections"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    persona_id: Mapped[str] = mapped_column(String(36), ForeignKey("personas.id", ondelete="CASCADE"), nullable=False)
+    audience_id: Mapped[str] = mapped_column(String(36), ForeignKey("audiences.id", ondelete="CASCADE"), nullable=False)
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -300,14 +291,14 @@ class AssertionModel(Base):
         String(36), ForeignKey("specs.id"), nullable=False
     )
     pillar_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("pillars.id", ondelete="SET NULL"), nullable=True)
-    section_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    assertion_type: Mapped[str] = mapped_column(String(30), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     variants: Mapped[dict] = mapped_column(JSON, default=dict)
-    personas: Mapped[list] = mapped_column(JSON, default=list)
+    audiences: Mapped[list] = mapped_column(JSON, default=list)
     # Many-to-many relationship with ChannelModel
     channels: Mapped[list["ChannelModel"]] = relationship(
         secondary=assertion_channel_association,
@@ -322,8 +313,8 @@ class AssertionModel(Base):
 KeyMessageModel = AssertionModel  # Deprecated alias
 
 
-class PersonaModel(Base):
-    __tablename__ = "personas"
+class AudienceModel(Base):
+    __tablename__ = "audiences"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     spec_id: Mapped[str] = mapped_column(
@@ -331,14 +322,12 @@ class PersonaModel(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(String(1000), default="")
-    pain_points: Mapped[list] = mapped_column(JSON, default=list)
-    buying_triggers: Mapped[list] = mapped_column(JSON, default=list)
-    objections: Mapped[list] = mapped_column(JSON, default=list)
+    qa_pairs: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    spec: Mapped["SpecModel"] = relationship(back_populates="personas")
+    spec: Mapped["SpecModel"] = relationship(back_populates="audiences")
 
 
 class SnapshotModel(Base):
@@ -492,9 +481,9 @@ class VectorMetadataModel(Base):
     spec_name: Mapped[str] = mapped_column(String(255), nullable=False)
     spec_summary: Mapped[str] = mapped_column(Text, default="")
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    section_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    assertion_type: Mapped[str] = mapped_column(String(30), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=3)
-    persona: Mapped[str] = mapped_column(String(255), default="general")
+    audience: Mapped[str] = mapped_column(String(255), default="general")
     channel: Mapped[str] = mapped_column(String(255), default="all")
     assertion_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_synced: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -504,7 +493,7 @@ class VectorMetadataModel(Base):
 # Performance indexes on high-cardinality FK / filter columns
 Index("ix_km_spec_id", AssertionModel.spec_id)
 Index("ix_km_pillar_id", AssertionModel.pillar_id)
-Index("ix_persona_spec_id", PersonaModel.spec_id)
+Index("ix_audience_spec_id", AudienceModel.spec_id)
 Index("ix_snapshot_spec_id", SnapshotModel.spec_id)
 Index("ix_artifact_spec_id", ArtifactHistoryModel.spec_id)
 Index("ix_token_usage_workspace", TokenUsageModel.workspace_id)
@@ -588,7 +577,7 @@ class Store:
             ])
             _rename_columns([
                 ('canon_entries', 'message_house_id', 'canon_domain_id'),
-                ('personas', 'message_house_id', 'canon_domain_id'),
+                ('audiences', 'message_house_id', 'canon_domain_id'),
                 ('pillars', 'house_id', 'canon_domain_id'),
                 ('snapshots', 'house_id', 'canon_domain_id'),
                 ('artifact_history', 'house_id', 'canon_domain_id'),
@@ -608,7 +597,7 @@ class Store:
             ])
             _rename_columns([
                 ('assertions', 'canon_domain_id', 'spec_id'),
-                ('personas', 'canon_domain_id', 'spec_id'),
+                ('audiences', 'canon_domain_id', 'spec_id'),
                 ('pillars', 'canon_domain_id', 'spec_id'),
                 ('snapshots', 'canon_domain_id', 'spec_id'),
                 ('artifact_history', 'canon_domain_id', 'spec_id'),
@@ -625,13 +614,64 @@ class Store:
             insp = inspect(self.engine)
             tables = insp.get_table_names()
 
+            # ── Generation 2 → 3: PMM schema → engineering schema ────────
+            _rename_tables([
+                ('personas', 'audiences'),
+                ('objections', 'qa_pairs'),
+            ])
+            _rename_columns([
+                ('assertions', 'section_type', 'assertion_type'),
+                ('vector_metadata', 'section_type', 'assertion_type'),
+                ('assertions', 'persona_ids', 'audience_ids'),
+                ('qa_pairs', 'persona_id', 'audience_id'),
+                ('audiences', 'persona_id', 'audience_id'),
+                ('specs', 'document_type', 'schema_type'),
+                ('departments', 'primary_grounding_type', 'primary_schema_type'),
+            ])
+
+            # Map legacy section_type values onto AssertionType. Unmappable
+            # values become 'capability' rather than being dropped — a
+            # mis-typed fact is recoverable, a deleted one is not.
+            insp = inspect(self.engine)
+            tables = insp.get_table_names()
+            if "assertions" in tables:
+                cols = {c["name"] for c in insp.get_columns("assertions")}
+                col = "assertion_type" if "assertion_type" in cols else "section_type"
+                if col in cols:
+                    known = {r[0] for r in conn.execute(text(
+                        f"SELECT DISTINCT {col} FROM assertions"))}
+                    valid = {t.value for t in AssertionType}
+                    for old_val in known:
+                        if old_val in valid or old_val is None:
+                            continue
+                        new_val = LEGACY_SECTION_TYPE_MAP.get(
+                            old_val, AssertionType.CAPABILITY.value)
+                        conn.execute(
+                            text(f"UPDATE assertions SET {col} = :new WHERE {col} = :old"),
+                            {"new": new_val, "old": old_val})
+                        if old_val not in LEGACY_SECTION_TYPE_MAP:
+                            log.warning(
+                                "Unmapped legacy section_type %r -> %r; review these rows",
+                                old_val, new_val)
+                    conn.commit()
+
+            # PMM child tables. Their rows were exported to
+            # data/archive/pmm-export-2026-08-07.json before this ran.
+            for dead in ("pain_points", "buying_triggers"):
+                if dead in tables:
+                    conn.execute(text(f"DROP TABLE {dead}"))
+                    conn.commit()
+
+            insp = inspect(self.engine)
+            tables = insp.get_table_names()
+
             # 3. Additive migrations
             if "specs" in tables:
                 mh_cols = {c["name"] for c in insp.get_columns("specs")}
-                if "document_type" not in mh_cols:
+                if "schema_type" not in mh_cols:
                     conn.execute(text(
-                        "ALTER TABLE specs ADD COLUMN document_type VARCHAR(30) "
-                        "NOT NULL DEFAULT 'message_house'"
+                        "ALTER TABLE specs ADD COLUMN schema_type VARCHAR(30) "
+                        "NOT NULL DEFAULT 'engineering_spec'"
                     ))
                     conn.commit()
                 if "last_reviewed" not in mh_cols:
@@ -721,31 +761,11 @@ class Store:
                         except Exception:
                             pass
 
-            if "pain_points" not in tables:
+            if "qa_pairs" not in tables:
                 conn.execute(text("""
-                    CREATE TABLE pain_points (
+                    CREATE TABLE qa_pairs (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
-                        content TEXT NOT NULL
-                    )
-                """))
-                conn.commit()
-
-            if "buying_triggers" not in tables:
-                conn.execute(text("""
-                    CREATE TABLE buying_triggers (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
-                        content TEXT NOT NULL
-                    )
-                """))
-                conn.commit()
-
-            if "objections" not in tables:
-                conn.execute(text("""
-                    CREATE TABLE objections (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        persona_id TEXT NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+                        audience_id TEXT NOT NULL REFERENCES audiences(id) ON DELETE CASCADE,
                         statement TEXT NOT NULL,
                         response TEXT
                     )
@@ -905,8 +925,8 @@ class Store:
                 """))
                 conn.commit()
 
-            if "personas" in tables:
-                p_cols = {c["name"] for c in insp.get_columns("personas")}
+            if "audiences" in tables:
+                p_cols = {c["name"] for c in insp.get_columns("audiences")}
                 for col, col_def in (
                     ("status", "VARCHAR(20) DEFAULT 'draft'"),
                     ("approved_by", "VARCHAR(255)"),
@@ -914,7 +934,7 @@ class Store:
                 ):
                     if col not in p_cols:
                         try:
-                            conn.execute(text(f"ALTER TABLE personas ADD COLUMN {col} {col_def}"))
+                            conn.execute(text(f"ALTER TABLE audiences ADD COLUMN {col} {col_def}"))
                             conn.commit()
                         except Exception:
                             pass
@@ -928,19 +948,18 @@ class Store:
             s.commit()
 
     def _seed_default_departments(self) -> None:
-        from src.models import GroundingType
         defaults = [
-            ("General", "message_house", "General grounding content"),
-            ("Product Marketing", "message_house", "Product messaging, positioning, value propositions, and personas"),
-            ("Company Marketing", "corp_narrative", "Corporate narrative, brand values, founding story, and company guidelines"),
-            ("Enablement", "persona_library", "Persona library, detailed guidelines, and customer facing assets"),
-            ("Product Management", "competitive_brief", "Competitive briefs, product roadmap alignment, strengths, and weaknesses"),
+            ("General", "engineering_spec", "Uncategorised specs"),
+            ("Engineering", "engineering_spec", "Services, APIs, interface contracts, and their constraints"),
+            ("Platform", "service_catalog", "Service inventory, dependencies, and ownership"),
+            ("Security", "policy_shield", "Security posture, compliance assertions, and approved responses"),
+            ("Operations", "incident_record", "Runbooks, postmortems, and operational decisions"),
         ]
         with self.session() as s:
             for name, g_type, desc in defaults:
                 exists = s.get(DepartmentModel, name)
                 if not exists:
-                    s.add(DepartmentModel(name=name, primary_grounding_type=g_type, description=desc, workspace_id="default"))
+                    s.add(DepartmentModel(name=name, primary_schema_type=g_type, description=desc, workspace_id="default"))
             s.commit()
 
     def _ensure_default_workspace(self) -> None:
@@ -966,9 +985,9 @@ class Store:
         spec_name: str,
         spec_summary: str,
         content: str,
-        section_type: str,
+        assertion_type: str,
         priority: int,
-        persona: str,
+        audience: str,
         channel: str,
         assertion_id: Optional[UUID] = None,
         last_synced: Optional[datetime] = None,
@@ -982,9 +1001,9 @@ class Store:
                 "spec_name": spec_name,
                 "spec_summary": spec_summary,
                 "content": content,
-                "section_type": section_type,
+                "assertion_type": assertion_type,
                 "priority": priority,
-                "persona": persona,
+                "audience": audience,
                 "channel": channel,
                 "assertion_id": str(assertion_id) if assertion_id else None,
                 "last_synced": last_synced,
@@ -1016,8 +1035,8 @@ class Store:
     def list_vector_metadata_matching_filters(
         self,
         specs: Optional[list[str]] = None,
-        section_types: Optional[list[str]] = None,
-        personas: Optional[list[str]] = None,
+        assertion_types: Optional[list[str]] = None,
+        audiences: Optional[list[str]] = None,
         channels: Optional[list[str]] = None,
         min_priority: Optional[int] = None,
     ) -> list[VectorMetadataModel]:
@@ -1025,10 +1044,10 @@ class Store:
             query = s.query(VectorMetadataModel)
             if specs:
                 query = query.filter(VectorMetadataModel.spec_id.in_(specs))
-            if section_types:
-                query = query.filter(VectorMetadataModel.section_type.in_(section_types))
-            if personas:
-                query = query.filter(VectorMetadataModel.persona.in_(personas))
+            if assertion_types:
+                query = query.filter(VectorMetadataModel.assertion_type.in_(assertion_types))
+            if audiences:
+                query = query.filter(VectorMetadataModel.audience.in_(audiences))
             if channels:
                 query = query.filter(VectorMetadataModel.channel.in_(channels))
             if min_priority is not None:
@@ -1174,8 +1193,8 @@ class Store:
 
         elif policy == "selective_override":
             # Child entries override parent entries of the exact same section type
-            child_section_types = {e.section_type for e in child_entries}
-            filtered_parents = [e for e in parent_entries if e.section_type not in child_section_types]
+            child_assertion_types = {e.assertion_type for e in child_entries}
+            filtered_parents = [e for e in parent_entries if e.assertion_type not in child_assertion_types]
             return child_entries + filtered_parents
 
         elif policy == "vocab_constrained":
@@ -1183,7 +1202,7 @@ class Store:
             # Find parent "word_list" entries representing banned terms or owned terms
             banned_terms = []
             for pe in parent_entries:
-                if pe.section_type == "word_list" and "banned" in pe.content.lower():
+                if pe.assertion_type == "word_list" and "banned" in pe.content.lower():
                     # Parse out words
                     banned_terms.extend([word.strip().lower() for word in pe.content.split(",") if word.strip()])
 
@@ -1211,114 +1230,74 @@ class Store:
 
     get_key_message = get_assertion  # Deprecated alias
 
-    def get_persona(self, persona_id: UUID) -> Persona | None:
+    def get_audience(self, audience_id: UUID) -> Audience | None:
         with self.session() as s:
-            row = s.get(PersonaModel, str(persona_id))
-            return _persona_from_row(row) if row else None
+            row = s.get(AudienceModel, str(audience_id))
+            return _audience_from_row(row) if row else None
 
-    def upsert_persona(self, persona: Persona) -> None:
+    def upsert_audience(self, audience: Audience) -> None:
         with self.session() as s:
-            existing = s.get(PersonaModel, str(persona.id))
+            existing = s.get(AudienceModel, str(audience.id))
             if existing:
-                for k, v in _to_db(persona.model_dump()).items():
+                for k, v in _to_db(audience.model_dump()).items():
                     if k != "id":
                         setattr(existing, k, v)
             else:
-                s.add(PersonaModel(**_to_db(persona.model_dump())))
+                s.add(AudienceModel(**_to_db(audience.model_dump())))
             s.commit()
         _invalidate_graph()
 
-    def get_personas(self, domain_id: UUID) -> list[Persona]:
+    def get_audiences(self, domain_id: UUID) -> list[Audience]:
         domain = self.get_spec(domain_id)
         if not domain:
             return []
         
         with self.session() as s:
-            rows = s.query(PersonaModel).filter(PersonaModel.spec_id == str(domain_id)).all()
-            child_personas = [_persona_from_row(r) for r in rows]
+            rows = s.query(AudienceModel).filter(AudienceModel.spec_id == str(domain_id)).all()
+            child_audiences = [_audience_from_row(r) for r in rows]
 
         if not domain.parent_domain_id or domain.inheritance_policy == "autonomous":
-            return child_personas
+            return child_audiences
 
-        # Inherit parent personas
-        parent_personas = self.get_personas(domain.parent_domain_id)
+        # Inherit parent audiences
+        parent_audiences = self.get_audiences(domain.parent_domain_id)
         
-        # Merge by persona name (child overrides parent of same name)
-        child_names = {p.name for p in child_personas}
-        filtered_parents = [p for p in parent_personas if p.name not in child_names]
+        # Merge by audience name (child overrides parent of same name)
+        child_names = {p.name for p in child_audiences}
+        filtered_parents = [p for p in parent_audiences if p.name not in child_names]
         
-        return child_personas + filtered_parents
+        return child_audiences + filtered_parents
 
-    def get_persona_by_name(self, domain_id: UUID, name: str) -> Persona | None:
+    def get_audience_by_name(self, domain_id: UUID, name: str) -> Audience | None:
         with self.session() as s:
             row = (
-                s.query(PersonaModel)
-                .filter(PersonaModel.spec_id == str(domain_id), PersonaModel.name == name)
+                s.query(AudienceModel)
+                .filter(AudienceModel.spec_id == str(domain_id), AudienceModel.name == name)
                 .first()
             )
-            return _persona_from_row(row) if row else None
+            return _audience_from_row(row) if row else None
 
-    def bulk_create_pain_points(self, persona_id: str, items: list[str]) -> list[int]:
-        with self.session() as s:
-            new_ids = []
-            for content in items:
-                pp = PainPointModel(persona_id=persona_id, content=content)
-                s.add(pp)
-                s.flush()
-                new_ids.append(pp.id)
-            s.commit()
-            return new_ids
-
-    def bulk_create_buying_triggers(self, persona_id: str, items: list[str]) -> list[int]:
-        with self.session() as s:
-            new_ids = []
-            for content in items:
-                bt = BuyingTriggerModel(persona_id=persona_id, content=content)
-                s.add(bt)
-                s.flush()
-                new_ids.append(bt.id)
-            s.commit()
-            return new_ids
-
-    def bulk_create_objections(self, persona_id: str, items: list[dict]) -> list[int]:
+    def bulk_create_qa_pairs(self, audience_id: str, items: list[dict]) -> list[int]:
         with self.session() as s:
             new_ids = []
             for ob in items:
                 stmt = ob.get("statement", "")
                 resp = ob.get("response")
-                obj = ObjectionModel(persona_id=persona_id, statement=stmt, response=resp)
+                obj = QAPairModel(audience_id=audience_id, statement=stmt, response=resp)
                 s.add(obj)
                 s.flush()
                 new_ids.append(obj.id)
             s.commit()
             return new_ids
 
-    def delete_persona_sub_attrs(self, persona_id: str) -> None:
+    def delete_audience_sub_attrs(self, audience_id: str) -> None:
         with self.session() as s:
-            s.query(PainPointModel).filter(PainPointModel.persona_id == persona_id).delete()
-            s.query(BuyingTriggerModel).filter(BuyingTriggerModel.persona_id == persona_id).delete()
-            s.query(ObjectionModel).filter(ObjectionModel.persona_id == persona_id).delete()
+            s.query(QAPairModel).filter(QAPairModel.audience_id == audience_id).delete()
             s.commit()
 
-    def update_chunk_links(self, chunk_id: str, pain_point_ids: list[int], objection_ids: list[int]) -> None:
+    def list_qa_pairs(self, audience_id: str) -> list:
         with self.session() as s:
-            row = s.get(AssertionModel, chunk_id)
-            if row:
-                row.pain_point_ids = pain_point_ids
-                row.objection_ids = objection_ids
-                s.commit()
-
-    def list_pain_points(self, persona_id: str) -> list:
-        with self.session() as s:
-            return s.query(PainPointModel).filter(PainPointModel.persona_id == persona_id).all()
-
-    def list_objections(self, persona_id: str) -> list:
-        with self.session() as s:
-            return s.query(ObjectionModel).filter(ObjectionModel.persona_id == persona_id).all()
-
-    def list_buying_triggers(self, persona_id: str) -> list:
-        with self.session() as s:
-            return s.query(BuyingTriggerModel).filter(BuyingTriggerModel.persona_id == persona_id).all()
+            return s.query(QAPairModel).filter(QAPairModel.audience_id == audience_id).all()
 
     def delete_spec(self, domain_id: UUID) -> bool:
         with self.session() as s:
@@ -1444,9 +1423,9 @@ class Store:
 
     delete_key_message = delete_assertion  # Deprecated alias
 
-    def delete_persona(self, persona_id: UUID) -> bool:
+    def delete_audience(self, audience_id: UUID) -> bool:
         with self.session() as s:
-            row = s.get(PersonaModel, str(persona_id))
+            row = s.get(AudienceModel, str(audience_id))
             if row:
                 s.delete(row)
                 s.commit()
@@ -1523,7 +1502,7 @@ class Store:
         if not domain:
             raise ValueError(f"Domain {domain_id} not found")
         entries = self.get_assertions(domain_id, include_unapproved=True)
-        personas = self.get_personas(domain_id)
+        audiences = self.get_audiences(domain_id)
         snapshot_data = {
             "domain": {
                 "id": str(domain.id),
@@ -1555,11 +1534,11 @@ class Store:
             "entries": [
                 {
                     "id": str(e.id),
-                    "section_type": str(e.section_type),
+                    "assertion_type": str(e.assertion_type),
                     "priority": e.priority,
                     "content": e.content,
                     "variants": e.variants,
-                    "personas": e.personas,
+                    "audiences": e.audiences,
                     "channels": [str(c) for c in e.channels],
                 }
                 for e in entries
@@ -1568,25 +1547,23 @@ class Store:
             "messages": [
                 {
                     "id": str(e.id),
-                    "section_type": str(e.section_type),
+                    "assertion_type": str(e.assertion_type),
                     "priority": e.priority,
                     "content": e.content,
                     "variants": e.variants,
-                    "personas": e.personas,
+                    "audiences": e.audiences,
                     "channels": [str(c) for c in e.channels],
                 }
                 for e in entries
             ],
-            "personas": [
+            "audiences": [
                 {
                     "id": str(p.id),
                     "name": p.name,
                     "description": p.description,
-                    "pain_points": p.pain_points,
-                    "buying_triggers": p.buying_triggers,
-                    "objections": p.objections,
+                    "qa_pairs": p.qa_pairs,
                 }
-                for p in personas
+                for p in audiences
             ],
         }
         snap_id = str(uuid4())
@@ -1619,7 +1596,7 @@ class Store:
                     "created_at": r.created_at.isoformat(),
                     "entry_count": len(r.snapshot_json.get("entries", [])),
                     "message_count": len(r.snapshot_json.get("messages", [])),
-                    "persona_count": len(r.snapshot_json.get("personas", [])),
+                    "audience_count": len(r.snapshot_json.get("audiences", [])),
                 }
                 for r in rows
             ]
@@ -1661,7 +1638,7 @@ class Store:
             raise ValueError("Domain no longer exists")
 
         current_entries = self.get_assertions(domain_id, include_unapproved=True)
-        current_personas = self.get_personas(domain_id)
+        current_audiences = self.get_audiences(domain_id)
 
         field_changes = {}
         snap_domain = snap_data.get("domain", snap_data.get("spec"))
@@ -1675,11 +1652,11 @@ class Store:
         curr_entries = {str(e.id): e for e in current_entries}
 
         added_entries = [
-            {"id": eid, "content": e.content, "section_type": str(e.section_type)}
+            {"id": eid, "content": e.content, "assertion_type": str(e.assertion_type)}
             for eid, e in curr_entries.items() if eid not in snap_entries
         ]
         removed_entries = [
-            {"id": eid, "content": e["content"], "section_type": e["section_type"]}
+            {"id": eid, "content": e["content"], "assertion_type": e["assertion_type"]}
             for eid, e in snap_entries.items() if eid not in curr_entries
         ]
         changed_entries = []
@@ -1692,13 +1669,13 @@ class Store:
                         "id": eid,
                         "snapshot_content": snap_e["content"],
                         "current_content": curr_e.content,
-                        "section_type": str(curr_e.section_type),
+                        "assertion_type": str(curr_e.assertion_type),
                     })
 
-        snap_personas = {p["id"]: p for p in snap_data.get("personas", [])}
-        curr_personas = {str(p.id): p for p in current_personas}
-        added_personas = [{"id": pid, "name": p.name} for pid, p in curr_personas.items() if pid not in snap_personas]
-        removed_personas = [{"id": pid, "name": p["name"]} for pid, p in snap_personas.items() if pid not in curr_personas]
+        snap_audiences = {p["id"]: p for p in snap_data.get("audiences", [])}
+        curr_audiences = {str(p.id): p for p in current_audiences}
+        added_audiences = [{"id": pid, "name": p.name} for pid, p in curr_audiences.items() if pid not in snap_audiences]
+        removed_audiences = [{"id": pid, "name": p["name"]} for pid, p in snap_audiences.items() if pid not in curr_audiences]
 
         return {
             "snapshot_id": str(snapshot_id),
@@ -1718,11 +1695,11 @@ class Store:
                 "removed": removed_entries,
                 "changed": changed_entries,
             },
-            "personas": {
-                "added": added_personas,
-                "removed": removed_personas,
+            "audiences": {
+                "added": added_audiences,
+                "removed": removed_audiences,
             },
-            "has_changes": bool(field_changes or added_entries or removed_entries or changed_entries or added_personas or removed_personas),
+            "has_changes": bool(field_changes or added_entries or removed_entries or changed_entries or added_audiences or removed_audiences),
         }
 
     # --- Artifact History ---
@@ -1954,7 +1931,7 @@ class Store:
             heatmap[chunk_id] = {
                 "chunk_id": chunk_id,
                 "content_preview": e.content[:100] if e else "",
-                "section_type": str(e.section_type) if e else "",
+                "assertion_type": str(e.assertion_type) if e else "",
                 "times_used": stat.times_used,
                 "avg_rating": round(stat.avg_rating, 2),
                 "boost_factor": round(stat.boost_factor, 2),
@@ -1974,7 +1951,7 @@ class Store:
     def get_spec_coverage(self, domain_id: UUID) -> dict:
         """Which parts of the spec are used most vs ignored."""
         entries = self.get_assertions(domain_id, include_unapproved=True)
-        personas = self.get_personas(domain_id)
+        audiences = self.get_audiences(domain_id)
 
         with self.session() as s:
             stats_rows = s.query(ChunkUsageStatModel).all()
@@ -1986,7 +1963,7 @@ class Store:
         by_section: dict = {}
         for e in entries:
             chunk_id = f"chunk-{e.id}"
-            st = str(e.section_type)
+            st = str(e.assertion_type)
             item = by_section.setdefault(st, {"used": 0, "unused": 0, "total": 0, "times_used": 0})
             item["total"] += 1
             if chunk_id in used_chunk_ids:
@@ -2011,16 +1988,16 @@ class Store:
                 for cid, times in chunk_usage[:10]
             ],
             "unused_chunks": [
-                {"chunk_id": f"chunk-{e.id}", "content": e.content[:80], "section_type": str(e.section_type)}
+                {"chunk_id": f"chunk-{e.id}", "content": e.content[:80], "assertion_type": str(e.assertion_type)}
                 for e in entries
                 if f"chunk-{e.id}" not in used_chunk_ids
             ],
-            "persona_coverage": {
+            "audience_coverage": {
                 p.name: {
-                    "has_messages": any(p.name in (e.personas or []) for e in entries),
-                    "message_count": sum(1 for e in entries if p.name in (e.personas or [])),
+                    "has_messages": any(p.name in (e.audiences or []) for e in entries),
+                    "message_count": sum(1 for e in entries if p.name in (e.audiences or [])),
                 }
-                for p in personas
+                for p in audiences
             },
         }
 
@@ -2432,20 +2409,20 @@ class Store:
 
     # --- Departments ---
 
-    def create_department(self, name: str, primary_grounding_type: str,
+    def create_department(self, name: str, primary_schema_type: str,
                           description: str = "", workspace_id: str = "default") -> dict:
         with self.session() as s:
             existing = s.get(DepartmentModel, name)
             if existing:
-                existing.primary_grounding_type = primary_grounding_type
+                existing.primary_schema_type = primary_schema_type
                 existing.description = description
                 existing.workspace_id = workspace_id
             else:
-                s.add(DepartmentModel(name=name, primary_grounding_type=primary_grounding_type,
+                s.add(DepartmentModel(name=name, primary_schema_type=primary_schema_type,
                                        description=description, workspace_id=workspace_id))
             s.commit()
             row = s.get(DepartmentModel, name)
-            return {"name": row.name, "primary_grounding_type": row.primary_grounding_type,
+            return {"name": row.name, "primary_schema_type": row.primary_schema_type,
                     "description": row.description, "workspace_id": row.workspace_id}
 
     def list_departments(self, workspace_id: str | None = None) -> list[dict]:
@@ -2454,7 +2431,7 @@ class Store:
             if workspace_id and workspace_id != "all":
                 q = q.filter(DepartmentModel.workspace_id == workspace_id)
             rows = q.order_by(DepartmentModel.name).all()
-            return [{"name": r.name, "primary_grounding_type": r.primary_grounding_type,
+            return [{"name": r.name, "primary_schema_type": r.primary_schema_type,
                      "description": r.description, "workspace_id": r.workspace_id} for r in rows]
 
     def get_department(self, name: str, workspace_id: str | None = None) -> dict | None:
@@ -2462,7 +2439,7 @@ class Store:
             row = s.get(DepartmentModel, name)
             if not row:
                 return None
-            return {"name": row.name, "primary_grounding_type": row.primary_grounding_type,
+            return {"name": row.name, "primary_schema_type": row.primary_schema_type,
                     "description": row.description, "workspace_id": row.workspace_id}
 
     def delete_department(self, name: str, workspace_id: str | None = None) -> bool:
@@ -2500,7 +2477,7 @@ class Store:
     list_specs = list_specs  # Deprecated alias
 
     def list_specs_with_counts(self, workspace_id: str | None = None) -> list[dict]:
-        """Return domains with pre-aggregated entry/persona counts — avoids N+1."""
+        """Return domains with pre-aggregated entry/audience counts — avoids N+1."""
         from sqlalchemy import func
         with self.session() as s:
             entry_counts = (
@@ -2508,19 +2485,19 @@ class Store:
                 .group_by(AssertionModel.spec_id)
                 .subquery()
             )
-            persona_counts = (
-                s.query(PersonaModel.spec_id, func.count().label("cnt"))
-                .group_by(PersonaModel.spec_id)
+            audience_counts = (
+                s.query(AudienceModel.spec_id, func.count().label("cnt"))
+                .group_by(AudienceModel.spec_id)
                 .subquery()
             )
             q = (
                 s.query(
                     SpecModel,
                     func.coalesce(entry_counts.c.cnt, 0).label("entry_count"),
-                    func.coalesce(persona_counts.c.cnt, 0).label("persona_count"),
+                    func.coalesce(audience_counts.c.cnt, 0).label("audience_count"),
                 )
                 .outerjoin(entry_counts, SpecModel.id == entry_counts.c.spec_id)
-                .outerjoin(persona_counts, SpecModel.id == persona_counts.c.spec_id)
+                .outerjoin(audience_counts, SpecModel.id == audience_counts.c.spec_id)
             )
             if workspace_id and workspace_id != "all":
                 q = q.filter(SpecModel.workspace_id == workspace_id)
@@ -2528,7 +2505,7 @@ class Store:
                 {
                     "domain": _domain_from_row(row),
                     "entry_count": int(ec),
-                    "persona_count": int(pc),
+                    "audience_count": int(pc),
                     # Backward-compat keys
                     "spec": _domain_from_row(row),
                     "message_count": int(ec),
@@ -2962,7 +2939,7 @@ class Store:
                 result.append({
                     "id": e.id,
                     "content": e.content,
-                    "section_type": e.section_type,
+                    "assertion_type": e.assertion_type,
                     "status": e.status,
                     "times_used": stat.times_used if stat else 0,
                     "avg_rating": round(stat.avg_rating, 1) if stat else 0.0,
@@ -3282,10 +3259,10 @@ class Store:
             return {"score": 0, "missing_sections": [], "error": "Domain not found"}
 
         entries = self.get_assertions(domain_id, include_unapproved=True)
-        present_sections = {str(e.section_type) for e in entries if e.section_type}
-        from src.models import SectionType
-        all_section_types = [st.value for st in SectionType
-                             if st not in (SectionType.SOURCE_MARKDOWN,)]
+        present_sections = {str(e.assertion_type) for e in entries if e.assertion_type}
+        from src.models import AssertionType
+        all_assertion_types = [st.value for st in AssertionType
+                             if st not in (AssertionType.SOURCE_MARKDOWN,)]
 
         # Core fields that contribute to the score
         core_fields = {
@@ -3305,18 +3282,18 @@ class Store:
         if entry_count >= 6:
             field_score += 10
 
-        personas = self.get_personas(domain_id)
-        if len(personas) >= 1:
+        audiences = self.get_audiences(domain_id)
+        if len(audiences) >= 1:
             field_score += 5
 
-        missing_sections = [st for st in all_section_types if st not in present_sections]
+        missing_sections = [st for st in all_assertion_types if st not in present_sections]
 
         return {
             "score": min(field_score, 100),
             "missing_sections": missing_sections,
             "present_sections": sorted(present_sections),
             "total_entries": entry_count,
-            "total_personas": len(personas),
+            "total_audiences": len(audiences),
             "core_fields": core_fields,
         }
 
@@ -3355,11 +3332,11 @@ def _source_file_to_dict(row: "SourceFileModel") -> dict:
     }
 
 
-def _safe_section_type(value: str) -> SectionType:
+def _safe_assertion_type(value: str) -> AssertionType:
     try:
-        return SectionType(value)
+        return AssertionType(value)
     except ValueError:
-        return SectionType.POSITIONING
+        return AssertionType.POSITIONING
 
 
 def _safe_channel(value: str) -> Channel:
@@ -3384,7 +3361,7 @@ def _domain_from_row(row: SpecModel) -> Spec:
         name=row.name,
         source=row.source,
         source_id=row.source_id,
-        grounding_type=row.document_type or "message_house",
+        schema_type=row.schema_type or "engineering_spec",
         summary=row.summary,
         audience=row.audience,
         brand_personality=row.brand_personality,
@@ -3410,7 +3387,7 @@ def _entry_from_row(row: AssertionModel) -> Assertion:
         id=UUID(row.id),
         spec_id=UUID(row.spec_id),
         pillar_id=row.pillar_id,
-        section_type=_safe_section_type(row.section_type),
+        assertion_type=_safe_assertion_type(row.assertion_type),
         priority=row.priority,
         content=row.content,
         status=AssertionStatus(row.status) if row.status else AssertionStatus.DRAFT,
@@ -3418,7 +3395,7 @@ def _entry_from_row(row: AssertionModel) -> Assertion:
         approved_at=row.approved_at,
         content_tier=ContentTier(row.content_tier) if row.content_tier else None,
         variants=row.variants or {},
-        personas=row.personas or [],
+        audiences=row.audiences or [],
         channels=[_safe_channel(c.id if hasattr(c, "id") else str(c)) for c in (row.channels or [])] or ["all"],
         source_chunk_id=row.source_chunk_id,
         dri=row.dri or "",
@@ -3428,15 +3405,13 @@ def _entry_from_row(row: AssertionModel) -> Assertion:
 _msg_from_row = _entry_from_row  # Deprecated alias
 
 
-def _persona_from_row(row: PersonaModel) -> Persona:
-    return Persona(
+def _audience_from_row(row: AudienceModel) -> Audience:
+    return Audience(
         id=UUID(row.id),
         spec_id=UUID(row.spec_id),
         name=row.name,
         description=row.description,
-        pain_points=row.pain_points or [],
-        buying_triggers=row.buying_triggers or [],
-        objections=row.objections or [],
+        qa_pairs=row.qa_pairs or [],
         status=AssertionStatus(row.status) if row.status else AssertionStatus.DRAFT,
         approved_by=row.approved_by,
         approved_at=row.approved_at,

@@ -31,7 +31,7 @@ def check_ingest_conflicts(
     for new_entry in new_entries:
         for old_entry in existing_entries:
             # Only compare entries of matching section types to avoid noise
-            if new_entry.section_type != old_entry.section_type:
+            if new_entry.assertion_type != old_entry.assertion_type:
                 continue
 
             # Compare contents using simple keyword intersection or LLM verification

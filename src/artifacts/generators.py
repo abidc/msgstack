@@ -27,7 +27,7 @@ from prefab_ui.components import (
 from prefab_ui.actions.mcp import CallTool, SendMessage
 
 from src.store import Store
-from src.models import SectionType
+from src.models import AssertionType
 
 
 def _get_store() -> Store:
@@ -44,11 +44,11 @@ def build_one_pager(spec_id: str, app_config=None):
     if not spec:
         return {"error": f"Spec {spec_id} not found"}
     messages = store.get_key_messages(UUID(spec_id))
-    personas = store.get_personas(UUID(spec_id))
+    audiences = store.get_audiences(UUID(spec_id))
 
     table_data = [
         {
-            "section": str(m.section_type).replace("_", " ").title(),
+            "section": str(m.assertion_type).replace("_", " ").title(),
             "message": m.content[:100] + ("..." if len(m.content) > 100 else ""),
             "priority": str(m.priority),
             "channels": ", ".join(str(c) for c in m.channels),
@@ -82,8 +82,8 @@ def build_one_pager(spec_id: str, app_config=None):
                 CardTitle("Key Messages")
             with CardContent():
                 with Column(gap=3):
-                    for section in SectionType:
-                        msgs = [m for m in messages if str(m.section_type) == section.value]
+                    for section in AssertionType:
+                        msgs = [m for m in messages if str(m.assertion_type) == section.value]
                         if not msgs:
                             continue
                         with Column(gap=2):
@@ -98,16 +98,16 @@ def build_one_pager(spec_id: str, app_config=None):
                 CardTitle("Personas")
             with CardContent():
                 with Row(gap=3, wrap=True):
-                    for p in personas:
+                    for p in audiences:
                         with Card():
                             with CardHeader():
                                 CardTitle(p.name)
                             with CardContent():
                                 P(p.description[:200] + ("..." if len(p.description) > 200 else ""))
-                                if p.pain_points:
+                                if p.qa_pairs:
                                     with Column(gap=1):
                                         Muted("Pain points:")
-                                        for pp in p.pain_points[:2]:
+                                        for pp in p.qa_pairs[:2]:
                                             Text("• " + pp[:80])
 
         if table_data:
@@ -149,7 +149,7 @@ def build_one_pager(spec_id: str, app_config=None):
                     Muted(
                         f"Last synced: {spec.last_synced.strftime('%Y-%m-%d') if spec.last_synced else 'Never'}"
                     )
-                    Muted(f"• {len(messages)} messages • {len(personas)} personas")
+                    Muted(f"• {len(messages)} messages • {len(audiences)} audiences")
 
     return PrefabApp(view=view, title=spec.name)
 
@@ -173,7 +173,7 @@ def build_social_posts(spec_id: str, channels: list[str] = None, app_config=None
             {
                 "id": f"post-{i+1}",
                 "channel": "LinkedIn",
-                "section": str(msg.section_type).replace("_", " ").title(),
+                "section": str(msg.assertion_type).replace("_", " ").title(),
                 "content": variant,
                 "priority": msg.priority,
             }
@@ -207,7 +207,7 @@ def build_social_posts(spec_id: str, channels: list[str] = None, app_config=None
                                         variant="ghost",
                                         on_click=CallTool("search_assertions", arguments={
                                             "query": f"linkedin {post['section']} for {spec.name}",
-                                            "section_types": [post["section"].lower()],
+                                            "assertion_types": [post["section"].lower()],
                                             "channels": ["linkedin"],
                                         }),
                                     )
@@ -227,8 +227,8 @@ def build_email_template(spec_id: str, stage: str = "awareness", app_config=None
         return {"error": f"Spec {spec_id} not found"}
 
     messages = store.get_key_messages(UUID(spec_id))
-    benefits = [m for m in messages if str(m.section_type) == "benefit"]
-    headlines = [m for m in messages if str(m.section_type) == "headline"]
+    benefits = [m for m in messages if str(m.assertion_type) == "benefit"]
+    headlines = [m for m in messages if str(m.assertion_type) == "headline"]
 
     stage_content = {
         "awareness": {
@@ -277,7 +277,7 @@ def build_email_template(spec_id: str, stage: str = "awareness", app_config=None
                                     variant="ghost",
                                     on_click=CallTool("search_assertions", arguments={
                                         "query": f"email subject {stage} for {spec.name}",
-                                        "section_types": ["headline", "subhead"],
+                                        "assertion_types": ["headline", "subhead"],
                                         "channels": ["email"],
                                     }),
                                 )

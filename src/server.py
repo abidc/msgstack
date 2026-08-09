@@ -18,8 +18,8 @@ mcp = FastMCP("MsgStack")
 @mcp.tool()
 def search_assertions(
     query: str,
-    section_types: Optional[list[str]] = None,
-    personas: Optional[list[str]] = None,
+    assertion_types: Optional[list[str]] = None,
+    audiences: Optional[list[str]] = None,
     channels: Optional[list[str]] = None,
     specs: Optional[list[str]] = None,
     include_variants: bool = True,
@@ -43,10 +43,10 @@ def search_assertions(
 
     Args:
         query: What spec content are you looking for? Include section types,
-               personas, and channels naturally (e.g., "headlines for CTOs on LinkedIn").
-        section_types: Filter by entry type: headline, subhead, benefit, use_case,
-                      proof_point, objection, social_proof, positioning, know_your_market.
-        personas: Filter by specific audience personas (e.g., SMB CTO, FinOps Manager).
+               audiences, and channels naturally (e.g., "headlines for CTOs on LinkedIn").
+        assertion_types: Filter by entry type: headline, subhead, benefit, use_case,
+                      proof_point, qa_pair, social_proof, positioning, know_your_market.
+        audiences: Filter by specific audience audiences (e.g., SMB CTO, FinOps Manager).
         channels: Filter by target destination channel: linkedin, email, landing, paid, twitter, blog.
         specs: Restrict to specific specs by ID or name.
         include_variants: Include channel-specific variant rewrites in results.
@@ -65,8 +65,8 @@ def search_assertions(
     """
     result = grounding_tools.search_assertions(
         query=query,
-        section_types=section_types,
-        personas=personas,
+        assertion_types=assertion_types,
+        audiences=audiences,
         channels=channels,
         specs=specs,
         include_variants=include_variants,
@@ -227,7 +227,7 @@ def compare_specs(domain_ids: list[str], include_unapproved: bool = False) -> di
 def get_grounding_context() -> dict:
     """Get the current grounding context for this session.
 
-    Returns which spec is active, which personas are in scope, and which
+    Returns which spec is active, which audiences are in scope, and which
     chunks have been used so far.
     """
     return grounding_tools.get_grounding_context().model_dump()
@@ -273,11 +273,11 @@ def generate_one_pager_data(spec_id: str) -> dict:
         return {"error": f"Spec not found."}
 
     messages = store.get_key_messages(spec.id)
-    personas = store.get_personas(spec.id)
+    audiences = store.get_audiences(spec.id)
 
     grouped = {}
     for m in messages:
-        key = str(m.section_type)
+        key = str(m.assertion_type)
         grouped.setdefault(key, []).append(m.content)
 
     return {
@@ -287,7 +287,7 @@ def generate_one_pager_data(spec_id: str) -> dict:
         "differentiation": spec.differentiation,
         "audience": spec.audience,
         "assertions": grouped,
-        "personas": [{"name": p.name, "description": p.description, "pain_points": p.pain_points} for p in personas],
+        "audiences": [{"name": p.name, "description": p.description, "qa_pairs": p.qa_pairs} for p in audiences],
         "message_count": len(messages),
     }
 
@@ -317,7 +317,7 @@ def generate_artifact(
     Args:
         skill_id: Content type — one of: one_pager, linkedin_post, email_template,
                   battlecard, press_release, blog_post, faq_document, talk_track,
-                  objection_handler, event_brief, executive_summary, partner_brief.
+                  qa_pair_handler, event_brief, executive_summary, partner_brief.
         domain_id: UUID of the spec (preferred over domain_name).
         domain_name: Exact name of the spec (used if domain_id not available).
         custom_context: Extra context dict, e.g. {"competitor": "Salesforce"} for battlecard
@@ -397,7 +397,7 @@ def generate_artifact(
         spec_id=spec.id,
         spec_name=spec.name,
         spec_summary=spec.summary or "",
-        personas=[],
+        audiences=[],
         workspace_id=workspace_id,
     )
 
@@ -531,7 +531,7 @@ def list_mcp_tools() -> dict:
     tool_defs = [
         {"name": "search_assertions", "description": "Search approved specs for grounding content (headlines, proof points, etc)."},
         {"name": "list_specs", "description": "List all available specs/categories."},
-        {"name": "get_spec", "description": "Retrieve full spec content for deep research (positioning, personas)."},
+        {"name": "get_spec", "description": "Retrieve full spec content for deep research (positioning, audiences)."},
         {"name": "list_skills", "description": "List all 12+ types of output templates you can generate (Email, PR, Blog, etc)."},
         {"name": "generate_artifact", "description": "MANDATORY: Generate a full document draft grounded in approved assertions."},
         {"name": "build_ui_artifact", "description": "Get a visual HTML link for a specific spec artifact."},
@@ -602,7 +602,7 @@ def get_schema() -> dict:
     """Return the specification for a complete MsgStack spec.
 
     Use this to understand what a fully-populated spec should contain:
-    required fields, section types, entry counts, persona structure, and
+    required fields, section types, entry counts, audience structure, and
     channel variants. Also returns a completeness checklist.
     """
     from src.models import COMPLETE_SCHEMA_SPEC
@@ -619,7 +619,7 @@ def check_spec_completeness(domain_id: Optional[str] = None, domain_name: Option
         domain_id: UUID of the spec.
         domain_name: Name of the spec (alternative to domain_id).
     """
-    from src.models import COMPLETE_SCHEMA_SPEC, SectionType
+    from src.models import COMPLETE_SCHEMA_SPEC, AssertionType
 
     store = get_store()
     spec = _resolve_spec(store, domain_id, domain_name)
@@ -627,11 +627,11 @@ def check_spec_completeness(domain_id: Optional[str] = None, domain_name: Option
         return {"error": "Domain not found. Use list_specs to find valid IDs."}
 
     messages = store.get_key_messages(spec.id)
-    personas = store.get_personas(spec.id)
+    audiences = store.get_audiences(spec.id)
 
     by_section = {}
     for m in messages:
-        key = str(m.section_type)
+        key = str(m.assertion_type)
         by_section.setdefault(key, []).append(m)
 
     checks = []
@@ -652,16 +652,15 @@ def check_spec_completeness(domain_id: Optional[str] = None, domain_name: Option
     check("Audience defined", bool(spec.audience))
     check("Brand personality defined", bool(spec.brand_personality))
 
-    required_min = {"headline": 3, "subhead": 3, "benefit": 3, "proof_point": 3, "objection": 3, "social_proof": 3, "positioning": 1}
+    required_min = {"headline": 3, "subhead": 3, "benefit": 3, "proof_point": 3, "qa_pair": 3, "social_proof": 3, "positioning": 1}
     for section, min_count in required_min.items():
         msgs = by_section.get(section, [])
         check(f"{section}: {min_count}+ entries (has {len(msgs)})", len(msgs) >= min_count)
 
-    check("2+ personas defined", len(personas) >= 2)
-    for p in personas[:3]:
-        check(f"Persona '{p.name}': pain_points defined", bool(p.pain_points))
-        check(f"Persona '{p.name}': buying_triggers defined", bool(p.buying_triggers))
-        check(f"Persona '{p.name}': objections defined", bool(p.objections))
+    check("2+ audiences defined", len(audiences) >= 2)
+    for p in audiences[:3]:
+        check(f"Audience '{p.name}': Q&A pairs defined", bool(p.qa_pairs))
+        check(f"Audience '{p.name}': qa_pairs defined", bool(p.qa_pairs))
 
     msgs_with_linkedin = sum(1 for m in messages if (m.variants or {}).get("linkedin"))
     msgs_with_email = sum(1 for m in messages if (m.variants or {}).get("email"))
@@ -685,8 +684,8 @@ def check_spec_completeness(domain_id: Optional[str] = None, domain_name: Option
                 recommendations.append("Define the primary target audience in the domain metadata.")
             elif "Brand personality" in label:
                 recommendations.append("Add brand personality traits (e.g., bold, empathetic, technical).")
-            elif "personas" in label.lower():
-                recommendations.append("Define at least 2 distinct buyer personas with pain points and triggers.")
+            elif "audiences" in label.lower():
+                recommendations.append("Define at least 2 distinct buyer audiences with pain points and triggers.")
             elif "LinkedIn" in label:
                 recommendations.append("Add LinkedIn channel variants to at least 5 entries.")
             elif "Email" in label:
@@ -707,7 +706,7 @@ def check_spec_completeness(domain_id: Optional[str] = None, domain_name: Option
         "recommendations": recommendations,
         "assertion_count": len(messages),
         "message_count": len(messages),
-        "persona_count": len(personas),
+        "audience_count": len(audiences),
         "sections_covered": list(by_section.keys()),
     }
 
@@ -782,7 +781,7 @@ def score_alignment(
 @mcp.tool()
 def get_graph_connections(
     domain_id: Optional[str] = None,
-    persona: Optional[str] = None,
+    audience: Optional[str] = None,
     channel: Optional[str] = None,
     spec_id: Optional[str] = None,
 ) -> dict:
@@ -790,14 +789,14 @@ def get_graph_connections(
 
     Unlike search_assertions (which uses vector approximation), this tool queries
     the knowledge graph directly — returning exactly the content associated with
-    a domain, persona, or channel via typed relationships. Use this when you need:
+    a domain, audience, or channel via typed relationships. Use this when you need:
     - An exact approved tagline or headline (not the nearest neighbor)
-    - All entries that apply to a specific persona
+    - All entries that apply to a specific audience
     - All entries approved for a specific channel
 
     Args:
         domain_id: UUID of the spec to query.
-        persona: Optional persona name to filter by ADDRESSES relationship.
+        audience: Optional audience name to filter by ADDRESSES relationship.
         channel: Optional channel to filter by APPLIES_TO relationship.
         spec_id: UUID of the spec to query (legacy alias).
 
@@ -810,15 +809,15 @@ def get_graph_connections(
 
     from src.grounding.graph import get_graph_engine
     engine = get_graph_engine()
-    chunks = engine.get_connections(actual_id, persona=persona, channel=channel)
+    chunks = engine.get_connections(actual_id, audience=audience, channel=channel)
     return {
         "retrieval_mode": "graph",
         "domain_id": actual_id,
         "spec_id": actual_id,
-        "persona_filter": persona,
+        "audience_filter": audience,
         "channel_filter": channel,
         "count": len(chunks),
-        "chunks": [{"content": c.get("content", ""), "section_type": c.get("section_type", ""),
+        "chunks": [{"content": c.get("content", ""), "assertion_type": c.get("assertion_type", ""),
                     "priority": c.get("priority", 3)} for c in chunks],
     }
 
@@ -854,7 +853,7 @@ def list_departments() -> dict:
         name = dept["name"]
         result.append({
             "department": name,
-            "primary_grounding_type": dept["primary_grounding_type"],
+            "primary_schema_type": dept["primary_schema_type"],
             "description": dept["description"],
             "domain_count": counts.get(name, 0),
         })
@@ -895,7 +894,7 @@ def traverse_graph(
         "results": [{
             "assertion_id": f.get("id"),
             "content": f.get("content"),
-            "section_type": f.get("section_type"),
+            "assertion_type": f.get("assertion_type"),
             "status": f.get("status"),
             "weight": f.get("graph_weight"),
             "hops": f.get("hops"),
@@ -977,15 +976,15 @@ Triggers: "build", "make", "create", "generate", "write", "draft", "give me", "s
 release, FAQ, script, or other document.
 
 **SEARCH the spec graph** — call `search_assertions` when:
-- User asks what approved assertions exist for a topic, persona, or channel
+- User asks what approved assertions exist for a topic, audience, or channel
 - You need grounding before writing any copy yourself
-- User asks for headlines, proof points, objections, or talking points
+- User asks for headlines, proof points, qa_pairs, or talking points
 
 **LIST / BROWSE** — use `list_specs` when the user hasn't specified a domain,
 and `list_skills` when they haven't specified an artifact/output type.
 
 **RESEARCH a domain** — call `get_spec` when the user wants to understand
-a domain's positioning, personas, or approved assertions.
+a domain's positioning, audiences, or approved assertions.
 
 ## Output Rules
 
@@ -1012,7 +1011,7 @@ a domain's positioning, personas, or approved assertions.
 ## When to use get_graph_connections vs search_assertions
 
 - Use `get_graph_connections` when you need **exact, verbatim approved content** — locked taglines,
-  specific proof points, or all entries for a persona. Confidence is always 1.0 (no approximation).
+  specific proof points, or all entries for a audience. Confidence is always 1.0 (no approximation).
 - Use `search_assertions` for **exploratory or semantic queries** where you want the closest match
   to a natural language request. Use `retrieval_mode="graph"` as a shortcut for the same effect.
 
@@ -1043,7 +1042,7 @@ Call `list_specs` to see available specs, then use the returned spec_id for all 
 - "Draft a post for [domain name]"
 
 Available artifact types: one-pager, battlecard, email template, post, blog post,
-press release, FAQ, talk track, objection handler, executive summary, partner brief, event brief.
+press release, FAQ, talk track, qa_pair handler, executive summary, partner brief, event brief.
 """
 
 

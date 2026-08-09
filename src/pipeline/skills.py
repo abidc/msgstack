@@ -11,14 +11,14 @@ DEFAULT_SKILLS = {
     "one_pager": {
         "id": "one_pager",
         "name": "One-Pager",
-        "description": "A structured overview of a messaging spec with positioning, key messages, and personas.",
+        "description": "A structured overview of a messaging spec with positioning, key messages, and audiences.",
         "channels": ["all"],
         "sections": [
             {"key": "positioning", "label": "Positioning Statement", "required": True},
             {"key": "tagline", "label": "Tagline", "required": False},
             {"key": "differentiation", "label": "Differentiation", "required": True},
             {"key": "assertions", "label": "Key Messages", "required": True},
-            {"key": "personas", "label": "Target Personas", "required": True},
+            {"key": "audiences", "label": "Target Personas", "required": True},
         ],
         "prompt_template": """Generate a one-pager for {spec_name} grounded in this messaging framework:
 
@@ -29,121 +29,10 @@ Structure the one-pager with:
 2. Tagline (7 words or fewer)
 3. Key differentiation points (3 bullets)
 4. Top 3 key messages by section type
-5. Primary and secondary personas with pain points
+5. Primary and secondary audiences with pain points
 
 Output as structured markdown.""",
         "prefab_template": "one_pager",
-    },
-    "linkedin_post": {
-        "id": "linkedin_post",
-        "name": "LinkedIn Post",
-        "description": "A LinkedIn post grounded in messaging for a specific section type.",
-        "channels": ["linkedin"],
-        "sections": [
-            {"key": "hook", "label": "Hook (first line)", "required": True},
-            {"key": "body", "label": "Body", "required": True},
-            {"key": "cta", "label": "Call to Action", "required": False},
-            {"key": "hashtags", "label": "Hashtags", "required": False},
-        ],
-        "prompt_template": """Write a LinkedIn post grounded in {spec_name} messaging.
-
-Core message: {primary_message}
-Persona: {persona}
-
-Rules:
-- Hook in the first line must stop the scroll (question, bold claim, or contrarian take)
-- Body expands the hook with concrete value — no fluffy intro
-- 150-300 words total
-- Include a natural CTA that doesn't feel salesy
-- 2-3 relevant hashtags at the end
-- Do NOT use emojis
-- Write in first person plural ("we", "our") not brand voice""",
-        "prefab_template": "social_post",
-    },
-    "email_template": {
-        "id": "email_template",
-        "name": "Email Template",
-        "description": "A funnel-stage email (awareness, consideration, decision).",
-        "channels": ["email"],
-        "stages": ["awareness", "consideration", "decision"],
-        "sections": [
-            {"key": "subject", "label": "Subject Line", "required": True},
-            {"key": "preview", "label": "Preview Text", "required": False},
-            {"key": "hook", "label": "Hook / Opening", "required": True},
-            {"key": "body", "label": "Body Copy", "required": True},
-            {"key": "cta", "label": "Call to Action", "required": True},
-        ],
-        "prompt_template": """Write an email at the {stage} stage for {spec_name}.
-
-Grounded in this positioning: {positioning}
-
-Key message: {primary_message}
-Target persona: {persona}
-
-Rules:
-- Subject line: max 60 chars, curiosity-driven, no clickbait
-- Preview text: max 90 chars, extends the subject
-- Hook: 1-2 sentences, lead with the insight not the product
-- Body: {stage} stage tone — awareness = educate, consideration = compare, decision = convert
-- CTA: singular, specific, low friction
-- Output subject, preview, hook, body, and CTA as separate fields""",
-        "prefab_template": "email_template",
-    },
-    "battlecard": {
-        "id": "battlecard",
-        "name": "Competitive Battlecard",
-        "description": "A structured comparison card against a named competitor.",
-        "channels": ["all"],
-        "sections": [
-            {"key": "competitor", "label": "Competitor Name", "required": True},
-            {"key": "our_strengths", "label": "Our Strengths vs Competitor", "required": True},
-            {"key": "their_weaknesses", "label": "Competitor Weaknesses", "required": True},
-            {"key": "counter_messaging", "label": "Counter Messaging", "required": True},
-            {"key": "proof_points", "label": "Proof Points", "required": True},
-        ],
-        "prompt_template": """Write a battlecard for {spec_name} against {competitor}.
-
-Our positioning: {positioning}
-Our key advantages: {assertions}
-
-Structure:
-1. Competitor overview (1 paragraph — what they're known for)
-2. Our strengths vs theirs (3-4 bullets — specific, evidence-backed)
-3. Where they fall short (2-3 bullets — cite specific weaknesses)
-4. Counter messaging (2-3 response templates for common objections)
-5. Proof points (stats, customer quotes, analyst data)
-
-Tone: confident, factual, never disparaging""",
-        "prefab_template": "battlecard",
-    },
-    "press_release": {
-        "id": "press_release",
-        "name": "Press Release",
-        "description": "A formal press release announcement.",
-        "channels": ["all"],
-        "sections": [
-            {"key": "headline", "label": "Headline", "required": True},
-            {"key": "subhead", "label": "Subheadline", "required": False},
-            {"key": "dateline", "label": "Dateline", "required": True},
-            {"key": "lead", "label": "Lead Paragraph", "required": True},
-            {"key": "body", "label": "Body", "required": True},
-            {"key": "quote_1", "label": "Executive Quote", "required": True},
-            {"key": "quote_2", "label": "Customer Quote", "required": False},
-            {"key": "boilerplate", "label": "Boilerplate", "required": True},
-            {"key": "media_contact", "label": "Media Contact", "required": True},
-        ],
-        "prompt_template": """Write a press release for {spec_name} announcing {announcement}.
-
-Grounded in: {positioning}
-
-Rules:
-- Follow AP style
-- Lead paragraph answers: who, what, when, where, why in 35 words or fewer
-- Headline is the story, not the company name
-- Executive quote: specific outcome, no marketing superlatives
-- Boilerplate: 75 words about the company
-- Include media contact with name, email, phone""",
-        "prefab_template": "press_release",
     },
     "blog_post": {
         "id": "blog_post",
@@ -162,7 +51,7 @@ Rules:
 
 Grounded in: {positioning}
 Key messages to weave in: {assertions}
-Persona: {persona}
+Audience: {audience}
 
 Rules:
 - Title: SEO-optimized, benefit-led, 60 chars or fewer
@@ -188,7 +77,7 @@ Rules:
         "prompt_template": """Write an FAQ document for {spec_name} addressing {audience} questions.
 
 Grounded in: {positioning}
-Common objections to address: {objections}
+Common qa_pairs to address: {qa_pairs}
 
 Rules:
 - Organize by theme (Product, Pricing, Security, Integration, Support)
@@ -197,98 +86,6 @@ Rules:
 - 8-12 Q&A pairs minimum
 - Include an 'Other questions?' section at the end""",
         "prefab_template": "faq_document",
-    },
-    "talk_track": {
-        "id": "talk_track",
-        "name": "Sales Talk Track",
-        "description": "Stage-by-stage sales call script with discovery questions and value statements.",
-        "channels": ["all"],
-        "sections": [
-            {"key": "opener", "label": "Call Opener", "required": True},
-            {"key": "discovery", "label": "Discovery Questions", "required": True},
-            {"key": "value_prop", "label": "Value Proposition", "required": True},
-            {"key": "demo_focus", "label": "Demo Focus Points", "required": True},
-            {"key": "objection_handling", "label": "Common Objections + Responses", "required": True},
-            {"key": "close", "label": "Close / Next Steps", "required": True},
-        ],
-        "prompt_template": """Write a sales talk track for {spec_name}.
-
-Grounded in: {positioning}
-Key differentiators: {assertions}
-Target persona: {persona}
-
-Structure:
-1. Call opener (30 seconds, hook the prospect immediately)
-2. 5-7 discovery questions that uncover pain points specific to this persona
-3. Value proposition statement (2-3 sentences tied to their likely pain points)
-4. Demo focus points (top 3 capabilities to show — ordered by persona priority)
-5. 4-5 common objections with specific, confident counter-responses
-6. Close / next steps (2 options for low-friction progression)
-
-Tone: consultative, confident, not pushy. Ask questions before pitching.""",
-        "prefab_template": "talk_track",
-    },
-    "objection_handler": {
-        "id": "objection_handler",
-        "name": "Objection Handler",
-        "description": "Full objection/rebuttal reference card for common sales and marketing objections.",
-        "channels": ["all"],
-        "sections": [
-            {"key": "objection", "label": "Objection", "required": True},
-            {"key": "root_cause", "label": "Root Cause", "required": True},
-            {"key": "response", "label": "Response", "required": True},
-            {"key": "proof", "label": "Supporting Proof Point", "required": False},
-        ],
-        "prompt_template": """Write a comprehensive objection handler reference card for {spec_name}.
-
-Grounded in: {positioning}
-Known objections from personas: {objections}
-
-For each objection:
-1. State the objection verbatim as a prospect would say it
-2. Identify the root cause (fear, misunderstanding, prior bad experience)
-3. Write a 2-3 sentence response: acknowledge → reframe → redirect
-4. Add a supporting proof point or stat where possible
-
-Cover at least 8 objections across these categories:
-- Price / ROI objections
-- Complexity / implementation concerns
-- "We already have a solution" objections
-- Timing / priority objections
-- Trust / credibility objections
-
-Tone: empathetic, factual, never defensive.""",
-        "prefab_template": "objection_handler",
-    },
-    "event_brief": {
-        "id": "event_brief",
-        "name": "Event Brief",
-        "description": "Conference or event messaging brief with talking points and booth/session strategy.",
-        "channels": ["all"],
-        "sections": [
-            {"key": "event_theme", "label": "Event Theme & Audience", "required": True},
-            {"key": "our_angle", "label": "Our Angle / Key Message", "required": True},
-            {"key": "talking_points", "label": "Top 3 Talking Points", "required": True},
-            {"key": "demo_story", "label": "Demo Story", "required": True},
-            {"key": "booth_hooks", "label": "Booth / Session Hooks", "required": False},
-            {"key": "follow_up", "label": "Post-Event Follow-up Messaging", "required": True},
-        ],
-        "prompt_template": """Write an event messaging brief for {spec_name} at {event_name}.
-
-Grounded in: {positioning}
-Key audience at this event: {audience}
-Primary message to land: {primary_message}
-
-Structure:
-1. Event theme and attendee profile (who will be in the room, what they care about)
-2. Our angle — the single idea we want every attendee to walk away with
-3. Top 3 talking points tailored to this specific audience
-4. Demo story (3-minute narrative arc: before → after → proof)
-5. Booth/session hook (what gets someone to stop, come in, stay)
-6. Post-event follow-up email subject lines and first-line hooks (3 options)
-
-Tone: energetic but credible. Avoid generic conference buzzwords.""",
-        "prefab_template": "event_brief",
     },
     "executive_summary": {
         "id": "executive_summary",
@@ -306,7 +103,7 @@ Tone: energetic but credible. Avoid generic conference buzzwords.""",
 
 Grounded in: {positioning}
 Key proof points: {assertions}
-Target executive persona: {persona}
+Target executive audience: {audience}
 
 Use the SCR (Situation-Complication-Resolution) framework:
 1. Situation (1 paragraph): The current state — what is the executive already dealing with?
@@ -321,35 +118,6 @@ Rules:
 - Under 400 words total
 - Each section starts with a bold topic sentence""",
         "prefab_template": "executive_summary",
-    },
-    "partner_brief": {
-        "id": "partner_brief",
-        "name": "Partner Brief",
-        "description": "Channel partner messaging enablement sheet with co-sell angles and joint value proposition.",
-        "channels": ["all"],
-        "sections": [
-            {"key": "joint_value_prop", "label": "Joint Value Proposition", "required": True},
-            {"key": "partner_benefit", "label": "Why Partners Win with Us", "required": True},
-            {"key": "target_customer", "label": "Ideal Joint Customer", "required": True},
-            {"key": "co_sell_motion", "label": "Co-Sell Motion", "required": True},
-            {"key": "field_messaging", "label": "Field-Ready Messaging", "required": True},
-            {"key": "resources", "label": "Available Resources", "required": False},
-        ],
-        "prompt_template": """Write a channel partner messaging brief for {spec_name}.
-
-Our positioning: {positioning}
-Our key differentiators: {assertions}
-
-Structure:
-1. Joint value proposition (2-3 sentences: what we do together that neither does alone)
-2. Why partners win with us (3 bullets: margin, stickiness, competitive advantage)
-3. Ideal joint customer profile (firmographics + tech environment + pain points)
-4. Co-sell motion (step-by-step: when to bring us in, how to position together)
-5. Field-ready messaging (3 one-liners partners can use in customer conversations)
-6. Available resources (sales tools, demo access, co-marketing options)
-
-Tone: partner-first. Focus on what the partner gains, not what we gain.""",
-        "prefab_template": "partner_brief",
     },
     "one_pager_visual": {
         "id": "one_pager_visual",
@@ -389,7 +157,7 @@ RULES:
 - positioning_block.text_content MUST be the positioning statement
 - pillar_grid shows exactly 3 differentiation points
 - message_list shows top 6 key messages by priority
-- persona_strip shows max 3 personas (primary first)
+- audience_strip shows max 3 audiences (primary first)
 - proof_block shows top 3 proof points""",
         "prefab_template": "one_pager_visual",
         "renderer": "fabric"
@@ -437,82 +205,6 @@ RULES:
         "prefab_template": "datasheet",
         "renderer": "fabric"
     },
-    "battlecard_visual": {
-        "id": "battlecard_visual",
-        "name": "Visual Battlecard (Canvas)",
-        "description": "A visual competitive battlecard with verbatim objections and responses.",
-        "channels": ["all"],
-        "sections": [
-            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
-            {"key": "competitor", "label": "Competitor Name", "required": True},
-        ],
-        "prompt_template": """Generate a structured design specification for a Visual Battlecard for {spec_name} against {competitor}.
-
-TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
-{visual_context}
-
-GROUNDING REMINDER:
-- Use ONLY objections/responses from the messaging spec.
-- Pull objections and responses from graph for VERBATIM accuracy.
-- Copy pre-filled zone content EXACTLY (edit only for tone/polish).
-
-COMPETITOR: {competitor}
-OUR POSITIONING: {positioning}
-KEY MESSAGES: {assertions}
-PERSONA OBJECTIONS: {objections}
-
-OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
-{{
-  "zones": [
-    {{ "id": "competitor_header", "type": "header", "text_content": "vs {competitor}" }},
-    {{ "id": "our_strengths", "type": "pillar_grid", "list_items": ["Strength 1", "Strength 2"] }},
-    {{ "id": "objections", "type": "message_list", "list_items": ["Objection → Response 1", "Objection → Response 2"] }},
-    {{ "id": "proof_block", "type": "proof_block", "text_content": "Proof 1 | Stat | Description" }}
-  ]
-}}
-
-RULES:
-- competitor_header.text_content MUST include competitor name
-- our_strengths shows our strengths vs theirs (3-4 items)
-- objections shows verbatim objections with responses (max 5)
-- proof_block shows top proof point
-- All objection responses MUST be from the graph (verbatim)""",
-        "prefab_template": "battlecard_visual",
-        "renderer": "fabric"
-    },
-    "social_card_visual": {
-        "id": "social_card_visual",
-        "name": "Social Card (Visual)",
-        "description": "A visually designed social media card (1:1 or 9:16).",
-        "channels": ["linkedin", "twitter"],
-        "sections": [
-            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
-        ],
-        "prompt_template": """Generate a structured design specification for a Social Card for {spec_name}.
-
-TEMPLATE ZONE STRUCTURE (injected below — DO NOT modify zone IDs or types):
-{visual_context}
-
-GROUNDING REMINDER:
-- Select the absolute highest-priority message from the spec.
-- Apply a bold, social-friendly tone.
-
-OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
-{{
-  "zones": [
-    {{ "id": "header", "type": "header", "text_content": "{spec_name}" }},
-    {{ "id": "hero", "type": "hero", "text_content": "Bold claim or headline" }},
-    {{ "id": "subhead", "type": "message_list", "list_items": ["Supporting context 1", "Supporting context 2"] }},
-    {{ "id": "cta_footer", "type": "cta_footer", "text_content": "Link or CTA" }}
-  ]
-}}
-
-RULES:
-- hero.text_content MUST be under 12 words
-- subhead contains max 2 list items for supporting context""",
-        "prefab_template": "social_card",
-        "renderer": "fabric"
-    },
     "executive_summary_visual": {
         "id": "executive_summary_visual",
         "name": "Executive Summary (Visual)",
@@ -537,7 +229,7 @@ OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
     {{ "id": "header", "type": "header", "text_content": "{spec_name} | Executive Summary" }},
     {{ "id": "positioning", "type": "positioning_block", "text_content": "Full positioning paragraph" }},
     {{ "id": "pillars", "type": "pillar_grid", "list_items": ["Pillar 1", "Pillar 2", "Pillar 3"] }},
-    {{ "id": "persona_strip", "type": "persona_strip", "list_items": ["Persona 1", "Persona 2"] }},
+    {{ "id": "audience_strip", "type": "audience_strip", "list_items": ["Audience 1", "Audience 2"] }},
     {{ "id": "proof", "type": "proof_block", "text_content": "Top ROI stat or outcome" }},
     {{ "id": "cta_footer", "type": "cta_footer", "text_content": "Next steps / Website" }}
   ]
@@ -549,55 +241,6 @@ RULES:
 - proof MUST be a quantified outcome or ROI point""",
         "prefab_template": "executive_summary",
         "renderer": "fabric"
-    },
-    "sales_deck": {
-        "id": "sales_deck",
-        "name": "Sales Deck (Reveal.js)",
-        "description": "An interactive sales presentation.",
-        "channels": ["sales_deck"],
-        "sections": [
-            {"key": "design_spec", "label": "Design JSON Specification", "required": True},
-        ],
-        "prompt_template": """Generate a structured JSON specification for a Reveal.js Sales Deck for {spec_name}.
-
-GROUNDING REMINDER:
-- Start with the Problem/Pain Points from the target persona.
-- Transition to the Solution ({spec_name} positioning).
-- Cover 3 key differentiators/benefits.
-- Include a Proof Point or Customer Success stat.
-
-OUTPUT FORMAT (return ONLY this JSON in `design_spec`):
-{{
-  "slides": [
-    {{
-      "type": "title",
-      "title": "{spec_name}",
-      "content": "Tagline or Positioning",
-      "notes": "Speaker notes for title slide"
-    }},
-    {{
-      "type": "standard",
-      "title": "The Challenge",
-      "content": "<ul><li>Pain point 1</li><li>Pain point 2</li></ul>",
-      "notes": "Speaker notes"
-    }},
-    {{
-      "type": "split",
-      "title": "Why {spec_name}?",
-      "left_content": "<h3>Traditional Approach</h3><ul><li>Issue 1</li></ul>",
-      "right_content": "<h3>Our Approach</h3><ul><li>Benefit 1</li></ul>",
-      "notes": "Speaker notes"
-    }}
-  ]
-}}
-
-RULES:
-- Must have 5-7 slides maximum.
-- Slide `content` fields must contain raw HTML (e.g. <ul>, <li>, <h3>, <p>).
-- Use `type: "split"` when comparing or showing two distinct columns.
-- Ensure all claims and benefits are drawn exclusively from the messaging spec.""",
-        "prefab_template": "sales_deck",
-        "renderer": "reveal"
     },
 }
 

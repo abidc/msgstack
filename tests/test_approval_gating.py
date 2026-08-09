@@ -6,7 +6,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("PINECONE_API_KEY", "test-key")
 
 import pytest
-from src.models import Spec, Assertion, SectionType, AssertionStatus, SpecStatus, SearchFilters
+from src.models import Spec, Assertion, AssertionType, AssertionStatus, SpecStatus, SearchFilters
 from src.store import Store
 
 
@@ -30,10 +30,10 @@ def seeded_domain(store):
     return domain
 
 
-def _create_entry(store, domain, content, status, section_type=SectionType.HEADLINE, priority=1):
+def _create_entry(store, domain, content, status, assertion_type=AssertionType.CAPABILITY, priority=1):
     entry = Assertion(
         spec_id=domain.id,
-        section_type=section_type,
+        assertion_type=assertion_type,
         priority=priority,
         content=content,
         status=status,
@@ -263,7 +263,7 @@ class TestGetSpecApprovalGating:
 @pytest.fixture
 def mcp_test_setup(tmp_path):
     from src.store import Store
-    from src.models import Spec, Assertion, SectionType, SpecStatus, AssertionStatus
+    from src.models import Spec, Assertion, AssertionType, SpecStatus, AssertionStatus
     import src.server as server_module
     import src.grounding.tools as gt_module
 
@@ -280,7 +280,7 @@ def mcp_test_setup(tmp_path):
 
     entry = Assertion(
         spec_id=domain.id,
-        section_type=SectionType.BENEFIT,
+        assertion_type=AssertionType.CAPABILITY,
         priority=1,
         content="Approved benefit",
         status=AssertionStatus.APPROVED,

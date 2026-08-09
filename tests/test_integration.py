@@ -33,15 +33,15 @@ Build faster. Ship smarter.
 ## Differentiation
 Only solution with built-in compliance checks.
 
-## Key Messages
+## Assertions
 
-### Headlines (Priority 1-2)
+### Capabilities (Priority 1-2)
 - Build faster. Ship smarter.
 
-### Benefits (Priority 1-3)
+### Capabilities (Priority 1-3)
 - Cut deployment time by 60%
 
-### Proof Points (Priority 1-3)
+### SLAs (Priority 1-3)
 - Acme Corp reduced incidents by 40%
 
 ## Personas
@@ -71,12 +71,12 @@ def client(tmp_path):
     mock_openai_response.choices = [MagicMock()]
     mock_openai_response.choices[0].message.content = SAMPLE_STRUCTURED_MARKDOWN
 
-    mock_personas_response = MagicMock()
-    mock_personas_response.choices = [MagicMock()]
-    mock_personas_response.choices[0].message.content = json.dumps({
-        "personas": [
+    mock_audiences_response = MagicMock()
+    mock_audiences_response.choices = [MagicMock()]
+    mock_audiences_response.choices[0].message.content = json.dumps({
+        "audiences": [
             {"name": "VP Engineering", "description": "VP of Engineering",
-             "pain_points": ["Slow deploys"], "buying_triggers": ["Board pressure"], "objections": ["Cost"]}
+             "pain_points": ["Slow deploys"], "buying_triggers": ["Board pressure"], "qa_pairs": ["Cost"]}
         ]
     })
 
@@ -86,10 +86,10 @@ def client(tmp_path):
 
         mock_client_instance = MagicMock()
         mock_oai_cls.return_value = mock_client_instance
-        # First call → structuring markdown, second call → personas JSON
+        # First call → structuring markdown, second call → audiences JSON
         mock_client_instance.chat.completions.create.side_effect = [
             mock_openai_response,
-            mock_personas_response,
+            mock_audiences_response,
         ]
 
         import src.web_app as web_app_module
@@ -150,7 +150,7 @@ def test_preview_structure_endpoint(client):
     assert data["status"] == "preview"
     assert "preview_token" in data
     assert "assertions" in data
-    assert "personas" in data
+    assert "audiences" in data
 
 
 def test_confirm_structure_endpoint(client):
@@ -177,7 +177,7 @@ def test_confirm_structure_bad_token(client):
 def mock_engine(tmp_path):
     """GroundingEngine with mocked Pinecone and a real Store."""
     from src.store import Store
-    from src.models import Spec, Assertion, SectionType, SpecStatus
+    from src.models import Spec, Assertion, AssertionType, SpecStatus
     from datetime import datetime, timezone
 
     store = Store(str(tmp_path / "search_test.db"))
@@ -194,7 +194,7 @@ def mock_engine(tmp_path):
     store.upsert_spec(spec)
     msg = Assertion(
         spec_id=spec.id,
-        section_type=SectionType.BENEFIT,
+        assertion_type=AssertionType.CAPABILITY,
         priority=1,
         content="Reduce deployment time by 60%",
     )

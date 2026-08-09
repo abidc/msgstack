@@ -1,0 +1,36 @@
+{
+  "id": "adr",
+  "name": "Architecture Decision Record",
+  "description": "An ADR: context, the decision, alternatives considered, and consequences.",
+  "channels": [
+    "all"
+  ],
+  "sections": [
+    {
+      "key": "context",
+      "label": "Context",
+      "required": true
+    },
+    {
+      "key": "decision",
+      "label": "Decision",
+      "required": true
+    },
+    {
+      "key": "alternatives_considered",
+      "label": "Alternatives Considered",
+      "required": false
+    },
+    {
+      "key": "consequences",
+      "label": "Consequences",
+      "required": false
+    },
+    {
+      "key": "status",
+      "label": "Status",
+      "required": false
+    }
+  ],
+  "prompt_template": "You are writing a architecture decision record for the service described by this spec.\n\n{grounding_context}\n\nUse ONLY the assertions above. Every claim must trace to one. If a required fact is absent, write '[not specified in spec]' rather than inventing it. Reproduce any assertion marked Tier 1 verbatim.\n\nProduce these sections: context, decision, alternatives_considered, consequences, status."
+}

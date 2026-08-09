@@ -49,8 +49,8 @@ def _get_engine(workspace_id: Optional[str] = None) -> GroundingEngine:
 
 def search_assertions(
     query: str,
-    section_types: Optional[list[str]] = None,
-    personas: Optional[list[str]] = None,
+    assertion_types: Optional[list[str]] = None,
+    audiences: Optional[list[str]] = None,
     channels: Optional[list[str]] = None,
     specs: Optional[list[str]] = None,
     include_variants: bool = True,
@@ -68,10 +68,10 @@ def search_assertions(
 
     Args:
         query: Natural language search query. Include section types (headline, benefit),
-               personas (SMB, enterprise), and channels (LinkedIn, email) in the query
+               audiences (SMB, enterprise), and channels (LinkedIn, email) in the query
                and the engine will infer them automatically.
-        section_types: Explicitly filter by message section types.
-        personas: Filter by specific personas.
+        assertion_types: Explicitly filter by message section types.
+        audiences: Filter by specific audiences.
         channels: Filter by marketing channels.
         specs: Restrict to specific message specs by ID.
         include_variants: Include channel-specific message variants in results.
@@ -84,8 +84,8 @@ def search_assertions(
         GroundingResponse with matched chunks and confidence context.
     """
     filters = SearchFilters(
-        section_types=section_types,
-        personas=personas,
+        assertion_types=assertion_types,
+        audiences=audiences,
         channels=channels,
         specs=specs,
         include_variants=include_variants,
@@ -129,15 +129,15 @@ def set_active_spec(spec_id: str) -> dict:
         names = ", ".join(h.name for h in all_specs)
         return {"error": f"Spec '{spec_id}' not found. Available: {names}"}
 
-    personas = store.get_personas(spec.id)
-    persona_names = [p.name for p in personas]
+    audiences = store.get_audiences(spec.id)
+    audience_names = [p.name for p in audiences]
     workspace_id = store.get_spec_workspace_id(spec.id) or "default"
 
     ctx = session.set_active_spec(
         spec_id=spec.id,
         spec_name=spec.name,
         spec_summary=spec.summary,
-        personas=persona_names,
+        audiences=audience_names,
         workspace_id=workspace_id,
     )
 
@@ -146,7 +146,7 @@ def set_active_spec(spec_id: str) -> dict:
         "spec_id": str(spec.id),
         "spec_name": spec.name,
         "spec_summary": spec.summary,
-        "personas": persona_names,
+        "audiences": audience_names,
         "key_messages_count": len(store.get_key_messages(spec.id)),
     }
 
@@ -157,7 +157,7 @@ def get_spec(
     include: Optional[list[str]] = None,
     include_unapproved: bool = False,
 ) -> dict:
-    """Retrieve a full message spec with key messages and personas.
+    """Retrieve a full message spec with key messages and audiences.
 
     By default only returns entries with status APPROVED or LOCKED.
     Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
@@ -166,7 +166,7 @@ def get_spec(
     Args:
         spec_id: UUID of the message spec.
         spec_name: Name of the message spec (alternative to spec_id).
-        include: Sections to include: ['assertions'], ['personas'], ['positioning'], or ['all'].
+        include: Sections to include: ['assertions'], ['audiences'], ['positioning'], or ['all'].
                  Defaults to ['all'].
         include_unapproved: If True, also include DRAFT and IN_REVIEW entries.
     """
@@ -191,7 +191,7 @@ def get_spec(
     workspace_id = store.get_spec_workspace_id(spec.id) or "default"
     session.set_active_spec(
         spec.id, spec.name, spec.summary,
-        [p.name for p in store.get_personas(spec.id)],
+        [p.name for p in store.get_audiences(spec.id)],
         workspace_id=workspace_id,
     )
 
@@ -215,7 +215,6 @@ def get_spec(
                 "positioning": spec.positioning,
                 "tagline": spec.tagline,
                 "differentiation": spec.differentiation,
-                "brand_personality": spec.brand_personality,
             }
         )
 
@@ -225,31 +224,29 @@ def get_spec(
         result["assertions"] = [
             {
                 "id": str(m.id),
-                "section_type": str(m.section_type),
+                "assertion_type": str(m.assertion_type),
                 "priority": m.priority,
                 "content": m.content,
                 "status": str(m.status),
                 "content_tier": str(m.content_tier) if getattr(m, "content_tier", None) else None,
                 "dri": getattr(m, "dri", "") or spec_dri,
                 "variants": m.variants,
-                "personas": m.personas,
+                "audiences": m.audiences,
                 "channels": [str(c) for c in m.channels],
             }
             for m in messages
         ]
 
-    if "all" in include or "personas" in include:
-        personas = store.get_personas(spec.id)
-        result["personas"] = [
+    if "all" in include or "audiences" in include:
+        audiences = store.get_audiences(spec.id)
+        result["audiences"] = [
             {
                 "id": str(p.id),
                 "name": p.name,
                 "description": p.description,
-                "pain_points": p.pain_points,
-                "buying_triggers": p.buying_triggers,
-                "objections": p.objections,
+                "qa_pairs": p.qa_pairs,
             }
-            for p in personas
+            for p in audiences
         ]
 
     return result
@@ -274,7 +271,7 @@ def list_specs(query: Optional[str] = None, workspace_id: Optional[str] = None) 
             "status": h.status,
             "summary": h.summary,
             "department": h.department,
-            "persona_count": len(store.get_personas(h.id)),
+            "audience_count": len(store.get_audiences(h.id)),
             "message_count": len(store.get_key_messages(h.id)),
             "last_synced": h.last_synced.isoformat() if h.last_synced else None,
             "last_reviewed": h.last_reviewed.isoformat() if h.last_reviewed else None,
@@ -322,7 +319,7 @@ def compare_specs(spec_ids: list[str], include_unapproved: bool = False) -> dict
             specs_data.append({"id": hid, "error": "not found"})
             continue
         messages = store.get_key_messages(spec.id, include_unapproved=include_unapproved)
-        personas = store.get_personas(spec.id)
+        audiences = store.get_audiences(spec.id)
         specs_data.append(
             {
                 "id": str(spec.id),
@@ -331,7 +328,7 @@ def compare_specs(spec_ids: list[str], include_unapproved: bool = False) -> dict
                 "tagline": spec.tagline,
                 "key_messages_count": len(messages),
                 "messages_by_section": _group_by_section(messages),
-                "personas": [{"name": p.name, "description": p.description} for p in personas],
+                "audiences": [{"name": p.name, "description": p.description} for p in audiences],
             }
         )
 
@@ -341,7 +338,7 @@ def compare_specs(spec_ids: list[str], include_unapproved: bool = False) -> dict
 def _group_by_section(messages: list) -> dict:
     grouped: dict = {}
     for msg in messages:
-        st = str(msg.section_type)
+        st = str(msg.assertion_type)
         grouped.setdefault(st, []).append(msg.content)
     return grouped
 

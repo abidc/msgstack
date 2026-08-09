@@ -26,7 +26,7 @@ TIER_CONTRACT_PREAMBLE = (
 from openai import OpenAI
 from pydantic import BaseModel
 
-from src.models import Spec, Assertion, Persona
+from src.models import Spec, Assertion, Audience
 from src.store import Store
 from src.pipeline.skills import SkillManager
 from src.design.validators import DesignSpec, validate_and_fill_design_spec
@@ -136,13 +136,13 @@ class ArtifactGenerator:
 
         messages = messages_to_use
 
-        personas = self.store.get_personas(spec.id)
+        audiences = self.store.get_audiences(spec.id)
 
         # Check if this is a visual artifact type
         artifact_type = skill.get("prefab_template") or skill_id
         is_visual = skill.get("renderer") == "fabric"
 
-        context = self._build_context(spec, messages, personas, custom_context or {})
+        context = self._build_context(spec, messages, audiences, custom_context or {})
 
         # Tonal sliders mapping:
         tone_register = ""
@@ -164,7 +164,7 @@ class ArtifactGenerator:
             template = self._get_template(artifact_type)
             if template:
                 visual_context = self._build_visual_context(
-                    spec_id, template, artifact_type, spec, messages, personas
+                    spec_id, template, artifact_type, spec, messages, audiences
                 )
                 context["visual_context"] = visual_context
                 context["template_zones"] = template.get("zones", [])
@@ -185,7 +185,7 @@ class ArtifactGenerator:
             )
         else:
             # Always prepend the full structured grounding block so every artifact
-            # has access to all section types, all personas, and all attributes —
+            # has access to all section types, all audiences, and all attributes —
             # regardless of which fields the skill template explicitly references.
             prompt = (
                 "GROUNDING CONTEXT — every claim, headline, and proof point you write "
@@ -206,8 +206,8 @@ class ArtifactGenerator:
                     "content": (
                         "You are a marketing content generator. "
                         "You will be given a complete messaging framework including ALL section types "
-                        "(headlines, subheads, benefits, proof points, objections, social proof, etc.), "
-                        "ALL personas with their pain points, buying triggers, and objections, "
+                        "(headlines, subheads, benefits, proof points, qa_pairs, social proof, etc.), "
+                        "ALL audiences with their pain points, buying triggers, and qa_pairs, "
                         "and full brand positioning. "
                         "You MUST ground every claim, headline, and proof point in the provided framework. "
                         "Do not introduce product capabilities, statistics, or claims that are not present "
@@ -327,7 +327,7 @@ class ArtifactGenerator:
         artifact_type: str,
         spec: Spec,
         messages: list[Assertion],
-        personas: list[Persona],
+        audiences: list[Audience],
     ) -> dict:
         """
         Pre-assign messaging spec content to template zones BEFORE the LLM call.
@@ -336,7 +336,7 @@ class ArtifactGenerator:
         - positioning → hero.body
         - differentiation → pillar_grid
         - top 6 key messages by priority → message_list
-        - personas → persona_strip (max 3, primary first)
+        - audiences → audience_strip (max 3, primary first)
         - proof points → proof_block (max 3)
         """
         zone_mapping = {}
@@ -344,12 +344,12 @@ class ArtifactGenerator:
         # Build message lookup by section type
         by_section = {}
         for m in messages:
-            key = str(m.section_type)
+            key = str(m.assertion_type)
             by_section.setdefault(key, []).append(m)
 
         # Sort each section by priority
-        for section_type in by_section:
-            by_section[section_type].sort(key=lambda x: x.priority or 3)
+        for assertion_type in by_section:
+            by_section[assertion_type].sort(key=lambda x: x.priority or 3)
 
         # Get template zones
         template_zones = template.get("zones", [])
@@ -388,13 +388,13 @@ class ArtifactGenerator:
                 all_msgs.sort(key=lambda x: x.priority or 3)
                 content["items"] = [m.content[:max_chars] for m in all_msgs[:capacity * 2][:6]]
 
-            elif zone_type == "persona_strip":
-                # Persona truncation: max 3 personas, primary first, then by completeness
-                sorted_personas = sorted(
-                    personas,
+            elif zone_type == "audience_strip":
+                # Audience truncation: max 3 audiences, primary first, then by completeness
+                sorted_audiences = sorted(
+                    audiences,
                     key=lambda p: (0 if getattr(p, 'is_primary', False) else 1, -len(p.description or ""))
                 )[:3]
-                content["items"] = [p.name for p in sorted_personas]
+                content["items"] = [p.name for p in sorted_audiences]
 
             elif zone_type == "proof_block":
                 # Proof points → proof_block (max 3)
@@ -405,19 +405,19 @@ class ArtifactGenerator:
                 benefit_msgs = by_section.get("benefit", [])
                 content["items"] = [m.content[:max_chars] for m in benefit_msgs[:capacity]]
 
-            elif zone_type == "objection_list" and artifact_type == "battlecard_visual":
-                # Pull objections + responses from graph for verbatim accuracy
-                objection_items = []
-                for p in personas:
-                    objs = p.objections or []
-                    for ob in objs[:capacity - len(objection_items)]:
+            elif zone_type == "qa_pair_list" and artifact_type == "battlecard_visual":
+                # Pull qa_pairs + responses from graph for verbatim accuracy
+                qa_pair_items = []
+                for p in audiences:
+                    objs = p.qa_pairs or []
+                    for ob in objs[:capacity - len(qa_pair_items)]:
                         if isinstance(ob, dict):
-                            objection_items.append(ob.get("statement", str(ob)))
+                            qa_pair_items.append(ob.get("statement", str(ob)))
                         else:
-                            objection_items.append(str(ob))
-                    if len(objection_items) >= capacity:
+                            qa_pair_items.append(str(ob))
+                    if len(qa_pair_items) >= capacity:
                         break
-                content["items"] = objection_items[:capacity]
+                content["items"] = qa_pair_items[:capacity]
 
             zone_mapping[zone_id] = {
                 "type": zone_type,
@@ -471,7 +471,7 @@ class ArtifactGenerator:
         self,
         spec: Spec,
         messages: list[Assertion],
-        personas: list[Persona],
+        audiences: list[Audience],
         custom: dict,
     ) -> dict:
         # Tier affects ordering and annotation ONLY — never inclusion. Untier'd
@@ -481,39 +481,39 @@ class ArtifactGenerator:
         # Group ALL messages by section type, sorted by tier then priority within each group
         by_section: dict[str, list[Assertion]] = {}
         for m in messages:
-            key = str(m.section_type)
+            key = str(m.assertion_type)
             by_section.setdefault(key, []).append(m)
 
         section_blocks = []
-        for section_type in sorted(by_section):
-            msgs = sorted(by_section[section_type], key=lambda x: (tier_order.get(getattr(x, "content_tier", None) or "", 99), x.priority or 3))
-            section_blocks.append(f"### {section_type.upper().replace('_', ' ')} ({len(msgs)})")
+        for assertion_type in sorted(by_section):
+            msgs = sorted(by_section[assertion_type], key=lambda x: (tier_order.get(getattr(x, "content_tier", None) or "", 99), x.priority or 3))
+            section_blocks.append(f"### {assertion_type.upper().replace('_', ' ')} ({len(msgs)})")
             for m in msgs:
                 directive = TIER_DIRECTIVES.get(getattr(m, "content_tier", None) or "", "")
                 section_blocks.append(f"  - {directive}{m.content}")
         key_messages_str = "\n".join(section_blocks)
 
-        # Build full persona blocks — all personas, all attributes
-        persona_blocks = []
-        for p in personas:
+        # Build full audience blocks — all audiences, all attributes
+        audience_blocks = []
+        for p in audiences:
             lines = [f"**{p.name}**"]
             if p.description:
                 lines.append(f"  Description: {p.description}")
-            pain = p.pain_points or []
+            pain = p.qa_pairs or []
             if pain:
                 lines.append(f"  Pain Points: {'; '.join(str(x) for x in pain)}")
-            triggers = p.buying_triggers or []
+            triggers = []
             if triggers:
                 lines.append(f"  Buying Triggers: {'; '.join(str(x) for x in triggers)}")
-            objs = p.objections or []
+            objs = p.qa_pairs or []
             if objs:
                 obj_strs = [
                     ob.get("statement", str(ob)) if isinstance(ob, dict) else str(ob)
                     for ob in objs
                 ]
                 lines.append(f"  Objections: {'; '.join(obj_strs)}")
-            persona_blocks.append("\n".join(lines))
-        personas_str = "\n\n".join(persona_blocks)
+            audience_blocks.append("\n".join(lines))
+        audiences_str = "\n\n".join(audience_blocks)
 
         context_block = (
             f"## {spec.name}\n\n"
@@ -524,31 +524,31 @@ class ArtifactGenerator:
             f"**Brand Personality:** {spec.brand_personality or '(not set)'}\n\n"
             f"## Key Messages ({len(messages)} total, all sections)\n\n"
             f"{key_messages_str}\n\n"
-            f"## Personas ({len(personas)} total)\n\n"
-            f"{personas_str}"
+            f"## Personas ({len(audiences)} total)\n\n"
+            f"{audiences_str}"
         )
 
-        # Safe single-item values for skill templates that reference {persona} / {objections}
-        first_persona = personas[0] if personas else None
+        # Safe single-item values for skill templates that reference {audience} / {qa_pairs}
+        first_audience = audiences[0] if audiences else None
         first_obj_list: list[str] = []
-        if first_persona:
-            for ob in (first_persona.objections or []):
+        if first_audience:
+            for ob in (first_audience.qa_pairs or []):
                 first_obj_list.append(
                     ob.get("statement", str(ob)) if isinstance(ob, dict) else str(ob)
                 )
 
         # Structured arrays for templating / design spec placeholder resolution
-        benefits = [m.content for m in messages if str(m.section_type).split(".")[-1].lower() == "benefit"]
-        all_objections = []
-        for p in personas:
-            for ob in (p.objections or []):
+        benefits = [m.content for m in messages if str(m.assertion_type).split(".")[-1].lower() == "benefit"]
+        all_qa_pairs = []
+        for p in audiences:
+            for ob in (p.qa_pairs or []):
                 if isinstance(ob, dict):
-                    all_objections.append(ob.get("statement", str(ob)) or "")
+                    all_qa_pairs.append(ob.get("statement", str(ob)) or "")
                 else:
-                    all_objections.append(str(ob))
+                    all_qa_pairs.append(str(ob))
         pillars_list = [{"name": pl.name, "description": pl.description} for pl in (getattr(spec, "pillars", []) or [])]
-        personas_list = [{"name": p.name, "description": p.description, "objections": p.objections} for p in personas]
-        structured_km = [{"section_type": str(m.section_type).split(".")[-1].lower(), "content": m.content} for m in messages]
+        audiences_list = [{"name": p.name, "description": p.description, "qa_pairs": p.qa_pairs} for p in audiences]
+        structured_km = [{"assertion_type": str(m.assertion_type).split(".")[-1].lower(), "content": m.content} for m in messages]
 
         context = {
             "spec_name": spec.name,
@@ -556,17 +556,16 @@ class ArtifactGenerator:
             "tagline": spec.tagline or "",
             "differentiation": spec.differentiation or "",
             "audience": spec.audience or "",
-            "brand_personality": spec.brand_personality or "",
             "assertions": key_messages_str,
-            "personas_detail": personas_str,
+            "audiences_detail": audiences_str,
             "context": context_block,
             "primary_message": messages[0].content if messages else "",
-            "persona": first_persona.name if first_persona else "",
-            "objections_str": "; ".join(first_obj_list) if first_obj_list else "",
+            "audience": first_audience.name if first_audience else "",
+            "qa_pairs_str": "; ".join(first_obj_list) if first_obj_list else "",
             "benefits": benefits,
-            "objections": all_objections,
+            "qa_pairs": all_qa_pairs,
             "pillars": pillars_list,
-            "personas": personas_list,
+            "audiences": audiences_list,
             "structured_key_messages": structured_km,
             # defaults for optional context variables used in some skill templates
             "target_length": "800-1200",

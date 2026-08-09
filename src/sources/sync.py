@@ -159,7 +159,7 @@ class SyncEngine:
         from pathlib import Path
         from src.pipeline.extract import extract_text
         from src.pipeline.structure import SpecStructurer, detect_document_type
-        from src.models import Spec, SpecStatus, GroundingType
+        from src.models import Spec, SpecStatus, SchemaType
         from src.store import get_store
 
         store = get_store()

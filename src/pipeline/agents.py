@@ -50,7 +50,7 @@ class VoiceAgent(BaseAgent):
 
     def analyze_tone(self, text: str, domain_id: UUID) -> dict:
         domain = self.store.get_spec(domain_id)
-        personality = domain.brand_personality if domain else "General"
+        personality = domain.positioning if domain else "General"
 
         prompt = (
             f"Evaluate the text against the brand personality: '{personality}'\n\n"

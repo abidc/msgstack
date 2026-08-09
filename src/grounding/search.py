@@ -23,7 +23,7 @@ from src.models import (
     GroundingResult,
     GroundingResponse,
     SearchFilters,
-    SectionType,
+    AssertionType,
 )
 from src.store import Store, VectorMetadataModel
 
@@ -102,18 +102,18 @@ class GroundingEngine:
             "benefit": ["benefit", "benefits", "value prop", "value proposition", "value pillar", "pillar"],
             "use_case": ["use case", "use cases", "capability", "capabilities", "how it works", "top use"],
             "proof_point": ["proof", "proof point", "social proof", "testimonial", "customer story", "case study", "evidence"],
-            "objection": ["objection", "objections", "rebuttal", "concern"],
+            "qa_pair": ["qa_pair", "qa_pairs", "rebuttal", "concern"],
             "positioning": ["positioning", "position", "frame"],
             "know_your_market": ["know your market", "know your customer", "kym", "kyc", "market research", "market context", "competitive context"],
         }
         for section, keywords in section_map.items():
             if any(kw in text for kw in keywords):
-                filters.setdefault("section_types", []).append(section)
+                filters.setdefault("assertion_types", []).append(section)
 
-        persona_cues = ["smb", "enterprise", "cto", "cmo", "developer", "ops", "finops"]
-        for cue in persona_cues:
+        audience_cues = ["smb", "enterprise", "cto", "cmo", "developer", "ops", "finops"]
+        for cue in audience_cues:
             if cue in text:
-                filters.setdefault("personas", []).append(cue)
+                filters.setdefault("audiences", []).append(cue)
 
         channel_map = {
             "linkedin": ["linkedin"],
@@ -146,7 +146,7 @@ class GroundingEngine:
         inferred = self._query_to_filters(query)
         for key, val in inferred.items():
             attr = f"{key}_types" if key == "section" else key
-            if attr in ["section_types", "personas", "channels"]:
+            if attr in ["assertion_types", "audiences", "channels"]:
                 existing = getattr(filters, attr, None) or []
                 merged = list(set(existing + val))
                 setattr(filters, attr, merged if merged else None)
@@ -160,8 +160,8 @@ class GroundingEngine:
         # SQLite pre-filtering
         matching_records = self.store.list_vector_metadata_matching_filters(
             specs=filters.specs,
-            section_types=filters.section_types,
-            personas=filters.personas,
+            assertion_types=filters.assertion_types,
+            audiences=filters.audiences,
             channels=filters.channels,
             min_priority=filters.min_priority,
         )
@@ -207,9 +207,9 @@ class GroundingEngine:
                         "spec_name": record.spec_name,
                         "spec_summary": record.spec_summary,
                         "content": record.content,
-                        "section_type": record.section_type,
+                        "assertion_type": record.assertion_type,
                         "priority": record.priority,
-                        "persona": record.persona,
+                        "audience": record.audience,
                         "channel": record.channel,
                         "assertion_id": record.assertion_id,
                         "last_synced": record.last_synced.isoformat() if record.last_synced else None,
@@ -231,24 +231,24 @@ class GroundingEngine:
         grounding_results = []
         specs_represented: dict[str, int] = {}
         confidence_scores = []
-        coverage: dict[str, str] = {"section_types": "none", "personas": "none", "channels": "none"}
+        coverage: dict[str, str] = {"assertion_types": "none", "audiences": "none", "channels": "none"}
 
         for match in matches[:top_k]:
             meta = match.get("metadata", {})
-            raw_st = meta.get("section_type", "positioning")
+            raw_st = meta.get("assertion_type", "positioning")
             try:
-                st = SectionType(raw_st)
+                st = AssertionType(raw_st)
             except ValueError:
-                st = SectionType.POSITIONING
+                st = AssertionType.POSITIONING
             
             chunk = GroundingChunk(
                 id=match["id"],
                 spec_id=UUID(meta.get("spec_id", "00000000-0000-0000-0000-000000000000")),
                 assertion_id=UUID(meta.get("assertion_id")) if meta.get("assertion_id") else None,
                 content=meta.get("content", ""),
-                section_type=st,
+                assertion_type=st,
                 priority=int(meta.get("priority", 3)),
-                persona=meta.get("persona"),
+                audience=meta.get("audience"),
                 channel=Channel(meta.get("channel", "all")),
                 spec_name=meta.get("spec_name", ""),
                 spec_summary=meta.get("spec_summary", ""),
@@ -262,9 +262,9 @@ class GroundingEngine:
                 GroundingResult(
                     chunk_id=chunk.id,
                     content=chunk.content,
-                    section_type=str(chunk.section_type),
+                    assertion_type=str(chunk.assertion_type),
                     priority=chunk.priority,
-                    persona=chunk.persona,
+                    audience=chunk.audience,
                     channel=str(chunk.channel),
                     channel_variants={},
                     source={
@@ -291,9 +291,9 @@ class GroundingEngine:
             else:
                 confidence = "low"
 
-            section_types = set(r.section_type for r in grounding_results)
-            coverage["section_types"] = "full" if len(section_types) > 1 else "partial"
-            coverage["personas"] = "full" if grounding_results[0].persona else "none"
+            assertion_types = set(r.assertion_type for r in grounding_results)
+            coverage["assertion_types"] = "full" if len(assertion_types) > 1 else "partial"
+            coverage["audiences"] = "full" if grounding_results[0].audience else "none"
             coverage["channels"] = "partial"
         else:
             confidence = "low"
@@ -301,7 +301,7 @@ class GroundingEngine:
             spec_summary = ""
             top_spec_id = str(active_spec_id) if active_spec_id else None
 
-        active_personas = list({r.persona for r in grounding_results if r.persona})
+        active_audiences = list({r.audience for r in grounding_results if r.audience})
 
         warnings: list[str] = []
         if filters.min_confidence is not None and grounding_results:
@@ -316,7 +316,7 @@ class GroundingEngine:
             active_spec_id=UUID(top_spec_id) if top_spec_id else active_spec_id,
             spec_name=spec_name,
             spec_summary=spec_summary,
-            active_personas=active_personas,
+            active_audiences=active_audiences,
             used_chunks=len(grounding_results),
             confidence=confidence,
             coverage=coverage,
@@ -436,7 +436,7 @@ class GroundingEngine:
         for node in found:
             if not self._visible(node.get("status", "draft"), filters):
                 continue
-            if filters.section_types and node.get("section_type") not in filters.section_types:
+            if filters.assertion_types and node.get("assertion_type") not in filters.assertion_types:
                 continue
             out.append(node)
         return out[:limit]
@@ -499,9 +499,9 @@ class GroundingEngine:
                     "spec_name": spec.name if spec else "",
                     "spec_summary": spec.summary if spec else "",
                     "content": record.content,
-                    "section_type": str(record.section_type),
+                    "assertion_type": str(record.assertion_type),
                     "priority": record.priority,
-                    "persona": None,
+                    "audience": None,
                     "channel": "all",
                     "assertion_id": key,
                     "last_synced": None,
@@ -528,9 +528,9 @@ class GroundingEngine:
         """Deterministic graph retrieval — bypasses vector approximation, filters outdated, prioritizes approved/locked."""
         from src.grounding.graph import get_graph_engine
         engine = get_graph_engine()
-        persona = (filters.personas or [None])[0] if filters.personas else None
+        audience = (filters.audiences or [None])[0] if filters.audiences else None
         channel = (filters.channels or [None])[0] if filters.channels else None
-        chunks = engine.get_connections(str(spec_id), persona=persona, channel=channel)
+        chunks = engine.get_connections(str(spec_id), audience=audience, channel=channel)
 
         results = []
         for chunk in chunks:
@@ -540,7 +540,7 @@ class GroundingEngine:
                 continue
             if not getattr(filters, "include_drafts", False) and status not in ("approved", "locked"):
                 continue
-            if filters.section_types and chunk.get("section_type") not in filters.section_types:
+            if filters.assertion_types and chunk.get("assertion_type") not in filters.assertion_types:
                 continue
             status_order = {"locked": 0, "approved": 1, "in_review": 2, "draft": 3}
             s_val = status_order.get(status, 4)
@@ -548,9 +548,9 @@ class GroundingEngine:
             results.append(GroundingResult(
                 chunk_id=chunk.get("id", ""),
                 content=chunk.get("content", ""),
-                section_type=chunk.get("section_type", "positioning"),
+                assertion_type=chunk.get("assertion_type", "positioning"),
                 priority=chunk.get("priority", 3),
-                persona=persona,
+                audience=audience,
                 channel=channel or "all",
                 channel_variants={},
                 source={"spec_id": str(spec_id), "spec_name": ""},
@@ -584,10 +584,10 @@ class GroundingEngine:
                     continue
                 if not getattr(filters, "include_drafts", False) and status not in ("approved", "locked"):
                     continue
-                if filters.section_types and str(msg.section_type) not in filters.section_types:
+                if filters.assertion_types and str(msg.assertion_type) not in filters.assertion_types:
                     continue
-                if filters.personas:
-                    matched = any(p.lower() in filters.personas for p in msg.personas)
+                if filters.audiences:
+                    matched = any(p.lower() in filters.audiences for p in msg.audiences)
                     if not matched:
                         continue
 
@@ -614,9 +614,9 @@ class GroundingEngine:
                     GroundingResult(
                         chunk_id=str(msg.id),
                         content=msg.content,
-                        section_type=str(msg.section_type),
+                        assertion_type=str(msg.assertion_type),
                         priority=msg.priority,
-                        persona=msg.personas[0] if msg.personas else None,
+                        audience=msg.audiences[0] if msg.audiences else None,
                         channel="all",
                         channel_variants=msg.variants,
                         source={
@@ -670,9 +670,9 @@ class GroundingEngine:
                     spec_name=spec.name,
                     spec_summary=spec.summary or "",
                     content=content,
-                    section_type=str(msg.section_type),
+                    assertion_type=str(msg.assertion_type),
                     priority=msg.priority,
-                    persona=msg.personas[0] if msg.personas else "general",
+                    audience=msg.audiences[0] if msg.audiences else "general",
                     channel=str(msg.channels[0]) if msg.channels else "all",
                     assertion_id=msg.id,
                     last_synced=spec.last_synced,
@@ -702,9 +702,9 @@ class GroundingEngine:
                         spec_name=spec.name,
                         spec_summary=spec.summary or "",
                         content=text,
-                        section_type=st,
+                        assertion_type=st,
                         priority=priority,
-                        persona="general",
+                        audience="general",
                         channel="all",
                         last_synced=spec.last_synced,
                     )
@@ -732,9 +732,9 @@ class GroundingEngine:
                             spec_name=spec.name,
                             spec_summary=spec.summary or "",
                             content=content_slice,
-                            section_type="know_your_market",
+                            assertion_type="know_your_market",
                             priority=1,
-                            persona="general",
+                            audience="general",
                             channel="all",
                             last_synced=spec.last_synced,
                         )
@@ -762,9 +762,9 @@ class GroundingEngine:
                             spec_name=spec.name,
                             spec_summary=spec.summary or "",
                             content=content,
-                            section_type="source_markdown",
+                            assertion_type="source_markdown",
                             priority=3,
-                            persona="general",
+                            audience="general",
                             channel="all",
                             last_synced=spec.last_synced,
                         )

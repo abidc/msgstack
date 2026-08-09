@@ -18,7 +18,7 @@ def test_setup(tmp_path):
     """Setup a temporary database and app context."""
     import src.web_app as web_app_module
     from src.store import Store
-    from src.models import Spec, Assertion, Persona, SectionType, AssertionStatus, SpecStatus
+    from src.models import Spec, Assertion, Audience, AssertionType, AssertionStatus, SpecStatus
 
     db_path = tmp_path / "alias_compat_test.db"
     store = Store(str(db_path))
@@ -38,7 +38,7 @@ def test_setup(tmp_path):
     # Seed one entry
     entry = Assertion(
         spec_id=domain.id,
-        section_type=SectionType.BENEFIT,
+        assertion_type=AssertionType.CAPABILITY,
         priority=1,
         content="Seed entry content",
         status=AssertionStatus.APPROVED,
@@ -46,14 +46,13 @@ def test_setup(tmp_path):
     )
     store.upsert_key_message(entry)
 
-    # Seed one persona
-    persona = Persona(
+    # Seed one audience
+    audience = Audience(
         spec_id=domain.id,
-        name="Compat Persona",
-        description="A persona for compat test",
-        pain_points=[" Slow deployment"],
+        name="Compat Audience",
+        description="A audience for compat test",
     )
-    store.upsert_persona(persona)
+    store.upsert_audience(audience)
 
     # Patch the web app's store
     old_store = web_app_module.store
@@ -61,7 +60,7 @@ def test_setup(tmp_path):
 
     client = TestClient(web_app_module.app)
 
-    yield store, client, domain, entry, persona
+    yield store, client, domain, entry, audience
 
     web_app_module.store = old_store
 
@@ -96,7 +95,7 @@ def test_assertions_endpoints_aliases(test_setup):
     # Test POST create with spec graph parameter
     resp_create_spec = client.post("/api/entries", json={
         "spec_id": str(domain.id),
-        "section_type": "headline",
+        "assertion_type": "capability",
         "content": "New headline content",
         "priority": 2
     })
@@ -106,7 +105,7 @@ def test_assertions_endpoints_aliases(test_setup):
     # Test POST create with legacy parameter
     resp_create_legacy = client.post("/api/messages", json={
         "spec_id": str(domain.id),
-        "section_type": "headline",
+        "assertion_type": "capability",
         "content": "Legacy parameter content",
         "priority": 3
     })
@@ -176,7 +175,7 @@ def test_spec_sub_endpoints_aliases(test_setup):
 def mock_mcp_store(tmp_path):
     """Setup a store and patch server-level functions."""
     from src.store import Store
-    from src.models import Spec, Assertion, SectionType, SpecStatus, AssertionStatus
+    from src.models import Spec, Assertion, AssertionType, SpecStatus, AssertionStatus
     import src.server as server_module
 
     db_path = tmp_path / "mcp_compat_test.db"
@@ -195,7 +194,7 @@ def mock_mcp_store(tmp_path):
     # Seed key entry
     entry = Assertion(
         spec_id=domain.id,
-        section_type=SectionType.BENEFIT,
+        assertion_type=AssertionType.CAPABILITY,
         priority=2,
         content="Super reliable tooling",
         status=AssertionStatus.APPROVED,

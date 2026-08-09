@@ -9,16 +9,16 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("PINECONE_API_KEY", "test-key")
 
-from src.models import Spec, GroundingType, DEPARTMENT_PRIMARY_GROUNDING
+from src.models import Spec, SchemaType, DEPARTMENT_PRIMARY_SCHEMA
 from src.auth import AuthContext
 from src.store import Store
 
 def test_department_mappings():
     """Verify department primary grounding mappings."""
-    assert DEPARTMENT_PRIMARY_GROUNDING["Product Marketing"] == GroundingType.MESSAGE_HOUSE
-    assert DEPARTMENT_PRIMARY_GROUNDING["Company Marketing"] == GroundingType.CORP_NARRATIVE
-    assert DEPARTMENT_PRIMARY_GROUNDING["Enablement"] == GroundingType.PERSONA_LIBRARY
-    assert DEPARTMENT_PRIMARY_GROUNDING["Product Management"] == GroundingType.COMPETITIVE_BRIEF
+    assert DEPARTMENT_PRIMARY_SCHEMA["Engineering"] == SchemaType.ENGINEERING_SPEC
+    assert DEPARTMENT_PRIMARY_SCHEMA["Platform"] == SchemaType.SERVICE_CATALOG
+    assert DEPARTMENT_PRIMARY_SCHEMA["Security"] == SchemaType.POLICY_SHIELD
+    assert DEPARTMENT_PRIMARY_SCHEMA["Operations"] == SchemaType.INCIDENT_RECORD
 
 def test_domain_model_default_dept():
     """Verify department default is 'General' on models."""
@@ -31,13 +31,13 @@ def test_auth_context_scoping():
     ctx_scoped = AuthContext(
         key_id="key-1",
         workspace_id="ws-1",
-        scopes={"write", "dept:Product Marketing"},
+        scopes={"write", "dept:Engineering"},
         name="sme-pmark",
         is_admin=False,
-        allowed_departments=["Product Marketing"],
+        allowed_departments=["Engineering"],
     )
-    assert ctx_scoped.has_department_access("Product Marketing") is True
-    assert ctx_scoped.has_department_access("Company Marketing") is False
+    assert ctx_scoped.has_department_access("Engineering") is True
+    assert ctx_scoped.has_department_access("Platform") is False
     assert ctx_scoped.has_department_access("General") is False
 
     # Admin user
@@ -49,8 +49,8 @@ def test_auth_context_scoping():
         is_admin=True,
         allowed_departments=[],
     )
-    assert ctx_admin.has_department_access("Product Marketing") is True
-    assert ctx_admin.has_department_access("Company Marketing") is True
+    assert ctx_admin.has_department_access("Engineering") is True
+    assert ctx_admin.has_department_access("Platform") is True
 
     # General API key (no dept filters, allowed all)
     ctx_general = AuthContext(
@@ -61,8 +61,8 @@ def test_auth_context_scoping():
         is_admin=False,
         allowed_departments=[],
     )
-    assert ctx_general.has_department_access("Product Marketing") is True
-    assert ctx_general.has_department_access("Company Marketing") is True
+    assert ctx_general.has_department_access("Engineering") is True
+    assert ctx_general.has_department_access("Platform") is True
 
 
 @pytest.fixture
@@ -78,12 +78,12 @@ def store_and_client(tmp_path):
     d1 = Spec(
         name="PMM Spec",
         status="active",
-        department="Product Marketing",
+        department="Engineering",
     )
     d2 = Spec(
         name="Corp Narrative Spec",
         status="active",
-        department="Company Marketing",
+        department="Platform",
     )
     store.upsert_spec(d1)
     store.upsert_spec(d2)
@@ -116,7 +116,7 @@ def test_api_read_filtering(store_and_client):
     pmm_key = {
         "id": "pmm-key-id",
         "workspace_id": "default",
-        "scopes": ["write", "dept:Product Marketing"],
+        "scopes": ["write", "dept:Engineering"],
         "name": "PMM SME",
         "is_active": True,
     }
@@ -148,7 +148,7 @@ def test_api_read_filtering(store_and_client):
         items = resp.json()
         assert len(items) == 1
         assert items[0]["name"] == "PMM Spec"
-        assert items[0]["department"] == "Product Marketing"
+        assert items[0]["department"] == "Engineering"
 
         # Test listing with general key
         resp = client.get("/api/canon-domains", headers={"X-API-Key": "gen-secret"})
@@ -164,7 +164,7 @@ def test_api_write_guarding(store_and_client):
     pmm_key = {
         "id": "pmm-key-id",
         "workspace_id": "default",
-        "scopes": ["write", "dept:Product Marketing"],
+        "scopes": ["write", "dept:Engineering"],
         "name": "PMM SME",
         "is_active": True,
     }
@@ -184,14 +184,14 @@ def test_api_write_guarding(store_and_client):
         # 3. Create domain in another department -> Forbidden 403
         resp3 = client.post("/api/canon-domains", json={
             "name": "Unauthorized Company Domain",
-            "department": "Company Marketing"
+            "department": "Platform"
         }, headers={"X-API-Key": "secret"})
         assert resp3.status_code == 403
 
         # 4. Create domain in own department -> Success
         resp4 = client.post("/api/canon-domains", json={
             "name": "Authorized PMM Domain",
-            "department": "Product Marketing"
+            "department": "Engineering"
         }, headers={"X-API-Key": "secret"})
         assert resp4.status_code == 200
 
@@ -209,18 +209,18 @@ def test_mcp_list_departments(store_and_client):
         assert "departments" in depts_res
         depts = depts_res["departments"]
         
-        pmm_dept = next(d for d in depts if d["department"] == "Product Marketing")
+        pmm_dept = next(d for d in depts if d["department"] == "Engineering")
         assert pmm_dept["domain_count"] == 1
-        assert pmm_dept["primary_grounding_type"] == GroundingType.MESSAGE_HOUSE.value
+        assert pmm_dept["primary_schema_type"] == SchemaType.ENGINEERING_SPEC.value
 
-        corp_dept = next(d for d in depts if d["department"] == "Company Marketing")
+        corp_dept = next(d for d in depts if d["department"] == "Platform")
         assert corp_dept["domain_count"] == 1
-        assert corp_dept["primary_grounding_type"] == GroundingType.CORP_NARRATIVE.value
+        assert corp_dept["primary_schema_type"] == SchemaType.SERVICE_CATALOG.value
 
         # Test list_specs with department filter
         res_all = list_specs()
         assert len(res_all["domains"]) == 2
 
-        res_pmm = list_specs(department="Product Marketing")
+        res_pmm = list_specs(department="Engineering")
         assert len(res_pmm["domains"]) == 1
         assert res_pmm["domains"][0]["name"] == "PMM Spec"

@@ -11,7 +11,7 @@ from uuid import uuid4
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from src.models import Spec, Assertion, SectionType, AssertionStatus, SpecStatus
+from src.models import Spec, Assertion, AssertionType, AssertionStatus, SpecStatus
 
 
 @pytest.fixture
@@ -38,10 +38,10 @@ def two_specs(store):
     store.upsert_spec(api)
     store.upsert_spec(slo)
 
-    a1 = Assertion(spec_id=api.id, section_type=SectionType.POSITIONING, priority=1,
+    a1 = Assertion(spec_id=api.id, assertion_type=AssertionType.POSITIONING, priority=1,
                    content="Checkout endpoint is limited to 1000 req/min per API key.",
                    status=AssertionStatus.APPROVED)
-    a2 = Assertion(spec_id=slo.id, section_type=SectionType.POSITIONING, priority=1,
+    a2 = Assertion(spec_id=slo.id, assertion_type=AssertionType.POSITIONING, priority=1,
                    content="Gateway sheds load above 1200 req/min aggregate.",
                    status=AssertionStatus.APPROVED)
     store.upsert_assertion(a1)
@@ -201,7 +201,7 @@ def test_propagation_marks_dependent_outdated(store, two_specs):
 
 def test_propagation_is_transitive(store, two_specs):
     api, slo, a1, a2 = two_specs
-    a3 = Assertion(spec_id=api.id, section_type=SectionType.POSITIONING, priority=1,
+    a3 = Assertion(spec_id=api.id, assertion_type=AssertionType.POSITIONING, priority=1,
                    content="Docs quote the checkout rate limit.",
                    status=AssertionStatus.APPROVED)
     store.upsert_assertion(a3)
@@ -269,8 +269,8 @@ def _vector_match(assertion_id, score, spec_id):
         "metadata": {
             "assertion_id": str(assertion_id), "spec_id": str(spec_id),
             "spec_name": "", "spec_summary": "", "content": "seed",
-            "section_type": "positioning", "priority": 1,
-            "persona": None, "channel": "all",
+            "assertion_type": "positioning", "priority": 1,
+            "audience": None, "channel": "all",
             "last_synced": None, "content_tier": None,
         },
     }
@@ -311,7 +311,7 @@ def test_fusion_ranks_dual_hits_above_single(store, two_specs):
     api, slo, a1, a2 = two_specs
     filler = []
     for i in range(5):
-        f = Assertion(spec_id=api.id, section_type=SectionType.POSITIONING,
+        f = Assertion(spec_id=api.id, assertion_type=AssertionType.POSITIONING,
                       priority=1, content=f"filler {i}", status=AssertionStatus.APPROVED)
         store.upsert_assertion(f)
         filler.append(f)
@@ -385,7 +385,7 @@ def test_hub_node_is_not_traversed_through(store):
     hub = store.resolve_entity("ubiquitous-thing")
     assertions = []
     for i in range(engine_hub_count := 30):
-        a = Assertion(spec_id=spec.id, section_type=SectionType.POSITIONING,
+        a = Assertion(spec_id=spec.id, assertion_type=AssertionType.POSITIONING,
                       priority=1, content=f"a{i}", status=AssertionStatus.APPROVED)
         store.upsert_assertion(a)
         store.add_entity_mention(hub, str(a.id), str(spec.id))

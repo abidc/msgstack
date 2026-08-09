@@ -1,0 +1,36 @@
+{
+  "id": "release_notes",
+  "name": "Release Notes",
+  "description": "Customer-facing notes for a release, grounded in the spec's capabilities, constraints and deprecations.",
+  "channels": [
+    "all"
+  ],
+  "sections": [
+    {
+      "key": "summary",
+      "label": "Summary",
+      "required": true
+    },
+    {
+      "key": "new_capabilities",
+      "label": "New Capabilities",
+      "required": true
+    },
+    {
+      "key": "changed_behaviour",
+      "label": "Changed Behaviour",
+      "required": false
+    },
+    {
+      "key": "deprecations",
+      "label": "Deprecations",
+      "required": false
+    },
+    {
+      "key": "upgrade_notes",
+      "label": "Upgrade Notes",
+      "required": false
+    }
+  ],
+  "prompt_template": "You are writing a release notes for the service described by this spec.\n\n{grounding_context}\n\nUse ONLY the assertions above. Every claim must trace to one. If a required fact is absent, write '[not specified in spec]' rather than inventing it. Reproduce any assertion marked Tier 1 verbatim.\n\nProduce these sections: summary, new_capabilities, changed_behaviour, deprecations, upgrade_notes."
+}

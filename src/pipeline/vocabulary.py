@@ -19,7 +19,7 @@ def apply_controlled_vocabulary(text: str, domain_id: UUID, store: Store) -> str
     replacements = {}
     
     for entry in entries:
-        if entry.section_type == "word_list":
+        if entry.assertion_type == "word_list":
             content = entry.content.strip()
             # Parse lines of banned mappings
             for line in content.split("\n"):

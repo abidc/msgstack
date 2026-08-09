@@ -128,10 +128,10 @@ def build_battlecard_template() -> Template:
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
         ),
         Zone(
-            id="objection_handler", type=ZoneType.MESSAGE_LIST, row=2, col=0, colspan=2,
+            id="qa_pair_handler", type=ZoneType.MESSAGE_LIST, row=2, col=0, colspan=2,
             text_content="Overcoming Objections",
             text_style=TextStyle.HEADING,
-            list_items=["{objection_1}", "{objection_2}", "{objection_3}"],
+            list_items=["{qa_pair_1}", "{qa_pair_2}", "{qa_pair_3}"],
         ),
         Zone(
             id="proof", type=ZoneType.PROOF_BLOCK, row=3, col=0, colspan=3,
@@ -209,10 +209,10 @@ def build_executive_summary_template() -> Template:
             list_items=["{pillar_1}", "{pillar_2}", "{pillar_3}"],
         ),
         Zone(
-            id="persona_strip", type=ZoneType.PERSONA_STRIP, row=3, col=0, colspan=3,
+            id="audience_strip", type=ZoneType.PERSONA_STRIP, row=3, col=0, colspan=3,
             text_content="Target Audience",
             text_style=TextStyle.BODY,
-            list_items=["{persona_1}", "{persona_2}"],
+            list_items=["{audience_1}", "{audience_2}"],
         ),
         Zone(
             id="proof", type=ZoneType.PROOF_BLOCK, row=4, col=0, colspan=2,
@@ -304,7 +304,7 @@ def build_capability_brief_template() -> Template:
             id="audience", type=ZoneType.PERSONA_STRIP, row=3, col=0, colspan=3,
             text_content="Who We Serve",
             text_style=TextStyle.BODY,
-            list_items=["{persona_1}", "{persona_2}"],
+            list_items=["{audience_1}", "{audience_2}"],
         ),
         Zone(
             id="cta_footer", type=ZoneType.CTA_FOOTER, row=4, col=0, colspan=3,
@@ -361,12 +361,12 @@ def build_roi_one_pager_template() -> Template:
     )
 
 
-def build_persona_profile_template() -> Template:
+def build_audience_profile_template() -> Template:
     page = PageSpec.from_preset(PagePreset.WIDE_16_9, grid_cols=4, gutter=20)
     zones = [
         Zone(
             id="header", type=ZoneType.HEADER, row=0, col=0, colspan=4,
-            text_content="Persona Profile: {persona_1}",
+            text_content="Audience Profile: {audience_1}",
             text_style=TextStyle.HEADING, emphasis=Emphasis.PRIMARY,
             brand_refs=["brand"],
         ),
@@ -376,16 +376,16 @@ def build_persona_profile_template() -> Template:
             text_style=TextStyle.BODY, emphasis=Emphasis.PRIMARY,
         ),
         Zone(
-            id="pain_points", type=ZoneType.PILLAR_GRID, row=2, col=0, colspan=4,
+            id="qa_pairs", type=ZoneType.PILLAR_GRID, row=2, col=0, colspan=4,
             text_content="Key Pain Points & Triggers",
             text_style=TextStyle.HEADING,
             list_items=["{benefit_1}", "{benefit_2}", "{benefit_3}"],
         ),
         Zone(
-            id="objections", type=ZoneType.MESSAGE_LIST, row=3, col=0, colspan=4,
+            id="qa_pairs", type=ZoneType.MESSAGE_LIST, row=3, col=0, colspan=4,
             text_content="Top Objections & Responses",
             text_style=TextStyle.BODY,
-            list_items=["{objection_1}", "{objection_2}"],
+            list_items=["{qa_pair_1}", "{qa_pair_2}"],
         ),
         Zone(
             id="cta_footer", type=ZoneType.CTA_FOOTER, row=4, col=0, colspan=4,
@@ -395,7 +395,7 @@ def build_persona_profile_template() -> Template:
         ),
     ]
     return Template(
-        artifact_type="persona_profile",
+        artifact_type="audience_profile",
         page_spec=page,
         zones=zones,
         brand_zones=["header", "cta_footer"],
@@ -488,7 +488,7 @@ def seed_default_templates(registry: TemplateRegistry | None = None) -> None:
         "product_tearsheet": build_product_tearsheet_template,
         "capability_brief": build_capability_brief_template,
         "roi_one_pager": build_roi_one_pager_template,
-        "persona_profile": build_persona_profile_template,
+        "audience_profile": build_audience_profile_template,
         "feature_release": build_feature_release_template,
         "case_study": build_case_study_template,
     }

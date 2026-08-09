@@ -3,18 +3,20 @@
 Graph schema
 ------------
 Spec
-  ├─[HAS_SECTION]──► Section (one per section_type present in the spec)
+  ├─[HAS_SECTION]──► Section (one per assertion_type present in the spec)
   │                    └─[CONTAINS]──► Assertion
   ├─[HAS_PILLAR]───► Pillar (optional user grouping, orthogonal to sections)
   │                    └─[GROUPS]────► Assertion
-  └─[TARGETS]──────► Persona
-                       ├─[HAS_PAIN_POINT]──► PainPoint
-                       ├─[HAS_TRIGGER]─────► BuyingTrigger
-                       └─[HAS_OBJECTION]───► Objection
+  └─[TARGETS]──────► Audience
+                       └─[HAS_QA_PAIR]───► QAPair
 
 Assertion
-  ├─[ADDRESSES]──► Persona
-  └─[APPLIES_TO]─► Channel
+  ├─[ADDRESSES]──► Audience
+  ├─[APPLIES_TO]─► Channel
+  └─[MENTIONS]───► Entity        ← crosses spec boundaries
+
+Typed cross-spec edges (DEPENDS_ON, INFORMS, SUPERSEDES, CONTRADICTS, OWNS,
+IMPLEMENTS) connect any two nodes and are loaded from the `edges` table.
 """
 
 import logging
@@ -30,56 +32,45 @@ except ImportError:
     log.warning("networkx not installed — graph engine disabled. Run: pip install networkx")
 
 _SECTION_LABELS: dict[str, str] = {
-    "headline":            "Headlines",
-    "subhead":             "Sub-headlines",
-    "benefit":             "Benefits",
-    "use_case":            "Use Cases",
-    "proof_point":         "Proof Points",
-    "objection":           "Objections",
-    "social_proof":        "Social Proof",
+    "constraint":          "Constraints",
+    "sla":                 "SLAs",
+    "deprecation":         "Deprecations",
+    "config_default":      "Config Defaults",
+    "dependency":          "Dependencies",
+    "capability":          "Capabilities",
+    "limitation":          "Limitations",
+    "security_posture":    "Security Posture",
+    "interface_contract":  "Interface Contracts",
+    "version_policy":      "Version Policy",
+    "runbook_step":        "Runbook Steps",
+    "decision":            "Decisions",
     "positioning":         "Positioning",
-    "know_your_market":    "Know Your Market",
-    "brand_voice":         "Brand Voice",
-    "style_rule":          "Style Rules",
-    "word_list":           "Word List",
-    "competitor_strength":   "Competitor Strengths",
-    "competitor_weakness":   "Competitor Weaknesses",
-    "competitive_response":  "Competitive Responses",
-    "narrative_pillar":    "Narrative Pillars",
-    "company_value":       "Company Values",
-    "founding_story":      "Founding Story",
-    "persona_detail":      "Persona Details",
+    "source_markdown":     "Source Document",
 }
 
 _SECTION_ORDER: dict[str, int] = {
-    "positioning": 0, "headline": 1, "subhead": 2, "benefit": 3,
-    "use_case": 4, "proof_point": 5, "social_proof": 6, "objection": 7,
-    "know_your_market": 8, "brand_voice": 9, "style_rule": 10,
-    "word_list": 11, "competitor_strength": 12, "competitor_weakness": 13,
-    "competitive_response": 14, "narrative_pillar": 15,
-    "company_value": 16, "founding_story": 17, "persona_detail": 18,
+    "positioning": 0, "capability": 1, "interface_contract": 2,
+    "constraint": 3, "sla": 4, "dependency": 5, "config_default": 6,
+    "limitation": 7, "security_posture": 8, "version_policy": 9,
+    "deprecation": 10, "decision": 11, "runbook_step": 12,
+    "source_markdown": 13,
 }
 
 _SECTION_COLORS: dict[str, str] = {
-    "headline":            "#3b82f6",
-    "subhead":             "#60a5fa",
-    "benefit":             "#22c55e",
-    "proof_point":         "#f59e0b",
-    "objection":           "#ef4444",
-    "social_proof":        "#a855f7",
-    "positioning":         "#0ea5e9",
-    "use_case":            "#14b8a6",
-    "know_your_market":    "#f97316",
-    "brand_voice":         "#ec4899",
-    "style_rule":          "#84cc16",
-    "word_list":           "#64748b",
-    "competitor_strength":   "#fbbf24",
-    "competitor_weakness":   "#fb923c",
-    "competitive_response":  "#f43f5e",
-    "narrative_pillar":    "#8b5cf6",
-    "company_value":       "#06b6d4",
-    "founding_story":      "#d97706",
-    "persona_detail":      "#6366f1",
+    "constraint":          "#f59e0b",
+    "sla":                 "#22c55e",
+    "deprecation":         "#ef4444",
+    "config_default":      "#64748b",
+    "dependency":          "#8b5cf6",
+    "capability":          "#3b82f6",
+    "limitation":          "#fb923c",
+    "security_posture":    "#14b8a6",
+    "interface_contract":  "#0ea5e9",
+    "version_policy":      "#a855f7",
+    "runbook_step":        "#84cc16",
+    "decision":            "#ec4899",
+    "positioning":         "#6366f1",
+    "source_markdown":     "#9ca3af",
 }
 
 _STATUS_COLORS: dict[str, str] = {
@@ -110,7 +101,7 @@ class GraphEngine:
             spec_node = f"spec:{spec.id}"
             g.add_node(spec_node, type="Spec",
                        id=str(spec.id), name=spec.name,
-                       grounding_type=str(spec.grounding_type),
+                       schema_type=str(spec.schema_type),
                        tagline=getattr(spec, "tagline", ""),
                        positioning=getattr(spec, "positioning", ""),
                        summary=spec.summary,
@@ -135,70 +126,42 @@ class GraphEngine:
                 g.add_edge(spec_node, pil_node, rel="HAS_PILLAR")
                 pillar_map[pillar.id] = pil_node
 
-            # Personas + sub-nodes (built before messages so edges can reference them)
-            for persona in store.get_personas(spec.id):
-                pnode = f"persona:{spec.id}:{persona.name}"
-                g.add_node(pnode, type="Persona", name=persona.name,
+            # Audiences + their QA pairs (built before assertions so edges resolve)
+            for audience in store.get_audiences(spec.id):
+                pnode = f"audience:{spec.id}:{audience.name}"
+                g.add_node(pnode, type="Audience", name=audience.name,
                            spec_id=str(spec.id),
-                           description=getattr(persona, "description", ""))
+                           description=getattr(audience, "description", ""))
                 g.add_edge(spec_node, pnode, rel="TARGETS")
 
-                db_pps = store.list_pain_points(str(persona.id))
-                if db_pps:
-                    for pp in db_pps:
-                        n = f"pain_point_db:{pp.id}"
-                        g.add_node(n, type="PainPoint", id=str(pp.id), content=pp.content,
-                                   persona_name=persona.name, spec_id=str(spec.id))
-                        g.add_edge(pnode, n, rel="HAS_PAIN_POINT")
-                else:
-                    for i, txt in enumerate(persona.pain_points or []):
-                        n = f"pain_point:{spec.id}:{persona.name}:{i}"
-                        g.add_node(n, type="PainPoint", id=n, content=str(txt),
-                                   persona_name=persona.name, spec_id=str(spec.id))
-                        g.add_edge(pnode, n, rel="HAS_PAIN_POINT")
-
-                db_trigs = store.list_buying_triggers(str(persona.id))
-                if db_trigs:
-                    for bt in db_trigs:
-                        n = f"trigger_db:{bt.id}"
-                        g.add_node(n, type="BuyingTrigger", id=str(bt.id), content=bt.content,
-                                   persona_name=persona.name, spec_id=str(spec.id))
-                        g.add_edge(pnode, n, rel="HAS_TRIGGER")
-                else:
-                    for i, txt in enumerate(persona.buying_triggers or []):
-                        n = f"trigger:{spec.id}:{persona.name}:{i}"
-                        g.add_node(n, type="BuyingTrigger", id=n, content=str(txt),
-                                   persona_name=persona.name, spec_id=str(spec.id))
-                        g.add_edge(pnode, n, rel="HAS_TRIGGER")
-
-                db_obs = store.list_objections(str(persona.id))
+                db_obs = store.list_qa_pairs(str(audience.id))
                 if db_obs:
                     for ob in db_obs:
-                        n = f"objection_db:{ob.id}"
-                        g.add_node(n, type="Objection", id=str(ob.id),
+                        n = f"qa_pair_db:{ob.id}"
+                        g.add_node(n, type="QAPair", id=str(ob.id),
                                    statement=ob.statement, response=ob.response or "",
-                                   persona_name=persona.name, spec_id=str(spec.id))
-                        g.add_edge(pnode, n, rel="HAS_OBJECTION")
+                                   audience_name=audience.name, spec_id=str(spec.id))
+                        g.add_edge(pnode, n, rel="HAS_QA_PAIR")
                 else:
-                    for i, ob in enumerate(persona.objections or []):
-                        n = f"objection:{spec.id}:{persona.name}:{i}"
+                    for i, ob in enumerate(audience.qa_pairs or []):
+                        n = f"qa_pair:{spec.id}:{audience.name}:{i}"
                         stmt = ob.get("statement", "") if isinstance(ob, dict) else str(ob)
                         resp = ob.get("response", "") if isinstance(ob, dict) else ""
-                        g.add_node(n, type="Objection", id=n, statement=stmt, response=resp,
-                                   persona_name=persona.name, spec_id=str(spec.id))
-                        g.add_edge(pnode, n, rel="HAS_OBJECTION")
+                        g.add_node(n, type="QAPair", id=n, statement=stmt, response=resp,
+                                   audience_name=audience.name, spec_id=str(spec.id))
+                        g.add_edge(pnode, n, rel="HAS_QA_PAIR")
 
             # Sections + KeyMessages
             by_section: dict[str, list] = {}
             for msg in store.get_key_messages(spec.id):
-                by_section.setdefault(str(msg.section_type), []).append(msg)
+                by_section.setdefault(str(msg.assertion_type), []).append(msg)
 
-            for section_type, msgs in by_section.items():
-                sec_node = f"section:{spec.id}:{section_type}"
-                label = _SECTION_LABELS.get(section_type,
-                                             section_type.replace("_", " ").title())
+            for assertion_type, msgs in by_section.items():
+                sec_node = f"section:{spec.id}:{assertion_type}"
+                label = _SECTION_LABELS.get(assertion_type,
+                                             assertion_type.replace("_", " ").title())
                 g.add_node(sec_node, type="Section",
-                           id=sec_node, section_type=section_type, label=label,
+                           id=sec_node, assertion_type=assertion_type, label=label,
                            spec_id=str(spec.id), count=len(msgs))
                 g.add_edge(spec_node, sec_node, rel="HAS_SECTION")
 
@@ -206,7 +169,7 @@ class GraphEngine:
                     chunk_node = f"chunk:{msg.id}"
                     g.add_node(chunk_node, type="Assertion",
                                id=str(msg.id), content=msg.content,
-                               section_type=section_type, priority=msg.priority,
+                               assertion_type=assertion_type, priority=msg.priority,
                                status=getattr(msg, "status", "draft"),
                                variants=msg.variants or {})
                     g.add_edge(sec_node, chunk_node, rel="CONTAINS")
@@ -214,10 +177,10 @@ class GraphEngine:
                     if msg.pillar_id and msg.pillar_id in pillar_map:
                         g.add_edge(pillar_map[msg.pillar_id], chunk_node, rel="GROUPS")
 
-                    for persona_name in (msg.personas or []):
-                        pnode = f"persona:{spec.id}:{persona_name}"
+                    for audience_name in (msg.audiences or []):
+                        pnode = f"audience:{spec.id}:{audience_name}"
                         if not g.has_node(pnode):
-                            g.add_node(pnode, type="Persona", name=persona_name,
+                            g.add_node(pnode, type="Audience", name=audience_name,
                                        spec_id=str(spec.id), description="")
                             g.add_edge(spec_node, pnode, rel="TARGETS")
                         g.add_edge(chunk_node, pnode, rel="ADDRESSES")
@@ -447,18 +410,18 @@ class GraphEngine:
                 sec_attrs["messages"] = sorted(messages, key=lambda m: m.get("priority", 3))
                 sections.append(sec_attrs)
         return sorted(sections,
-                      key=lambda s: _SECTION_ORDER.get(s.get("section_type", ""), 99))
+                      key=lambda s: _SECTION_ORDER.get(s.get("assertion_type", ""), 99))
 
-    def get_chunks_for_persona(self, spec_id: str, persona_name: str) -> list[dict]:
-        """KeyMessages that ADDRESS a specific persona within a spec."""
+    def get_chunks_for_audience(self, spec_id: str, audience_name: str) -> list[dict]:
+        """KeyMessages that ADDRESS a specific audience within a spec."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        persona_node = f"persona:{spec_id}:{persona_name}"
-        if persona_node not in self._graph:
+        audience_node = f"audience:{spec_id}:{audience_name}"
+        if audience_node not in self._graph:
             return []
         return [dict(self._graph.nodes[n]) for n, _, d
-                in self._graph.in_edges(persona_node, data=True)
+                in self._graph.in_edges(audience_node, data=True)
                 if d.get("rel") == "ADDRESSES"]
 
     def get_chunks_for_channel(self, spec_id: str, channel: str) -> list[dict]:
@@ -475,19 +438,19 @@ class GraphEngine:
                 if d.get("rel") == "APPLIES_TO" and n in spec_chunks]
 
     def get_connections(self, spec_id: str,
-                        persona: str | None = None,
+                        audience: str | None = None,
                         channel: str | None = None) -> list[dict]:
-        """Graph query entry point — filter by optional persona and/or channel."""
+        """Graph query entry point — filter by optional audience and/or channel."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        if persona and channel:
-            by_p = {c["id"] for c in self.get_chunks_for_persona(spec_id, persona)}
+        if audience and channel:
+            by_p = {c["id"] for c in self.get_chunks_for_audience(spec_id, audience)}
             by_c = {c["id"] for c in self.get_chunks_for_channel(spec_id, channel)}
             ids = by_p & by_c
             results = [c for c in self.get_chunks_for_spec(spec_id) if c.get("id") in ids]
-        elif persona:
-            results = self.get_chunks_for_persona(spec_id, persona)
+        elif audience:
+            results = self.get_chunks_for_audience(spec_id, audience)
         elif channel:
             results = self.get_chunks_for_channel(spec_id, channel)
         else:
@@ -504,14 +467,11 @@ class GraphEngine:
         nodes: list[dict] = []
         for nid, attrs in g.nodes(data=True):
             ntype = attrs.get("type", "unknown")
-            if ntype == "Objection":
+            if ntype == "QAPair":
                 raw = attrs.get("statement", "") or ""
                 label = (raw[:32] + "…") if len(raw) > 32 else raw or nid
-            elif ntype in ("PainPoint", "BuyingTrigger"):
-                raw = attrs.get("content", "") or ""
-                label = (raw[:32] + "…") if len(raw) > 32 else raw or nid
             elif ntype == "Section":
-                label = attrs.get("label", attrs.get("section_type", nid))
+                label = attrs.get("label", attrs.get("assertion_type", nid))
             else:
                 content = attrs.get("content", "")
                 label = (attrs.get("name")
@@ -520,17 +480,17 @@ class GraphEngine:
             entry: dict[str, Any] = {"id": nid, "type": ntype, "label": label}
             if ntype == "Spec":
                 entry.update({"name": attrs.get("name", ""),
-                               "document_type": attrs.get("document_type", ""),
+                               "schema_type": attrs.get("schema_type", ""),
                                "tagline": attrs.get("tagline", ""),
                                "summary": (attrs.get("summary") or "")[:150]})
             elif ntype == "Section":
-                entry.update({"section_type": attrs.get("section_type", ""),
+                entry.update({"assertion_type": attrs.get("assertion_type", ""),
                                "label": attrs.get("label", ""),
                                "count": attrs.get("count", 0),
                                "spec_id": attrs.get("spec_id", "")})
-                entry["color"] = _SECTION_COLORS.get(attrs.get("section_type", ""), "#6366f1")
+                entry["color"] = _SECTION_COLORS.get(attrs.get("assertion_type", ""), "#6366f1")
             elif ntype == "Assertion":
-                entry.update({"section_type": attrs.get("section_type", ""),
+                entry.update({"assertion_type": attrs.get("assertion_type", ""),
                                "priority": attrs.get("priority"),
                                "content": (attrs.get("content") or "")[:150],
                                "status": attrs.get("status", "draft")})
@@ -539,23 +499,19 @@ class GraphEngine:
                 entry.update({"name": attrs.get("name", ""),
                                "description": attrs.get("description", ""),
                                "spec_id": attrs.get("spec_id", "")})
-            elif ntype == "Persona":
+            elif ntype == "Audience":
                 entry.update({"name": attrs.get("name", ""),
                                "spec_id": attrs.get("spec_id", "")})
             elif ntype == "Channel":
                 entry["name"] = attrs.get("name", "")
-            elif ntype == "PainPoint":
-                entry.update({"content": (attrs.get("content") or "")[:150],
-                               "persona_name": attrs.get("persona_name", ""),
-                               "spec_id": attrs.get("spec_id", "")})
-            elif ntype == "BuyingTrigger":
-                entry.update({"content": (attrs.get("content") or "")[:150],
-                               "persona_name": attrs.get("persona_name", ""),
-                               "spec_id": attrs.get("spec_id", "")})
-            elif ntype == "Objection":
+            elif ntype == "Entity":
+                entry.update({"name": attrs.get("name", ""),
+                               "entity_type": attrs.get("entity_type", ""),
+                               "description": (attrs.get("description") or "")[:150]})
+            elif ntype == "QAPair":
                 entry.update({"statement": (attrs.get("statement") or "")[:150],
                                "response": (attrs.get("response") or "")[:150],
-                               "persona_name": attrs.get("persona_name", ""),
+                               "audience_name": attrs.get("audience_name", ""),
                                "spec_id": attrs.get("spec_id", "")})
             nodes.append(entry)
         edges = [{"source": s, "target": t, "rel": d.get("rel", "")}

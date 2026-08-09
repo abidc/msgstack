@@ -8,43 +8,70 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, AliasChoices
 
 
-class SectionType(str, Enum):
-    HEADLINE = "headline"
-    SUBHEAD = "subhead"
-    BENEFIT = "benefit"
-    USE_CASE = "use_case"
-    PROOF_POINT = "proof_point"
-    OBJECTION = "objection"
-    SOCIAL_PROOF = "social_proof"
-    POSITIONING = "positioning"
-    KNOW_YOUR_MARKET = "know_your_market"
-    BRAND_VOICE = "brand_voice"
-    STYLE_RULE = "style_rule"
-    WORD_LIST = "word_list"
-    COMPETITOR_STRENGTH = "competitor_strength"
-    COMPETITOR_WEAKNESS = "competitor_weakness"
-    COMPETITIVE_RESPONSE = "competitive_response"
-    NARRATIVE_PILLAR = "narrative_pillar"
-    COMPANY_VALUE = "company_value"
-    FOUNDING_STORY = "founding_story"
-    PERSONA_DETAIL = "persona_detail"
-    SOURCE_MARKDOWN = "source_markdown"
+class AssertionType(str, Enum):
+    """What kind of fact an assertion states.
+
+    Engineering-shaped: these are the categories a service owner actually
+    maintains. The previous set (headline / benefit / proof_point /
+    social_proof) described marketing copy and is gone — see STRATEGY_V2.md §6.
+    """
+    CONSTRAINT = "constraint"                  # a limit: rate, size, quota
+    SLA = "sla"                                # a commitment: uptime, latency
+    DEPRECATION = "deprecation"                # a sunset with a date
+    CONFIG_DEFAULT = "config_default"          # what a setting is unless changed
+    DEPENDENCY = "dependency"                  # what this needs to function
+    CAPABILITY = "capability"                  # what it can do
+    LIMITATION = "limitation"                  # what it deliberately cannot do
+    SECURITY_POSTURE = "security_posture"      # authn/authz/compliance statement
+    INTERFACE_CONTRACT = "interface_contract"  # request/response shape, schema
+    VERSION_POLICY = "version_policy"          # compatibility and support window
+    RUNBOOK_STEP = "runbook_step"              # an operational instruction
+    DECISION = "decision"                      # an ADR: choice + rationale
+    POSITIONING = "positioning"                # one-line summary of the subject
+    SOURCE_MARKDOWN = "source_markdown"        # raw ingested document chunk
 
 
-class GroundingType(str, Enum):
-    MESSAGE_HOUSE = "message_house"  # Product Marketing grounding type
-    BRAND_GUIDE = "brand_guide"
-    COMPETITIVE_BRIEF = "competitive_brief"
-    CORP_NARRATIVE = "corp_narrative"
-    PERSONA_LIBRARY = "persona_library"
+#: Historical assertion_type values -> AssertionType. Applied once at migration.
+#: Anything absent here is mapped to CAPABILITY and flagged for review rather
+#: than dropped — losing a fact silently is worse than mis-typing one.
+LEGACY_SECTION_TYPE_MAP: dict[str, str] = {
+    "positioning":           AssertionType.POSITIONING.value,
+    "source_markdown":       AssertionType.SOURCE_MARKDOWN.value,
+    "benefit":               AssertionType.CAPABILITY.value,
+    "use_case":              AssertionType.CAPABILITY.value,
+    "headline":              AssertionType.POSITIONING.value,
+    "subhead":               AssertionType.POSITIONING.value,
+    "proof_point":           AssertionType.SLA.value,
+    "qa_pair":             AssertionType.LIMITATION.value,
+    "competitor_weakness":   AssertionType.LIMITATION.value,
+    "competitor_strength":   AssertionType.CAPABILITY.value,
+    "competitive_response":  AssertionType.POSITIONING.value,
+    "social_proof":          AssertionType.CAPABILITY.value,
+    "know_your_market":      AssertionType.POSITIONING.value,
+    "brand_voice":           AssertionType.POSITIONING.value,
+    "style_rule":            AssertionType.CONSTRAINT.value,
+    "word_list":             AssertionType.CONSTRAINT.value,
+    "narrative_pillar":      AssertionType.POSITIONING.value,
+    "company_value":         AssertionType.POSITIONING.value,
+    "founding_story":        AssertionType.POSITIONING.value,
+    "persona_detail":         AssertionType.CAPABILITY.value,
+}
 
 
+class SchemaType(str, Enum):
+    """The shape of a spec — which assertion types and sections it expects."""
+    ENGINEERING_SPEC = "engineering_spec"   # default: a service or component
+    SERVICE_CATALOG = "service_catalog"     # an inventory of services
+    POLICY_SHIELD = "policy_shield"         # legal/compliance assertions
+    INCIDENT_RECORD = "incident_record"     # postmortems and their findings
 
-DEPARTMENT_PRIMARY_GROUNDING = {
-    "Product Marketing": GroundingType.MESSAGE_HOUSE,
-    "Company Marketing": GroundingType.CORP_NARRATIVE,
-    "Enablement": GroundingType.PERSONA_LIBRARY,
-    "Product Management": GroundingType.COMPETITIVE_BRIEF,
+
+DEPARTMENT_PRIMARY_SCHEMA = {
+    "General": SchemaType.ENGINEERING_SPEC,
+    "Engineering": SchemaType.ENGINEERING_SPEC,
+    "Platform": SchemaType.SERVICE_CATALOG,
+    "Security": SchemaType.POLICY_SHIELD,
+    "Operations": SchemaType.INCIDENT_RECORD,
 }
 
 
@@ -152,9 +179,11 @@ class Spec(BaseModel):
     name: str
     source: str = "manual"
     source_id: str | None = None
-    grounding_type: GroundingType = GroundingType.MESSAGE_HOUSE
+    schema_type: SchemaType = SchemaType.ENGINEERING_SPEC
     summary: str = ""
     audience: str = ""
+    # Free-text register/tone. Kept from the PMM schema because it is generic:
+    # a runbook and a public changelog want different registers.
     brand_personality: str = ""
     positioning: str = ""
     tagline: str = ""
@@ -183,7 +212,7 @@ class Assertion(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     spec_id: UUID = Field(validation_alias=AliasChoices('spec_id', 'spec_id'), serialization_alias='spec_id')
     pillar_id: int | None = None
-    section_type: SectionType
+    assertion_type: AssertionType
     priority: int = Field(ge=1, le=5)
     content: str
     status: AssertionStatus = AssertionStatus.DRAFT
@@ -200,7 +229,7 @@ class Assertion(BaseModel):
         except (TypeError, ValueError):
             return 3
     variants: dict[str, str] = Field(default_factory=dict)
-    personas: list[str] = Field(default_factory=list)
+    audiences: list[str] = Field(default_factory=list)
     channels: list[str] = Field(default_factory=list)
     source_chunk_id: str | None = None
 
@@ -227,45 +256,39 @@ class PillarUpdate(BaseModel):
     display_order: int | None = None
 
 
-class Persona(BaseModel):
+class Audience(BaseModel):
+    """Who an assertion is being rendered for.
+
+    Audience-conditioned retrieval is a general mechanism, not a marketing one:
+    the same constraint reads differently for a new hire, an on-call engineer
+    and an integrating partner. This is the old Audience model with its
+    buyer-journey children (pain_points, buying_triggers) removed.
+    """
     model_config = ConfigDict(populate_by_name=True)
     id: UUID = Field(default_factory=uuid4)
-    spec_id: UUID = Field(validation_alias=AliasChoices('spec_id', 'spec_id'), serialization_alias='spec_id')
+    spec_id: UUID = Field(validation_alias=AliasChoices('spec_id', 'canon_domain_id'), serialization_alias='spec_id')
     name: str
     description: str = ""
-    pain_points: list[str] = Field(default_factory=list)
-    buying_triggers: list[str] = Field(default_factory=list)
-    objections: list[str] = Field(default_factory=list)
+    qa_pairs: list[str] = Field(default_factory=list)
     status: AssertionStatus = AssertionStatus.DRAFT
     approved_by: str | None = None
     approved_at: datetime | None = None
 
-    @field_validator("pain_points", "buying_triggers", mode="before")
+    @field_validator("qa_pairs", mode="before")
     @classmethod
-    def coerce_str_list(cls, v):
-        return [i.get("content", str(i)) if isinstance(i, dict) else str(i) for i in (v or [])]
-
-    @field_validator("objections", mode="before")
-    @classmethod
-    def coerce_objections(cls, v):
+    def coerce_qa_pairs(cls, v):
         return [i.get("statement", str(i)) if isinstance(i, dict) else str(i) for i in (v or [])]
 
 
-class PainPoint(BaseModel):
+class QAPair(BaseModel):
+    """A statement paired with its response.
+
+    Kept from the old QAPair model because the shape is independently
+    useful: FAQ entries, known-issue/workaround pairs, and the rejected
+    alternatives in an ADR are all this.
+    """
     id: int
-    persona_id: str
-    content: str
-
-
-class BuyingTrigger(BaseModel):
-    id: int
-    persona_id: str
-    content: str
-
-
-class Objection(BaseModel):
-    id: int
-    persona_id: str
+    audience_id: str
     statement: str
     response: str | None = None
 
@@ -277,9 +300,9 @@ class GroundingChunk(BaseModel):
     spec_id: UUID = Field(validation_alias=AliasChoices('spec_id', 'spec_id'), serialization_alias='spec_id')
     assertion_id: UUID | None = Field(default=None, validation_alias=AliasChoices('assertion_id', 'assertion_id'), serialization_alias='assertion_id')
     content: str
-    section_type: SectionType
+    assertion_type: AssertionType
     priority: int
-    persona: str | None = None
+    audience: str | None = None
     channel: Channel = Channel.ALL
     spec_name: str = Field(default="", validation_alias=AliasChoices('spec_name', 'spec_name'), serialization_alias='spec_name')
     spec_summary: str = Field(default="", validation_alias=AliasChoices('spec_summary', 'spec_summary'), serialization_alias='spec_summary')
@@ -290,9 +313,9 @@ class GroundingChunk(BaseModel):
 class GroundingResult(BaseModel):
     chunk_id: str
     content: str
-    section_type: str
+    assertion_type: str
     priority: int
-    persona: str | None
+    audience: str | None
     channel: str
     channel_variants: dict[str, str] = Field(default_factory=dict)
     source: dict
@@ -305,7 +328,7 @@ class GroundingContext(BaseModel):
     active_spec_id: UUID | None = Field(default=None, validation_alias=AliasChoices('active_spec_id', 'active_spec_id'), serialization_alias='active_spec_id')
     spec_name: str = Field(default="", validation_alias=AliasChoices('spec_name', 'spec_name'), serialization_alias='spec_name')
     spec_summary: str = Field(default="", validation_alias=AliasChoices('spec_summary', 'spec_summary'), serialization_alias='spec_summary')
-    active_personas: list[str] = Field(default_factory=list)
+    active_audiences: list[str] = Field(default_factory=list)
     used_chunks: int = 0
     confidence: str = "medium"
     coverage: dict[str, str] = Field(default_factory=dict)
@@ -327,22 +350,21 @@ COMPLETE_SCHEMA_SPEC = {
         "tagline": "7 words or fewer. Memorable and ownable.",
         "differentiation": "2-3 specific ways this is better than alternatives (not just different).",
         "audience": "Firmographic/demographic definition: role, company size, industry.",
-        "brand_personality": "Voice and tone descriptors (e.g. bold, precise, friendly).",
         "status": "active | archived | needs_review",
     },
-    "required_section_types": {
+    "required_assertion_types": {
         "headline": "Attention-grabbing primary messages. Min 3. Priority 1 = most important.",
         "subhead": "Supporting messages that expand on headlines. Min 3.",
         "benefit": "Specific value props with evidence or metrics. Min 4.",
         "proof_point": "Quantified stats, customer counts, analyst citations. Min 3.",
-        "objection": "Common objections with concise counter-messaging. Min 3.",
+        "qa_pair": "Common qa_pairs with concise counter-messaging. Min 3.",
         "social_proof": "Customer quotes, awards, media mentions, G2/analyst recognition. Min 3.",
         "positioning": "Core positioning message in key-message form. Min 1.",
     },
     "assertion_fields": {
         "content": "The core message in plain language.",
         "priority": "1 (highest) to 5. Top 3 should be the sharpest messages.",
-        "personas": "Which personas this message is most relevant for.",
+        "audiences": "Which audiences this message is most relevant for.",
         "channels": "Channels where this message appears. 'all' = universal.",
         "variants": {
             "linkedin": "LinkedIn-optimized version (conversational, 15-20 words max)",
@@ -351,18 +373,16 @@ COMPLETE_SCHEMA_SPEC = {
             "twitter": "Twitter/X version (under 240 chars with punch)",
         },
     },
-    "persona_fields": {
+    "audience_fields": {
         "name": "Role title (e.g. CISO, VP Sales, HR Manager)",
         "description": "Who they are, what they own, what success looks like for them.",
-        "pain_points": "3-5 specific frustrations this persona has today.",
-        "buying_triggers": "2-4 events or pressures that make them evaluate solutions.",
-        "objections": "2-4 reasons they hesitate to buy or switch.",
+        "qa_pairs": "2-4 reasons they hesitate to buy or switch.",
     },
-    "minimum_personas": 2,
+    "minimum_audiences": 2,
     "completeness_checklist": [
         "All 7 section types have at least 1 assertion",
         "headline, subhead, benefit, proof_point have 3+ entries each",
-        "At least 2 personas defined with all fields",
+        "At least 2 audiences defined with all fields",
         "All assertions have linkedin and email variants",
         "Positioning statement is a full sentence (50+ chars)",
         "Tagline is present and under 60 chars",
@@ -437,8 +457,8 @@ def resolve_brand_tokens(workspace_id: str, design_spec: "DesignSpec") -> "Desig
 
 class SearchFilters(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    section_types: list[str] | None = None
-    personas: list[str] | None = None
+    assertion_types: list[str] | None = None
+    audiences: list[str] | None = None
     channels: list[str] | None = None
     specs: list[str] | None = Field(default=None, validation_alias=AliasChoices('specs', 'canon_domains'), serialization_alias='specs')
     include_variants: bool = True

@@ -26,32 +26,32 @@ def detect_document_type(text: str, filename: str = "") -> str:
         return "competitive_brief"
     if any(k in name_lower for k in ("narrative", "story", "about us", "company")):
         return "corp_narrative"
-    if any(k in name_lower for k in ("persona", "buyer", "icp")):
-        return "persona_library"
+    if any(k in name_lower for k in ("audience", "buyer", "icp")):
+        return "audience_library"
 
     # Content-based fallback
     if any(k in text_lower for k in ("message house", "key message", "positioning statement", "tagline", "pillar")):
-        return "message_house"
+        return "engineering_spec"
     if any(k in text_lower for k in ("brand voice", "writing style", "word list", "do not use")):
         return "brand_guide"
     if any(k in text_lower for k in ("competitor", "vs.", " vs ", "battle card")):
         return "competitive_brief"
-    if any(k in text_lower for k in ("persona", "buyer", "pain point", "buying trigger")):
-        return "persona_library"
+    if any(k in text_lower for k in ("audience", "buyer", "pain point", "buying trigger")):
+        return "audience_library"
 
-    return "message_house"  # default
+    return "engineering_spec"  # default
 
 
 class StructuredSpec(BaseModel):
     name: str
     summary: str
     audience: str
-    brand_personality: str
+    brand_personality: str = ""
     positioning: str
     tagline: str
     differentiation: str
     assertions: list[dict] = Field(default_factory=list)
-    personas: list[dict]
+    audiences: list[dict]
     pillars: list[dict] = Field(default_factory=list)
     ungrouped_chunks: list[dict] = Field(default_factory=list)
     know_your_market: str = Field(default="")
@@ -65,7 +65,7 @@ class StructuredSpec(BaseModel):
         return v if isinstance(v, str) else str(v) if v is not None else ""
 
 REQUIRED_SECTIONS = ["summary", "audience", "positioning", "tagline", "differentiation"]
-REQUIRED_MESSAGE_TYPES = ["headline", "benefit", "proof_point"]
+REQUIRED_MESSAGE_TYPES = ["capability", "constraint", "interface_contract"]
 
 _STRUCTURE_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete Spec.
 
@@ -74,7 +74,6 @@ Return a JSON object matching this schema:
   "name": "Product or brand name",
   "summary": "2-3 sentence overview",
   "audience": "Target audience definition",
-  "brand_personality": "Tone and voice descriptors",
   "positioning": "Core positioning statement",
   "tagline": "One punchy tagline (7 words or fewer)",
   "differentiation": "Key differentiators",
@@ -85,41 +84,31 @@ Return a JSON object matching this schema:
       "description": "One sentence summary of the pillar",
       "chunks": [
         {
-          "section_type": "headline | benefit | use_case | proof_point | objection | social_proof | subhead",
+          "assertion_type": "constraint | sla | deprecation | config_default | dependency | capability | limitation | security_posture | interface_contract | version_policy | runbook_step | decision | positioning",
           "priority": 1-5,
           "content": "Message content",
-          "personas": [],
+          "audiences": [],
           "channels": ["all"],
-          "addresses_pain_points": [],
-          "resolves_objections": []
+              "resolves_qa_pairs": []
         }
       ]
     }
   ],
   "ungrouped_chunks": [
     {
-      "section_type": "headline | benefit | use_case | proof_point | objection | social_proof | subhead",
+      "assertion_type": "constraint | sla | deprecation | config_default | dependency | capability | limitation | security_posture | interface_contract | version_policy | runbook_step | decision | positioning",
       "priority": 1-5,
       "content": "Message content that doesn't fit in a pillar",
-      "personas": [],
+      "audiences": [],
       "channels": ["all"],
-      "addresses_pain_points": [],
-      "resolves_objections": []
+      "resolves_qa_pairs": []
     }
   ],
-  "personas": [
+  "audiences": [
     {
-      "name": "Persona name",
+      "name": "Audience name",
       "description": "Role description",
-      "pain_points": [
-        "They struggle with X",
-        "Manual Y process wastes 3 days per week"
-      ],
-      "buying_triggers": [
-        "Upcoming compliance audit",
-        "Board mandate to reduce operational costs"
-      ],
-      "objections": [
+      "qa_pairs": [
         {
           "statement": "This is too expensive for our budget",
           "response": "Customers typically recover the cost in 6 months through a 40% reduction in operational overhead"
@@ -142,12 +131,12 @@ Rules:
 - Map Value Pillars -> Benefits (but also create a pillar if distinct)
 - Map Use Cases -> Use Case messages
 - Map Proof Points -> Proof Point messages
-- Map Objections -> Objection messages
-- For each chunk, populate "addresses_pain_points" with the verbatim text of any pain
-  point (from the personas list) that this message directly speaks to.
-- Populate "resolves_objections" with the verbatim statement text of any objection this
+- Map Objections -> QAPair messages
+- For each chunk, populate "addresses" with the verbatim text of any requirement
+  point (from the audiences list) that this message directly speaks to.
+- Populate "resolves_qa_pairs" with the verbatim statement text of any qa_pair this
   message helps overcome.
-- Leave both arrays empty [] if the chunk is general and not specific to a pain/objection.
+- Leave both arrays empty [] if the chunk is general and not specific to a pain/qa_pair.
 
 SOURCE DOCUMENT:
 {content}
@@ -166,21 +155,21 @@ Return a JSON object matching this schema:
   "brand_personality": "Voice and tone descriptors extracted from the guide",
   "assertions": [
     {
-      "section_type": "brand_voice | style_rule | word_list",
+      "assertion_type": "constraint | config_default | version_policy",
       "priority": 1-5,
       "content": "The guideline or rule text verbatim or closely paraphrased",
-      "personas": [],
+      "audiences": [],
       "channels": ["all"]
     }
   ],
-  "personas": [],
+  "audiences": [],
   "missing_sections": ["list any major sections you couldn't extract"]
 }
 
 Rules:
-- Use section_type "brand_voice" for tone/personality descriptions
-- Use section_type "style_rule" for specific writing rules (capitalization, punctuation, grammar)
-- Use section_type "word_list" for approved/banned word lists
+- Use assertion_type "constraint" for hard limits (rate, size, quota)
+- Use assertion_type "config_default" for the value a setting takes unless overridden
+- Use assertion_type "version_policy" for compatibility and support windows
 - Preserve exact wording for rules — do not paraphrase style_rule or word_list entries
 - Set priority 1-2 for mandatory rules, 3-5 for guidance/suggestions
 
@@ -201,14 +190,14 @@ Return a JSON object matching this schema:
   "brand_personality": "",
   "assertions": [
     {
-      "section_type": "competitor_strength | competitor_weakness | competitive_response",
+      "assertion_type": "capability | limitation | dependency",
       "priority": 1-5,
       "content": "The intelligence or response message",
-      "personas": [],
+      "audiences": [],
       "channels": ["all"]
     }
   ],
-  "personas": [],
+  "audiences": [],
   "missing_sections": []
 }
 
@@ -235,14 +224,14 @@ Return a JSON object matching this schema:
   "brand_personality": "Company personality and cultural values",
   "assertions": [
     {
-      "section_type": "narrative_pillar | company_value | founding_story",
+      "assertion_type": "positioning | decision | security_posture",
       "priority": 1-5,
       "content": "The narrative element",
-      "personas": [],
+      "audiences": [],
       "channels": ["all"]
     }
   ],
-  "personas": [],
+  "audiences": [],
   "missing_sections": []
 }
 
@@ -255,62 +244,58 @@ SOURCE DOCUMENT:
 {content}
 """
 
-_PERSONA_LIBRARY_PROMPT = """You are extracting buyer and user persona profiles from a document.
+_PERSONA_LIBRARY_PROMPT = """You are extracting buyer and user audience profiles from a document.
 
 Return a JSON object matching this schema:
 {
-  "name": "Persona library name or document title",
-  "summary": "Brief description of what personas are covered",
-  "audience": "Teams these personas are for (sales, marketing, product)",
+  "name": "Audience library name or document title",
+  "summary": "Brief description of what audiences are covered",
+  "audience": "Teams these audiences are for (sales, marketing, product)",
   "positioning": "",
   "tagline": "",
   "differentiation": "",
   "brand_personality": "",
   "assertions": [
     {
-      "section_type": "persona_detail",
+      "assertion_type": "capability",
       "priority": 1-3,
-      "content": "A specific insight about this persona — a key pain point, buying trigger, or objection in one sentence",
-      "personas": ["<persona name>"],
+      "content": "A specific insight about this audience — a key pain point, buying trigger, or qa_pair in one sentence",
+      "audiences": ["<audience name>"],
       "channels": ["all"]
     }
   ],
-  "personas": [
+  "audiences": [
     {
       "name": "Role title (e.g., CISO, VP Sales)",
       "description": "Who they are and what they own",
-      "pain_points": ["specific frustration 1", "..."],
-      "buying_triggers": ["event or pressure that makes them evaluate", "..."],
-      "objections": ["reason they hesitate to buy", "..."]
+      "qa_pairs": ["reason they hesitate to buy", "..."]
     }
   ],
   "missing_sections": []
 }
 
 Rules:
-- Each persona should appear both as a full Persona object AND as assertions with section_type "persona_detail"
-- assertions for personas should be atomic, quotable insights (one per message), not summaries
-- Set priority 1 for the primary persona, 2-3 for secondary
+- Each audience should appear both as a full Audience object AND as assertions with assertion_type "capability"
+- assertions for audiences should be atomic, quotable insights (one per message), not summaries
+- Set priority 1 for the primary audience, 2-3 for secondary
 
 SOURCE DOCUMENT:
 {content}
 """
 
-PERSONAS_JSON_PROMPT = """Extract all buyer personas from the markdown text below.
-Return ONLY a valid JSON object with a "personas" array using this schema:
+PERSONAS_JSON_PROMPT = """Extract all buyer audiences from the markdown text below.
+Return ONLY a valid JSON object with a "audiences" array using this schema:
 {{
-  "personas": [
+  "audiences": [
     {{
-      "name": "persona name or role title",
+      "name": "audience name or role title",
       "description": "job title / who they are",
-      "pain_points": ["specific pain point 1", "specific pain point 2"],
-      "buying_triggers": ["trigger 1", "trigger 2"],
-      "objections": ["objection 1", "objection 2"]
+      "qa_pairs": ["qa_pair 1", "qa_pair 2"]
     }}
   ]
 }}
 
-If a field is empty return an empty array []. If there are no personas, return {{"personas": []}}.
+If a field is empty return an empty array []. If there are no audiences, return {{"audiences": []}}.
 Do not fabricate — only extract what is stated.
 
 Markdown text:
@@ -323,11 +308,11 @@ class SpecStructurer:
     CHUNK_OVERLAP = 1000
 
     _PROMPT_MAP = {
-        "message_house": _STRUCTURE_PROMPT,
+        "engineering_spec": _STRUCTURE_PROMPT,
         "brand_guide": _BRAND_GUIDE_PROMPT,
         "competitive_brief": _COMPETITIVE_BRIEF_PROMPT,
         "corp_narrative": _CORP_NARRATIVE_PROMPT,
-        "persona_library": _PERSONA_LIBRARY_PROMPT,
+        "audience_library": _PERSONA_LIBRARY_PROMPT,
     }
 
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
@@ -344,7 +329,7 @@ class SpecStructurer:
             self._client = OpenAI(api_key=self._api_key)
         return self._client
 
-    def structure(self, text: str, source_name: str = "Untitled Source", document_type: str = "message_house") -> "tuple[StructuredSpec, dict]":
+    def structure(self, text: str, source_name: str = "Untitled Source", document_type: str = "engineering_spec") -> "tuple[StructuredSpec, dict]":
         """Run the structurer LLM on raw text and return (StructuredSpec, usage_dict).
 
         usage_dict has keys: input_tokens, output_tokens.
@@ -443,7 +428,7 @@ class SpecStructurer:
         """Merge multiple StructuredSpec objects from chunked structuring."""
         if not specs:
             return StructuredSpec(name=source_name, summary="", audience="", brand_personality="",
-                                   positioning="", tagline="", differentiation="", assertions=[], personas=[])
+                                   positioning="", tagline="", differentiation="", assertions=[], audiences=[])
         if len(specs) == 1:
             return specs[0]
 
@@ -486,14 +471,14 @@ class SpecStructurer:
                     seen_content.add(key)
                     merged_ungrouped.append(chunk)
 
-        merged_personas: list[dict] = []
+        merged_audiences: list[dict] = []
         seen_names: set[str] = set()
         for h in specs:
-            for p in h.personas:
+            for p in h.audiences:
                 name_key = p.get("name", "").strip().lower()
                 if name_key not in seen_names:
                     seen_names.add(name_key)
-                    merged_personas.append(p)
+                    merged_audiences.append(p)
 
         merged = StructuredSpec(
             name=first_nonempty("name") or source_name,
@@ -506,7 +491,7 @@ class SpecStructurer:
             assertions=merged_messages,
             pillars=merged_pillars,
             ungrouped_chunks=merged_ungrouped,
-            personas=merged_personas,
+            audiences=merged_audiences,
             know_your_market=first_nonempty("know_your_market"),
         )
         merged.missing_sections = self._find_missing(merged)
@@ -545,7 +530,7 @@ class SpecStructurer:
         assertions = self._parse_key_messages(
             sections.get("assertions") or sections.get("key_messages", "")
         )
-        personas = self._parse_personas(sections.get("personas", ""))
+        audiences = self._parse_audiences(sections.get("audiences", ""))
 
         spec = StructuredSpec(
             name=name,
@@ -556,7 +541,7 @@ class SpecStructurer:
             tagline=sections.get("tagline", ""),
             differentiation=sections.get("differentiation", ""),
             assertions=assertions,
-            personas=personas,
+            audiences=audiences,
             know_your_market=sections.get("know_your_market", ""),
         )
         spec.missing_sections = self._find_missing(spec)
@@ -576,26 +561,44 @@ class SpecStructurer:
             if not value or value.strip() in ("", "[Not found in source]"):
                 missing.append(field)
 
-        found_types = {m["section_type"] for m in spec.assertions}
+        found_types = {m["assertion_type"] for m in spec.assertions}
         for t in REQUIRED_MESSAGE_TYPES:
             if t not in found_types:
                 missing.append(f"messages:{t}")
 
-        if not spec.personas:
-            missing.append("personas")
+        if not spec.audiences:
+            missing.append("audiences")
 
         return missing
 
     def _parse_key_messages(self, text: str) -> list[dict]:
         messages = []
+        # Markdown heading -> (assertion_type, default priority). Legacy PMM
+        # headings are still accepted so existing data/sources/*.md proxy files
+        # keep parsing; they fold onto the nearest engineering type.
         section_map = {
-            "headlines": ("headline", 1),
-            "benefits": ("benefit", 1),
-            "use_cases": ("use_case", 2),
-            "proof_points": ("proof_point", 1),
-            "objections": ("objection", 1),
-            "subheads": ("subhead", 2),
-            "social_proof": ("social_proof", 2),
+            "capabilities":        ("capability", 1),
+            "constraints":         ("constraint", 1),
+            "slas":                ("sla", 1),
+            "dependencies":        ("dependency", 2),
+            "limitations":         ("limitation", 2),
+            "decisions":           ("decision", 2),
+            "deprecations":        ("deprecation", 2),
+            "config_defaults":     ("config_default", 2),
+            "interface_contracts": ("interface_contract", 1),
+            "security_posture":    ("security_posture", 2),
+            "version_policy":      ("version_policy", 2),
+            "runbook_steps":       ("runbook_step", 3),
+            "positioning":         ("positioning", 1),
+            # legacy
+            "headlines":     ("capability", 1),
+            "subheads":      ("positioning", 2),
+            "benefits":      ("capability", 1),
+            "use_cases":     ("capability", 2),
+            "proof_points":  ("sla", 1),
+            "objections":    ("limitation", 2),
+            "qa_pairs":      ("limitation", 2),
+            "social_proof":  ("capability", 2),
         }
 
         current_section = None
@@ -618,28 +621,28 @@ class SpecStructurer:
                 if content and content != "[Not found in source]":
                     messages.append(
                         {
-                            "section_type": current_section or "positioning",
+                            "assertion_type": current_section or "positioning",
                             "priority": current_priority,
                             "content": content,
                             "variants": {},
-                            "personas": [],
+                            "audiences": [],
                             "channels": ["all"],
                         }
                     )
 
         return messages
 
-    def _parse_personas(self, text: str) -> list[dict]:
-        """Extract personas using LLM JSON output, falling back to regex parser."""
+    def _parse_audiences(self, text: str) -> list[dict]:
+        """Extract audiences using LLM JSON output, falling back to regex parser."""
         if not text.strip():
             return []
         try:
-            return self._extract_personas_json(text)
+            return self._extract_audiences_json(text)
         except Exception:
-            return self._parse_personas_regex(text)
+            return self._parse_audiences_regex(text)
 
-    def _extract_personas_json(self, text: str) -> list[dict]:
-        """Ask the LLM to return personas as structured JSON — no regex fragility."""
+    def _extract_audiences_json(self, text: str) -> list[dict]:
+        """Ask the LLM to return audiences as structured JSON — no regex fragility."""
         prompt = PERSONAS_JSON_PROMPT.format(text=text)
         response = self.client.chat.completions.create(
             model=self.model,
@@ -653,69 +656,54 @@ class SpecStructurer:
         )
         raw = response.choices[0].message.content
         data = json.loads(raw)
-        personas = data.get("personas", [])
+        audiences = data.get("audiences", [])
         # Normalise — ensure all required keys exist
         result = []
-        for p in personas:
+        for p in audiences:
             name = (p.get("name") or "").strip()
             if not name:
                 continue
             result.append({
                 "name": name,
                 "description": (p.get("description") or "").strip(),
-                "pain_points": [s for s in p.get("pain_points", []) if isinstance(s, str) and s.strip()],
-                "buying_triggers": [s for s in p.get("buying_triggers", []) if isinstance(s, str) and s.strip()],
-                "objections": [s for s in p.get("objections", []) if isinstance(s, str) and s.strip()],
+                "qa_pairs": [s for s in p.get("qa_pairs", []) if isinstance(s, str) and s.strip()],
             })
         return result
 
-    def _parse_personas_regex(self, text: str) -> list[dict]:
-        """Legacy regex-based persona parser — used as fallback only."""
-        personas = []
+    def _parse_audiences_regex(self, text: str) -> list[dict]:
+        """Legacy regex-based audience parser — used as fallback only."""
+        audiences = []
         current: dict = {}
 
         for line in text.split("\n"):
             stripped = line.strip()
             if not stripped:
                 if current and "name" in current:
-                    personas.append(current)
+                    audiences.append(current)
                     current = {}
                 continue
             if stripped.startswith("### "):
                 if current and "name" in current:
-                    personas.append(current)
+                    audiences.append(current)
                     current = {}
                 current["name"] = stripped[4:].strip()
-                current["pain_points"] = []
-                current["buying_triggers"] = []
-                current["objections"] = []
+                current["qa_pairs"] = []
                 current["description"] = ""
                 continue
             if "**Role:**" in stripped:
                 current["description"] = stripped.split("**Role:**")[1].strip()
-            elif "**Pain Points:**" in stripped:
-                continue
-            elif "**Buying Triggers:**" in stripped:
-                continue
-            elif "**Objections:**" in stripped:
+            elif "**Q&A:**" in stripped:
                 continue
             elif stripped.startswith("-"):
                 content = stripped[1:].strip()
                 if content == "[Not found in source]":
                     continue
-                if "pain_points" not in current:
-                    current["pain_points"] = []
-                if current.get("description"):
-                    current["pain_points"].append(content)
-                elif "buying_triggers" not in current:
-                    current["buying_triggers"] = [content]
-                else:
-                    current.setdefault("objections", []).append(content)
+                current.setdefault("qa_pairs", []).append(content)
 
         if current and "name" in current:
-            personas.append(current)
+            audiences.append(current)
 
-        return personas
+        return audiences
 
     def to_markdown(self, spec: StructuredSpec) -> str:
         """Render a StructuredSpec back to markdown."""
@@ -730,12 +718,14 @@ class SpecStructurer:
         lines.append(f"\n## Differentiation\n{spec.differentiation}")
 
         if spec.assertions:
-            lines.append("\n## Key Messages")
-            section_order = ["headline", "subhead", "benefit", "use_case", "proof_point", "objection", "social_proof"]
+            lines.append("\n## Assertions")
+            section_order = ["positioning", "capability", "interface_contract", "constraint", "sla",
+                             "dependency", "config_default", "limitation", "security_posture",
+                             "version_policy", "deprecation", "decision", "runbook_step"]
             from collections import defaultdict
             by_section = defaultdict(list)
             for m in spec.assertions:
-                by_section[m["section_type"]].append(m)
+                by_section[m["assertion_type"]].append(m)
 
             for sec in section_order:
                 if sec in by_section:
@@ -743,23 +733,15 @@ class SpecStructurer:
                     for m in by_section[sec]:
                         lines.append(f"- {m['content']}")
 
-        if spec.personas:
+        if spec.audiences:
             lines.append("\n## Personas")
-            for p in spec.personas:
+            for p in spec.audiences:
                 lines.append(f"\n### {p['name']}")
                 if p.get("description"):
                     lines.append(f"**Role:** {p['description']}")
-                if p.get("pain_points"):
-                    lines.append("**Pain Points:** " + ", ".join(
-                        i.get("content", str(i)) if isinstance(i, dict) else str(i)
-                        for i in p["pain_points"]))
-                if p.get("buying_triggers"):
-                    lines.append("**Buying Triggers:** " + ", ".join(
-                        i.get("content", str(i)) if isinstance(i, dict) else str(i)
-                        for i in p["buying_triggers"]))
-                if p.get("objections"):
-                    lines.append("**Objections:** " + ", ".join(
+                if p.get("qa_pairs"):
+                    lines.append("**Q&A:** " + ", ".join(
                         i.get("statement", str(i)) if isinstance(i, dict) else str(i)
-                        for i in p["objections"]))
+                        for i in p["qa_pairs"]))
 
         return "\n".join(lines)

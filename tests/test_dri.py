@@ -14,7 +14,7 @@ def store(tmp_path):
     spec = Spec(
         id=uuid4(),
         name="DRI Test Spec",
-        grounding_type="message_house",
+        schema_type="engineering_spec",
         dri="alice@example.com",
     )
     s.upsert_spec(spec)
@@ -48,7 +48,7 @@ def test_entry_dri_defaults_empty(store):
     entry = Assertion(
         id=uuid4(),
         spec_id=spec.id,
-        section_type="brand_voice",
+        assertion_type="positioning",
         content="Hello",
         priority=0,
     )
@@ -63,7 +63,7 @@ def test_entry_dri_override(store):
     entry = Assertion(
         id=uuid4(),
         spec_id=spec.id,
-        section_type="brand_voice",
+        assertion_type="positioning",
         content="Hello",
         priority=0,
         dri="override@example.com",
@@ -78,7 +78,7 @@ def test_set_entry_dri(store):
     entry = Assertion(
         id=uuid4(),
         spec_id=spec.id,
-        section_type="brand_voice",
+        assertion_type="positioning",
         content="Hello",
         priority=0,
     )
@@ -101,7 +101,7 @@ def test_get_effective_dri_returns_entry_dri_when_set(store):
     entry = Assertion(
         id=uuid4(),
         spec_id=spec.id,
-        section_type="brand_voice",
+        assertion_type="positioning",
         content="Hello",
         priority=0,
         dri="entry@example.com",
@@ -116,7 +116,7 @@ def test_get_effective_dri_falls_back_to_domain(store):
     entry = Assertion(
         id=uuid4(),
         spec_id=spec.id,
-        section_type="brand_voice",
+        assertion_type="positioning",
         content="Hello",
         priority=0,
     )
@@ -136,7 +136,7 @@ def test_entry_dri_in_get_entries(store):
     entry = Assertion(
         id=uuid4(),
         spec_id=spec.id,
-        section_type="brand_voice",
+        assertion_type="positioning",
         content="Hello",
         priority=0,
         dri="in-list@example.com",
@@ -161,7 +161,7 @@ def test_migration_adds_dri_column(tmp_path):
             name VARCHAR(255) NOT NULL,
             source VARCHAR(50) DEFAULT 'manual',
             source_id VARCHAR(255),
-            document_type VARCHAR(30) NOT NULL DEFAULT 'message_house',
+            document_type VARCHAR(30) NOT NULL DEFAULT 'engineering_spec',
             summary TEXT DEFAULT '',
             audience TEXT DEFAULT '',
             brand_personality TEXT DEFAULT '',
@@ -178,7 +178,7 @@ def test_migration_adds_dri_column(tmp_path):
         CREATE TABLE IF NOT EXISTS assertions (
             id VARCHAR(36) PRIMARY KEY,
             spec_id VARCHAR(36) NOT NULL,
-            section_type VARCHAR(50) NOT NULL DEFAULT 'voice',
+            assertion_type VARCHAR(50) NOT NULL DEFAULT 'voice',
             content TEXT NOT NULL DEFAULT '',
             status VARCHAR(20) NOT NULL DEFAULT 'draft',
             priority INTEGER NOT NULL DEFAULT 100,
@@ -188,7 +188,7 @@ def test_migration_adds_dri_column(tmp_path):
             content_tier VARCHAR(20),
             pillar_id INTEGER,
             variants TEXT DEFAULT '{}',
-            personas TEXT DEFAULT '[]'
+            audiences TEXT DEFAULT '[]'
         );
     """)
     conn.close()
@@ -225,7 +225,7 @@ def test_set_entry_dri_logs_trail_event(store):
     entry = Assertion(
         id=uuid4(),
         spec_id=spec.id,
-        section_type="headline",
+        assertion_type="capability",
         content="Entry for DRI trail",
         priority=1,
     )
@@ -242,12 +242,12 @@ def test_set_entry_dri_logs_trail_event(store):
 
 def test_dri_summary_groups_and_unowned(store):
     s, spec = store  # spec has dri alice@example.com
-    orphan = Spec(id=uuid4(), name="Orphan Domain", grounding_type="message_house")
+    orphan = Spec(id=uuid4(), name="Orphan Domain", schema_type="engineering_spec")
     s.upsert_spec(orphan)
     entry = Assertion(
         id=uuid4(),
         spec_id=orphan.id,
-        section_type="headline",
+        assertion_type="capability",
         content="Unowned entry",
         priority=1,
     )

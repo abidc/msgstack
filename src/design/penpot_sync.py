@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
-from src.models import Spec, Assertion, Persona, SectionType
+from src.models import Spec, Assertion, Audience, AssertionType
 from src.store import Store, get_store
 
 
@@ -16,7 +16,7 @@ def _extract_brand_colors(spec: Spec) -> dict[str, str]:
         "text": "#202124",
         "background": "#ffffff",
     }
-    personality = (spec.brand_personality or "").lower()
+    personality = (spec.positioning or "").lower()
     if "bold" in personality or "strong" in personality:
         colors["primary"] = "#d93025"
     elif "calm" in personality or "trust" in personality:
@@ -87,7 +87,7 @@ def sync_brand_tokens_to_penpot(workspace_id: str, spec: Spec) -> dict:
         "workspace_id": workspace_id,
         "spec_name": spec.name,
         "brand_colors": _extract_brand_colors(spec),
-        "font_family": _map_personality_to_font(spec.brand_personality),
+        "font_family": _map_personality_to_font(spec.positioning),
         "project_id": project_id,
         "actions": [],
     }
@@ -148,7 +148,7 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -
 
     # Build design specification
     brand_colors = _extract_brand_colors(spec)
-    font_family = _map_personality_to_font(spec.brand_personality)
+    font_family = _map_personality_to_font(spec.positioning)
 
     design_spec = {
         "file": {
@@ -233,8 +233,8 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -
         steps.append({
             "tool": "penpot_create_text",
             "params": {
-                "name": f"Message {i+1}: {msg.section_type}",
-                "text": f"[{msg.section_type}] {msg.content[:150]}",
+                "name": f"Message {i+1}: {msg.assertion_type}",
+                "text": f"[{msg.assertion_type}] {msg.content[:150]}",
                 "x": 40,
                 "y": y_offset,
                 "fontSize": 14,

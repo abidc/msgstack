@@ -5,7 +5,7 @@ from uuid import uuid4, UUID
 os.environ["OPENAI_API_KEY"] = "test-key"
 os.environ["PINECONE_API_KEY"] = "test-key"
 
-from src.models import Channel, SpecStatus, Assertion, Spec, Persona, SectionType
+from src.models import Channel, SpecStatus, Assertion, Spec, Audience, AssertionType
 from src.store import Store
 
 
@@ -59,11 +59,11 @@ def test_key_messages(store):
 
     msg = Assertion(
         spec_id=spec.id,
-        section_type=SectionType.HEADLINE,
+        assertion_type=AssertionType.CAPABILITY,
         priority=1,
         content="Test headline content",
         variants={"linkedin": "LinkedIn version"},
-        personas=["SMB CTO"],
+        audiences=["SMB CTO"],
         channels=[Channel.LINKEDIN],
     )
     store.upsert_key_message(msg)
@@ -71,28 +71,26 @@ def test_key_messages(store):
     messages = store.get_key_messages(spec.id, include_unapproved=True)
     assert len(messages) == 1
     assert messages[0].content == "Test headline content"
-    assert messages[0].section_type == SectionType.HEADLINE
+    assert messages[0].assertion_type == AssertionType.CAPABILITY
     assert "linkedin" in messages[0].variants
 
 
-def test_personas(store):
+def test_audiences(store):
     spec = Spec(name="Test Spec")
     store.upsert_spec(spec)
 
-    persona = Persona(
+    audience = Audience(
         spec_id=spec.id,
         name="SMB CTO",
         description="Technical leader",
-        pain_points=["Cost", "Complexity"],
-        buying_triggers=["CFO pressure"],
-        objections=["Too complex"],
+        qa_pairs=["Too complex"],
     )
-    store.upsert_persona(persona)
+    store.upsert_audience(audience)
 
-    personas = store.get_personas(spec.id)
-    assert len(personas) == 1
-    assert personas[0].name == "SMB CTO"
-    assert "Cost" in personas[0].pain_points
+    audiences = store.get_audiences(spec.id)
+    assert len(audiences) == 1
+    assert audiences[0].name == "SMB CTO"
+    assert "Too complex" in audiences[0].qa_pairs
 
 
 def test_delete_spec(store):
@@ -117,39 +115,39 @@ def test_upsert_updates_existing(store):
 def test_search_filters_model():
     from src.models import SearchFilters
     f = SearchFilters(
-        section_types=["headline", "benefit"],
-        personas=["SMB CTO"],
+        assertion_types=["headline", "benefit"],
+        audiences=["SMB CTO"],
         channels=["linkedin"],
         min_priority=2,
     )
-    assert "headline" in f.section_types
+    assert "headline" in f.assertion_types
     assert f.min_priority == 2
 
 
 def test_delete_key_message(store):
     spec = Spec(name="Test Spec")
     store.upsert_spec(spec)
-    msg = Assertion(spec_id=spec.id, section_type=SectionType.BENEFIT, priority=1, content="Test msg")
+    msg = Assertion(spec_id=spec.id, assertion_type=AssertionType.CAPABILITY, priority=1, content="Test msg")
     store.upsert_key_message(msg)
     assert len(store.get_key_messages(spec.id, include_unapproved=True)) == 1
     assert store.delete_key_message(msg.id) is True
     assert len(store.get_key_messages(spec.id, include_unapproved=True)) == 0
 
 
-def test_delete_persona(store):
+def test_delete_audience(store):
     spec = Spec(name="Test Spec")
     store.upsert_spec(spec)
-    persona = Persona(spec_id=spec.id, name="Test Persona")
-    store.upsert_persona(persona)
-    assert len(store.get_personas(spec.id)) == 1
-    assert store.delete_persona(persona.id) is True
-    assert len(store.get_personas(spec.id)) == 0
+    audience = Audience(spec_id=spec.id, name="Test Audience")
+    store.upsert_audience(audience)
+    assert len(store.get_audiences(spec.id)) == 1
+    assert store.delete_audience(audience.id) is True
+    assert len(store.get_audiences(spec.id)) == 0
 
 
 def test_snapshots(store):
     spec = Spec(name="Snap Spec", positioning="Position A")
     store.upsert_spec(spec)
-    msg = Assertion(spec_id=spec.id, section_type=SectionType.HEADLINE, priority=1, content="Test headline")
+    msg = Assertion(spec_id=spec.id, assertion_type=AssertionType.CAPABILITY, priority=1, content="Test headline")
     store.upsert_key_message(msg)
 
     snap = store.create_snapshot(spec.id, label="Before edit")
@@ -196,9 +194,9 @@ def test_grounding_response_model():
     result = GroundingResult(
         chunk_id="c1",
         content="Test content",
-        section_type="headline",
+        assertion_type="capability",
         priority=1,
-        persona="SMB CTO",
+        audience="SMB CTO",
         channel="all",
         confidence=0.95,
         rerank_reason="high score",
@@ -214,22 +212,22 @@ def test_grounding_response_model():
     assert resp.grounding_context.confidence == "high"
 
 
-def test_persona_governance_fields(store):
+def test_audience_governance_fields(store):
     from datetime import datetime, timezone
     spec = Spec(name="Gov Spec")
     store.upsert_spec(spec)
 
-    persona = Persona(
+    audience = Audience(
         spec_id=spec.id,
-        name="Gov Persona",
+        name="Gov Audience",
         status="in_review",
         approved_by="test-user",
         approved_at=datetime.now(timezone.utc).replace(tzinfo=None)
     )
-    store.upsert_persona(persona)
+    store.upsert_audience(audience)
 
-    personas = store.get_personas(spec.id)
-    assert len(personas) == 1
-    assert personas[0].status == "in_review"
-    assert personas[0].approved_by == "test-user"
-    assert personas[0].approved_at is not None
+    audiences = store.get_audiences(spec.id)
+    assert len(audiences) == 1
+    assert audiences[0].status == "in_review"
+    assert audiences[0].approved_by == "test-user"
+    assert audiences[0].approved_at is not None

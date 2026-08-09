@@ -1,0 +1,31 @@
+{
+  "id": "rfc_summary",
+  "name": "RFC Summary",
+  "description": "A concise summary of a proposal for reviewers: problem, proposal, tradeoffs, open questions.",
+  "channels": [
+    "all"
+  ],
+  "sections": [
+    {
+      "key": "problem",
+      "label": "Problem",
+      "required": true
+    },
+    {
+      "key": "proposal",
+      "label": "Proposal",
+      "required": true
+    },
+    {
+      "key": "tradeoffs",
+      "label": "Tradeoffs",
+      "required": false
+    },
+    {
+      "key": "open_questions",
+      "label": "Open Questions",
+      "required": false
+    }
+  ],
+  "prompt_template": "You are writing a rfc summary for the service described by this spec.\n\n{grounding_context}\n\nUse ONLY the assertions above. Every claim must trace to one. If a required fact is absent, write '[not specified in spec]' rather than inventing it. Reproduce any assertion marked Tier 1 verbatim.\n\nProduce these sections: problem, proposal, tradeoffs, open_questions."
+}
