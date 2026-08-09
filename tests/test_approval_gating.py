@@ -134,7 +134,7 @@ class TestFallbackSearch:
         _create_entry(store, seeded_domain, "Locked headline", AssertionStatus.LOCKED, priority=3)
         _create_entry(store, seeded_domain, "Outdated headline", AssertionStatus.OUTDATED, priority=4)
 
-        with patch("src.grounding.search.OpenAI"):
+        with patch("src.config.llm_client"):
             engine = GroundingEngine.__new__(GroundingEngine)
             engine.store = store
             engine.index = None
@@ -166,7 +166,7 @@ class TestRerank:
     @pytest.fixture
     def engine(self, tmp_path, store):
         from src.grounding.search import GroundingEngine
-        with patch("src.grounding.search.OpenAI"):
+        with patch("src.config.llm_client"):
             engine = GroundingEngine.__new__(GroundingEngine)
             engine.store = store
             engine.namespace = "default"

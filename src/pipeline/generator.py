@@ -104,7 +104,8 @@ class ArtifactGenerator:
     ):
         self.store = store
         self.skills = skills
-        self.client = OpenAI(api_key=openai_api_key or os.environ.get("OPENAI_API_KEY"))
+        from src.config import llm_client
+        self.client = llm_client(openai_api_key)
         self.model = model
 
     def generate(self, skill_id: str, spec_id: str, custom_context: dict = None) -> GeneratedArtifact:

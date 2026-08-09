@@ -683,6 +683,20 @@ class Store:
                                 "Unmapped legacy schema_type %r -> %r", old_val, new_val)
                     conn.commit()
 
+            # Leftover PMM columns on audiences (was personas). They are NOT
+            # NULL and the ORM no longer writes them, so every insert fails
+            # with an IntegrityError until they are gone. Their contents were
+            # exported to data/archive/pmm-export-2026-08-07.json.
+            if "audiences" in tables:
+                aud_cols = {c["name"] for c in insp.get_columns("audiences")}
+                for dead_col in ("pain_points", "buying_triggers"):
+                    if dead_col in aud_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE audiences DROP COLUMN {dead_col}"))
+                            conn.commit()
+                        except Exception as e:
+                            log.warning("Could not drop audiences.%s: %s", dead_col, e)
+
             # PMM child tables. Their rows were exported to
             # data/archive/pmm-export-2026-08-07.json before this ran.
             for dead in ("pain_points", "buying_triggers"):

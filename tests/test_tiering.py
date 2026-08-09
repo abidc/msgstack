@@ -148,7 +148,7 @@ class TestGeneratorTierGrounding:
 
     def _build(self, store, seeded_domain):
         from src.pipeline.generator import ArtifactGenerator
-        with patch("src.pipeline.generator.OpenAI"):
+        with patch("src.config.llm_client"):
             gen = ArtifactGenerator(store, "test-key")
         return gen._build_context(seeded_domain, store.get_assertions(seeded_domain.id), [], {})
 

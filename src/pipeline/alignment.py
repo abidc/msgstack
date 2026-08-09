@@ -8,6 +8,7 @@ from uuid import UUID
 from openai import OpenAI
 from pydantic import BaseModel
 from src.store import Store
+from src.config import llm_model
 from src.models import Assertion
 
 log = logging.getLogger(__name__)
@@ -32,7 +33,8 @@ class AlignmentEngine:
         self.api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY is required for alignment scoring.")
-        self.client = OpenAI(api_key=self.api_key)
+        from src.config import llm_client
+        self.client = llm_client(self.api_key)
 
     def score(self, spec_id: UUID, content: str) -> AlignmentReport:
         spec = self.store.get_spec(spec_id)
@@ -121,7 +123,7 @@ class AlignmentEngine:
         )
 
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=llm_model("gpt-4o"),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"CONTENT TO SCORE:\n\n{content}"}
@@ -147,7 +149,8 @@ def score_alignment(
     Score a draft document against approved assertions.
     Splits draft text into sections, runs Turbovec lookups, and classifies matches.
     """
-    client = openai_client or OpenAI()
+    from src.config import llm_client
+    client = openai_client or llm_client()
     
     # 1. Fetch approved entries for reference
     assertions = store.get_assertions(domain_id, include_unapproved=False)
@@ -205,7 +208,7 @@ def score_alignment(
         )
         try:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=llm_model("gpt-4o-mini"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
                 response_format={"type": "json_object"}

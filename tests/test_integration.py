@@ -80,7 +80,7 @@ def client(tmp_path):
         ]
     })
 
-    with patch("src.pipeline.structure.OpenAI") as mock_oai_cls, \
+    with patch("src.config.llm_client") as mock_oai_cls, \
          patch("src.grounding.search.GroundingEngine.ensure_index"), \
          patch("src.grounding.search.GroundingEngine.index_spec", return_value=5):
 
@@ -200,7 +200,7 @@ def mock_engine(tmp_path):
     )
     store.upsert_key_message(msg)
 
-    with patch("src.grounding.search.OpenAI"):
+    with patch("src.config.llm_client"):
         from src.grounding.search import GroundingEngine
         engine = GroundingEngine.__new__(GroundingEngine)
         engine.store = store

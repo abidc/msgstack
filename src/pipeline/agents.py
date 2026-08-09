@@ -6,6 +6,7 @@ from typing import Optional, Generator
 from uuid import UUID
 from openai import OpenAI
 from src.store import Store
+from src.config import llm_model
 from src.grounding.graph import get_graph_engine
 
 log = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class GovernanceAgent(BaseAgent):
         )
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=llm_model("gpt-4o-mini"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
                 response_format={"type": "json_object"}
@@ -61,7 +62,7 @@ class VoiceAgent(BaseAgent):
         )
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=llm_model("gpt-4o-mini"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
                 response_format={"type": "json_object"}
@@ -88,7 +89,7 @@ class StructureAgent(BaseAgent):
         )
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=llm_model("gpt-4o-mini"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
                 response_format={"type": "json_object"}
@@ -128,7 +129,7 @@ class SpecNavigator(BaseAgent):
 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=llm_model("gpt-4o-mini"),
                 messages=[
                     {"role": "system", "content": "You are the friendly, professional Spec Navigator super-agent. Stream your answer in Markdown format."},
                     {"role": "user", "content": prompt}

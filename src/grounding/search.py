@@ -10,7 +10,6 @@ from typing import Optional
 from uuid import UUID
 
 import numpy as np
-from openai import OpenAI
 from turbovec import IdMapIndex
 
 log = logging.getLogger(__name__)
@@ -52,7 +51,8 @@ class GroundingEngine:
         **kwargs,
     ):
         self.store = store
-        self.openai = OpenAI(api_key=openai_api_key or os.environ.get("OPENAI_API_KEY"))
+        from src.config import llm_client
+        self.openai = llm_client(openai_api_key)
         from src.config import settings
         self.index_path = Path(turbovec_index_path or settings.turbovec_index_path)
         self.namespace = namespace
@@ -87,8 +87,9 @@ class GroundingEngine:
         pass
 
     def _embed(self, text: str) -> list[float]:
+        from src.config import llm_model
         response = self.openai.embeddings.create(
-            model="text-embedding-3-small",
+            model=llm_model("text-embedding-3-small"),
             input=text,
         )
         return response.data[0].embedding

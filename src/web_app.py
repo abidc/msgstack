@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from src.config import llm_model
 from uuid import UUID
 
 from dotenv import load_dotenv
@@ -73,7 +74,8 @@ def _get_oai_client():
     if _oai_client is None:
         if not _oai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable required")
-        _oai_client = _oai_mod.OpenAI(api_key=_oai_api_key)
+        from src.config import llm_client as _llm_client
+        _oai_client = _llm_client(_oai_api_key)
     return _oai_client
 
 
@@ -1074,7 +1076,7 @@ async def extract_upload(
         store.record_token_usage(
             workspace_id=auth.workspace_id if settings.auth_enabled else "default",
             endpoint="extract",
-            model="gpt-4o-mini",
+            model=llm_model("gpt-4o-mini"),
             input_tokens=llm_usage["input_tokens"],
             output_tokens=llm_usage["output_tokens"],
             cost_usd=estimate_cost_usd("gpt-4o-mini", llm_usage["input_tokens"], llm_usage["output_tokens"]),
@@ -1156,7 +1158,7 @@ async def preview_structure(
         store.record_token_usage(
             workspace_id=auth.workspace_id if settings.auth_enabled else "default",
             endpoint="preview-structure",
-            model="gpt-4o-mini",
+            model=llm_model("gpt-4o-mini"),
             input_tokens=llm_usage["input_tokens"],
             output_tokens=llm_usage["output_tokens"],
             cost_usd=estimate_cost_usd("gpt-4o-mini", llm_usage["input_tokens"], llm_usage["output_tokens"]),
@@ -1275,7 +1277,6 @@ def _commit_structured_spec(
     store.upsert_spec(spec)
 
     # ── Phase 2: Create audiences + sub-attrs FIRST (needed for chunk linking) ──
-    pain_point_map: dict = {}    # content.lower() → id
     qa_pair_map: dict = {}     # statement.lower() → id
 
     for p in structured.audiences:
@@ -1291,16 +1292,6 @@ def _commit_structured_spec(
         if audience_obj:
             store.delete_audience_sub_attrs(str(audience_obj.id))
 
-            store.bulk_create_pain_points(
-                str(audience_obj.id),
-                [pt if isinstance(pt, str) else pt.get("content", str(pt))
-                 for pt in p.get("pain_points", [])]
-            )
-            store.bulk_create_buying_triggers(
-                str(audience_obj.id),
-                [t if isinstance(t, str) else t.get("content", str(t))
-                 for t in p.get("buying_triggers", [])]
-            )
             ob_items = []
             for ob in p.get("qa_pairs", []):
                 if isinstance(ob, dict):
@@ -1309,8 +1300,6 @@ def _commit_structured_spec(
                     ob_items.append({"statement": str(ob), "response": None})
             store.bulk_create_qa_pairs(str(audience_obj.id), ob_items)
 
-            for pp in store.list_pain_points(str(audience_obj.id)):
-                pain_point_map[pp.content.strip().lower()] = pp.id
             for ob in store.list_qa_pairs(str(audience_obj.id)):
                 qa_pair_map[ob.statement.strip().lower()] = ob.id
 
@@ -1318,7 +1307,7 @@ def _commit_structured_spec(
     pillar_map = {}  # pillar name -> pillar_id
     for pillar in structured.pillars:
         pillar_id = store.create_pillar(
-            spec_id=spec.id,
+            domain_id=spec.id,
             name=pillar["name"],
             description=pillar.get("description", ""),
         )
@@ -1341,24 +1330,6 @@ def _commit_structured_spec(
             channels=[Channel(c) for c in chunk_data.get("channels", ["all"])],
         )
         store.upsert_key_message(msg)
-        # Phase 2: link chunk to pain points / qa_pairs
-        pp_ids = [
-            pain_point_map[txt.strip().lower()]
-            for txt in chunk_data.get("addresses_pain_points", [])
-            if txt.strip().lower() in pain_point_map
-        ]
-        ob_ids = [
-            qa_pair_map[txt.strip().lower()]
-            for txt in chunk_data.get("resolves_qa_pairs", [])
-            if txt.strip().lower() in qa_pair_map
-        ]
-        if pp_ids or ob_ids:
-            # Re-fetch the message to get its UUID
-            messages = store.get_key_messages(spec.id)
-            for m in messages:
-                if m.content == chunk_data["content"] and m.assertion_type == str(assertion_type):
-                    store.update_chunk_links(str(m.id), pp_ids, ob_ids)
-                    break
 
     if structured.pillars:
         for pillar in structured.pillars:
@@ -1877,7 +1848,7 @@ def generate_artifact(
                 store.record_token_usage(
                     workspace_id=auth.workspace_id if settings.auth_enabled else "default",
                     endpoint="generate",
-                    model="gpt-4o-mini",
+                    model=llm_model("gpt-4o-mini"),
                     input_tokens=artifact.input_tokens,
                     output_tokens=artifact.output_tokens,
                     cost_usd=estimate_cost_usd("gpt-4o-mini", artifact.input_tokens, artifact.output_tokens),
@@ -1959,7 +1930,7 @@ def generate_section(spec_id: str = Form(...), section: str = Form(...)):
 
     client = _get_oai_client()
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         messages=[
             {"role": "system", "content": "You are a B2B messaging strategist. Be specific, benefit-led, and concise."},
             {"role": "user", "content": prompt},
@@ -1970,7 +1941,7 @@ def generate_section(spec_id: str = Form(...), section: str = Form(...)):
     store.record_token_usage(
         workspace_id="default",
         endpoint="generate-section",
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         input_tokens=resp.usage.prompt_tokens,
         output_tokens=resp.usage.completion_tokens,
         cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
@@ -2020,7 +1991,7 @@ def generate_section_single(spec_id: str = Query(...), section: str = Query(...)
 
     client = _get_oai_client()
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         messages=[
             {"role": "system", "content": "You are a B2B messaging strategist. Be specific, benefit-led, and concise."},
             {"role": "user", "content": prompt},
@@ -2031,7 +2002,7 @@ def generate_section_single(spec_id: str = Query(...), section: str = Query(...)
     store.record_token_usage(
         workspace_id="default",
         endpoint="generate-section-single",
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         input_tokens=resp.usage.prompt_tokens,
         output_tokens=resp.usage.completion_tokens,
         cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
@@ -2054,7 +2025,7 @@ def improve_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None
 
     client = _get_oai_client()
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         messages=[
             {"role": "system", "content": "You are a messaging and positioning expert. Rewrite the entry to be more specific, truth-grounded, and compelling. Return only the improved entry text — no preamble."},
             {"role": "user", "content": f"Section type: {msg.assertion_type}\nPositioning context: {positioning}\n\nOriginal entry:\n{msg.content}\n\nImproved version:"},
@@ -2065,7 +2036,7 @@ def improve_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None
     store.record_token_usage(
         workspace_id="default",
         endpoint="improve-message",
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         input_tokens=resp.usage.prompt_tokens,
         output_tokens=resp.usage.completion_tokens,
         cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
@@ -2094,7 +2065,7 @@ def generate_variant(channel: str = Form(...), msg_id: Optional[str] = None, ent
 
     client = _get_oai_client()
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         messages=[
             {"role": "system", "content": f"You are a B2B copywriter. Adapt the assertion for {channel}: {guidance}. Return only the adapted text."},
             {"role": "user", "content": f"Original entry:\n{msg.content}"},
@@ -2106,7 +2077,7 @@ def generate_variant(channel: str = Form(...), msg_id: Optional[str] = None, ent
     store.record_token_usage(
         workspace_id="default",
         endpoint="generate-variant",
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         input_tokens=resp.usage.prompt_tokens,
         output_tokens=resp.usage.completion_tokens,
         cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
@@ -2139,7 +2110,7 @@ def generate_audience(data: GeneratePersonaRequest):
 
     client = _get_oai_client()
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         messages=[
             {"role": "system", "content": "You are a B2B buyer audience expert. Return JSON only."},
             {"role": "user", "content": f"""Generate a buyer audience for a '{data.job_title}' who might buy {spec.name}.
@@ -2150,8 +2121,7 @@ Return JSON:
 {{
   "name": "<descriptive audience name like 'SMB CTO'>",
   "description": "<1-2 sentence role description>",
-  "pain_points": ["<pain 1>", "<pain 2>", "<pain 3>"],
-  "buying_triggers": ["<trigger 1>", "<trigger 2>"],
+  "qa_pairs": ["<common question 1>", "<common question 2>"],
   "qa_pairs": ["<qa_pair 1>", "<qa_pair 2>"]
 }}"""},
         ],
@@ -2162,7 +2132,7 @@ Return JSON:
     store.record_token_usage(
         workspace_id="default",
         endpoint="generate-audience",
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         input_tokens=resp.usage.prompt_tokens,
         output_tokens=resp.usage.completion_tokens,
         cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
@@ -2177,8 +2147,6 @@ Return JSON:
         spec_id=spec.id,
         name=audience_data.get("name", data.job_title),
         description=audience_data.get("description", ""),
-        pain_points=audience_data.get("pain_points", []),
-        buying_triggers=audience_data.get("buying_triggers", []),
         qa_pairs=audience_data.get("qa_pairs", []),
     )
     store.upsert_audience(audience)
@@ -2186,8 +2154,7 @@ Return JSON:
         "id": str(audience.id),
         "name": audience.name,
         "description": audience.description,
-        "pain_points": audience.pain_points,
-        "buying_triggers": audience.buying_triggers,
+
         "qa_pairs": audience.qa_pairs,
     }
 
@@ -2213,7 +2180,7 @@ def check_tone(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
     import json as _json
     client = _get_oai_client()
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         messages=[
             {"role": "system", "content": "You are a brand voice analyst. Return JSON only."},
             {"role": "user", "content": f"""Brand personality: {spec.brand_personality}
@@ -2237,7 +2204,7 @@ Identify which entries (if any) are inconsistent with the brand personality. Ret
     store.record_token_usage(
         workspace_id="default",
         endpoint="check-tone",
-        model="gpt-4o-mini",
+        model=llm_model("gpt-4o-mini"),
         input_tokens=resp.usage.prompt_tokens,
         output_tokens=resp.usage.completion_tokens,
         cost_usd=estimate_cost_usd("gpt-4o-mini", resp.usage.prompt_tokens, resp.usage.completion_tokens),
@@ -2343,8 +2310,6 @@ def restore_snapshot(snapshot_id: str):
             spec_id=spec_id,
             name=pd["name"],
             description=pd.get("description", ""),
-            pain_points=pd.get("pain_points", []),
-            buying_triggers=pd.get("buying_triggers", []),
             qa_pairs=pd.get("qa_pairs", []),
         )
         store.upsert_audience(audience)
@@ -3316,7 +3281,7 @@ def _render_one_pager(spec, grouped: dict, audiences: list) -> str:
     audience_items = ""
     for p in audiences:
         initials = "".join(w[0].upper() for w in p.name.split()[:2])
-        pain_tags = "".join(f'<span class="pain-tag">{pp[:40]}</span>' for pp in (p.pain_points or [])[:3])
+        pain_tags = "".join(f'<span class="pain-tag">{qa[:40]}</span>' for qa in (p.qa_pairs or [])[:3])
         audience_items += f"""<div class="audience-card">
         <div class="audience-avatar">{initials}</div>
         <div class="audience-name">{p.name}</div>
@@ -3995,22 +3960,9 @@ def api_chat_stream(req: ChatRequest, auth: AuthContext = Depends(get_auth_conte
     """SSE streaming endpoint for the Spec Navigator conversational chat."""
     try:
         from src.pipeline.agents import SpecNavigator
-        from openai import OpenAI
-        import os as _os
+        from src.config import llm_client
 
-        # Query audit (non-blocking) — chat is the web-surface query path
-        try:
-            from src.models import QueryAuditLog
-            store.log_query(QueryAuditLog(
-                workspace_id=req.workspace_id or "default",
-                user_id=auth.name or "web",
-                query_text=req.query,
-                source="web:chat",
-            ))
-        except Exception as _log_exc:
-            log.warning("Query audit logging failed (non-blocking): %s", _log_exc)
-
-        client = OpenAI(api_key=_os.environ.get("OPENAI_API_KEY"))
+        client = llm_client()
         navigator = SpecNavigator(client, store)
 
         def event_generator():

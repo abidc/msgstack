@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import UUID
 from openai import OpenAI
 from src.store import Store
+from src.config import llm_model
 from src.models import Assertion
 
 log = logging.getLogger(__name__)
@@ -19,7 +20,8 @@ def check_ingest_conflicts(
     Compare newly parsed entries against existing active entries in the domain.
     Flags entries with high semantic similarity and parses them using the LLM for contradictions.
     """
-    client = openai_client or OpenAI()
+    from src.config import llm_client
+    client = openai_client or llm_client()
     conflicts = []
 
     # 1. Fetch existing approved assertions
@@ -62,7 +64,7 @@ def check_ingest_conflicts(
                 try:
                     import json
                     response = client.chat.completions.create(
-                        model="gpt-4o-mini",
+                        model=llm_model("gpt-4o-mini"),
                         messages=[{"role": "user", "content": prompt}],
                         temperature=0.0,
                         response_format={"type": "json_object"}

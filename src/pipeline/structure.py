@@ -20,24 +20,23 @@ def detect_document_type(text: str, filename: str = "") -> str:
     name_lower = (filename or "").lower()
     text_lower = text[:2000].lower()
 
-    if any(k in name_lower for k in ("brand", "style guide", "voice", "tone")):
-        return "brand_guide"
-    if any(k in name_lower for k in ("competitive", "competitor", "battle card")):
-        return "competitive_brief"
-    if any(k in name_lower for k in ("narrative", "story", "about us", "company")):
-        return "corp_narrative"
-    if any(k in name_lower for k in ("audience", "buyer", "icp")):
-        return "audience_library"
+    # Must return a live SchemaType value. brand_guide / competitive_brief /
+    # corp_narrative / persona_library were retired in v2.
+    if any(k in name_lower for k in ("incident", "postmortem", "post-mortem", "outage", "rca")):
+        return "incident_record"
+    if any(k in name_lower for k in ("policy", "compliance", "security", "soc2", "privacy", "legal")):
+        return "policy_shield"
+    if any(k in name_lower for k in ("catalog", "catalogue", "inventory", "services", "ownership")):
+        return "service_catalog"
 
     # Content-based fallback
-    if any(k in text_lower for k in ("message house", "key message", "positioning statement", "tagline", "pillar")):
-        return "engineering_spec"
-    if any(k in text_lower for k in ("brand voice", "writing style", "word list", "do not use")):
-        return "brand_guide"
-    if any(k in text_lower for k in ("competitor", "vs.", " vs ", "battle card")):
-        return "competitive_brief"
-    if any(k in text_lower for k in ("audience", "buyer", "pain point", "buying trigger")):
-        return "audience_library"
+    if any(k in text_lower for k in ("incident", "postmortem", "root cause", "impact window")):
+        return "incident_record"
+    if any(k in text_lower for k in ("compliance", "data retention", "encryption at rest",
+                                      "soc 2", "gdpr", "access control")):
+        return "policy_shield"
+    if any(k in text_lower for k in ("service owner", "on-call", "dependency graph", "runbook")):
+        return "service_catalog"
 
     return "engineering_spec"  # default
 
@@ -312,7 +311,7 @@ class SpecStructurer:
         "brand_guide": _BRAND_GUIDE_PROMPT,
         "competitive_brief": _COMPETITIVE_BRIEF_PROMPT,
         "corp_narrative": _CORP_NARRATIVE_PROMPT,
-        "audience_library": _PERSONA_LIBRARY_PROMPT,
+        "service_catalog": _PERSONA_LIBRARY_PROMPT,
     }
 
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
@@ -326,7 +325,8 @@ class SpecStructurer:
         if self._client is None:
             if not self._api_key:
                 raise ValueError("OpenAI API key required. Set OPENAI_API_KEY or pass openai_api_key.")
-            self._client = OpenAI(api_key=self._api_key)
+            from src.config import llm_client
+            self._client = llm_client(self._api_key)
         return self._client
 
     def structure(self, text: str, source_name: str = "Untitled Source", document_type: str = "engineering_spec") -> "tuple[StructuredSpec, dict]":

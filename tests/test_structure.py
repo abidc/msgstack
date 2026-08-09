@@ -76,7 +76,7 @@ Only platform with pre-deploy enforcement. No agent required. SOC2 certified.
 
 @pytest.fixture
 def structurer():
-    with patch("src.pipeline.structure.OpenAI"):
+    with patch("src.config.llm_client"):
         s = SpecStructurer(openai_api_key="test-key")
     return s
 

@@ -513,3 +513,30 @@ def test_migrated_enum_values_are_valid(tmp_path):
     specs = store.list_specs()
     assert len(specs) == 5
     assert len(store.get_assertions(specs[0].id, include_unapproved=True)) == 19
+
+
+def test_detected_document_type_is_always_a_live_schema_type():
+    """The ingestion sniffer must only ever return a current SchemaType.
+
+    Regression: the persona->audience rename rewrote its 'persona_library'
+    return value to 'audience_library', which is not a member of the enum. The
+    Drive sync then failed to commit every file it classified that way, and the
+    failed re-ingest removed a spec that had previously synced fine.
+    """
+    from src.pipeline.structure import detect_document_type
+    from src.models import SchemaType
+
+    valid = {t.value for t in SchemaType}
+    probes = [
+        ("outage timeline and root cause", "incident-2026-07.docx"),
+        ("encryption at rest, SOC 2 controls", "security-policy.docx"),
+        ("service owner and on-call rotation", "service-catalog.docx"),
+        ("key message and positioning statement", "HR Messaging House.docx"),
+        ("buyer persona and pain point", "audience-library.docx"),
+        ("competitor battle card", "competitive-brief.docx"),
+        ("brand voice and word list", "brand-style-guide.docx"),
+        ("", ""),
+    ]
+    for text, filename in probes:
+        got = detect_document_type(text, filename)
+        assert got in valid, f"{filename!r} -> {got!r}, not a SchemaType"
