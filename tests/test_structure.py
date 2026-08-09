@@ -9,7 +9,7 @@ import pytest
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("PINECONE_API_KEY", "test-key")
 
-from src.pipeline.structure import HouseStructurer, StructuredHouse
+from src.pipeline.structure import SpecStructurer, StructuredSpec
 
 CANONICAL_MARKDOWN = """# Acme Cloud Security
 
@@ -45,23 +45,23 @@ Ship fast. Stay secure.
 ## Differentiation
 Only platform with pre-deploy enforcement. No agent required. SOC2 certified.
 
-## Key Messages
+## Assertions
 
-### Headlines (Priority 1-2)
+### Capabilities (Priority 1-2)
 - Ship fast. Stay secure.
 - Automate security before it becomes a breach.
 
-### Benefits (Priority 1-3)
+### Capabilities (Priority 1-3)
 - Prevent 80% of cloud misconfigurations automatically
 - Deploy in minutes, not months
 
-### Use Cases (Priority 1-3)
+### Capabilities (Priority 1-3)
 - CI/CD pipeline integration for automated policy checks
 
-### Proof Points (Priority 1-3)
+### SLAs (Priority 1-3)
 - Acme customer reduced breach incidents by 90% in Q1
 
-### Objections (Priority 1-2)
+### Limitations (Priority 1-2)
 - "Too complex to implement" — deploys in under 30 minutes, no agent
 
 ## Personas
@@ -77,7 +77,7 @@ Only platform with pre-deploy enforcement. No agent required. SOC2 certified.
 @pytest.fixture
 def structurer():
     with patch("src.pipeline.structure.OpenAI"):
-        s = HouseStructurer(openai_api_key="test-key")
+        s = SpecStructurer(openai_api_key="test-key")
     return s
 
 
@@ -85,211 +85,211 @@ def structurer():
 
 class TestParseMarkdown:
     def test_extracts_name(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "fallback")
-        assert house.name == "Acme Cloud Security"
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "fallback")
+        assert spec.name == "Acme Cloud Security"
 
     def test_extracts_summary(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "DevOps" in house.summary
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "DevOps" in spec.summary
 
     def test_extracts_audience(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "Security engineers" in house.audience
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "Security engineers" in spec.audience
 
     def test_extracts_positioning(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "policy-as-code" in house.positioning
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "policy-as-code" in spec.positioning
 
     def test_extracts_tagline(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "Ship fast" in house.tagline
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "Ship fast" in spec.tagline
 
     def test_extracts_differentiation(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "pre-deploy" in house.differentiation
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "pre-deploy" in spec.differentiation
 
     def test_extracts_know_your_market(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert "Vision" in house.know_your_market or "Secure" in house.know_your_market
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert "Vision" in spec.know_your_market or "Secure" in spec.know_your_market
 
     def test_fallback_name_when_no_h1(self, structurer):
         md = "## Summary\nSome summary"
-        house = structurer._parse_markdown(md, "My Source")
-        assert house.name == "My Source"
+        spec = structurer._parse_markdown(md, "My Source")
+        assert spec.name == "My Source"
 
     def test_missing_sections_detected(self, structurer):
         md = "# Minimal\n\n## Summary\nA summary\n"
-        house = structurer._parse_markdown(md, "x")
-        assert "tagline" in house.missing_sections or len(house.missing_sections) > 0
+        spec = structurer._parse_markdown(md, "x")
+        assert "tagline" in spec.missing_sections or len(spec.missing_sections) > 0
 
-    def test_returns_structured_house(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        assert isinstance(house, StructuredHouse)
+    def test_returns_structured_spec(self, structurer):
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        assert isinstance(spec, StructuredSpec)
 
 
 # ── _parse_key_messages ───────────────────────────────────────────────────────
 
 class TestParseKeyMessages:
     def test_headline_section(self, structurer):
-        text = "### Headlines (Priority 1-2)\n- Ship fast. Stay secure.\n- Automate now."
+        text = "### Capabilities (Priority 1-2)\n- Ship fast. Stay secure.\n- Automate now."
         msgs = structurer._parse_key_messages(text)
         assert len(msgs) == 2
-        assert all(m["section_type"] == "headline" for m in msgs)
+        assert all(m["assertion_type"] == "capability" for m in msgs)
 
     def test_benefit_section(self, structurer):
-        text = "### Benefits (Priority 1-3)\n- Reduce cost by 40%\n- Deploy in minutes"
+        text = "### Capabilities (Priority 1-3)\n- Reduce cost by 40%\n- Deploy in minutes"
         msgs = structurer._parse_key_messages(text)
-        assert all(m["section_type"] == "benefit" for m in msgs)
+        assert all(m["assertion_type"] == "capability" for m in msgs)
 
     def test_proof_point_section(self, structurer):
-        text = "### Proof Points (Priority 1-3)\n- Acme reduced incidents by 90%"
+        text = "### SLAs (Priority 1-3)\n- Acme reduced incidents by 90%"
         msgs = structurer._parse_key_messages(text)
-        assert msgs[0]["section_type"] == "proof_point"
+        assert msgs[0]["assertion_type"] == "sla"
 
-    def test_objection_section(self, structurer):
-        text = "### Objections (Priority 1-2)\n- Too complex — deploys in 30 min"
+    def test_qa_pair_section(self, structurer):
+        text = "### Limitations (Priority 1-2)\n- Too complex — deploys in 30 min"
         msgs = structurer._parse_key_messages(text)
-        assert msgs[0]["section_type"] == "objection"
+        assert msgs[0]["assertion_type"] == "limitation"
 
     def test_use_case_section(self, structurer):
-        text = "### Use Cases (Priority 1-3)\n- CI/CD integration for policy enforcement"
+        text = "### Capabilities (Priority 1-3)\n- CI/CD integration for policy enforcement"
         msgs = structurer._parse_key_messages(text)
-        assert msgs[0]["section_type"] == "use_case"
+        assert msgs[0]["assertion_type"] == "capability"
 
     def test_priority_suffix_stripped(self, structurer):
         """'(Priority 1-2)' suffix in header name should not break section detection."""
-        text = "### Headlines (Priority 1-2)\n- My headline"
+        text = "### Capabilities (Priority 1-2)\n- My headline"
         msgs = structurer._parse_key_messages(text)
-        assert msgs[0]["section_type"] == "headline"
+        assert msgs[0]["assertion_type"] == "capability"
 
     def test_skips_not_found_placeholder(self, structurer):
-        text = "### Benefits (Priority 1-3)\n- [Not found in source]"
+        text = "### Capabilities (Priority 1-3)\n- [Not found in source]"
         msgs = structurer._parse_key_messages(text)
         assert len(msgs) == 0
 
     def test_multiple_sections(self, structurer):
-        text = ("### Headlines (Priority 1-2)\n- H1\n"
-                "### Benefits (Priority 1-3)\n- B1\n- B2")
+        text = ("### Capabilities (Priority 1-2)\n- H1\n"
+                "### Capabilities (Priority 1-3)\n- B1\n- B2")
         msgs = structurer._parse_key_messages(text)
-        types = [m["section_type"] for m in msgs]
-        assert "headline" in types
-        assert "benefit" in types
+        types = [m["assertion_type"] for m in msgs]
+        assert "capability" in types
+        assert "capability" in types
         assert len(msgs) == 3
 
     def test_default_fields(self, structurer):
-        text = "### Benefits (Priority 1-3)\n- Value here"
+        text = "### Capabilities (Priority 1-3)\n- Value here"
         msgs = structurer._parse_key_messages(text)
         assert msgs[0]["variants"] == {}
-        assert msgs[0]["personas"] == []
+        assert msgs[0]["audiences"] == []
         assert msgs[0]["channels"] == ["all"]
 
     def test_empty_text(self, structurer):
         assert structurer._parse_key_messages("") == []
 
 
-# ── _parse_personas (regex fallback) ─────────────────────────────────────────
+# ── _parse_audiences (regex fallback) ─────────────────────────────────────────
 
 class TestParsePersonasRegex:
     def test_extracts_name(self, structurer):
         text = "### Security Engineer\n**Role:** Senior engineer\n- Pain one\n"
-        personas = structurer._parse_personas_regex(text)
-        assert len(personas) == 1
-        assert personas[0]["name"] == "Security Engineer"
+        audiences = structurer._parse_audiences_regex(text)
+        assert len(audiences) == 1
+        assert audiences[0]["name"] == "Security Engineer"
 
     def test_extracts_role(self, structurer):
         text = "### CISO\n**Role:** Chief Information Security Officer\n"
-        personas = structurer._parse_personas_regex(text)
-        assert "Chief Information Security Officer" in personas[0]["description"]
+        audiences = structurer._parse_audiences_regex(text)
+        assert "Chief Information Security Officer" in audiences[0]["description"]
 
-    def test_multiple_personas(self, structurer):
+    def test_multiple_audiences(self, structurer):
         text = ("### Dev Lead\n**Role:** Lead developer\n\n"
                 "### DevOps Engineer\n**Role:** Platform engineer\n")
-        personas = structurer._parse_personas_regex(text)
-        assert len(personas) == 2
+        audiences = structurer._parse_audiences_regex(text)
+        assert len(audiences) == 2
 
     def test_skips_not_found(self, structurer):
         text = "### DevOps\n**Role:** Engineer\n- [Not found in source]"
-        personas = structurer._parse_personas_regex(text)
-        assert personas[0]["pain_points"] == [] or "[Not found" not in str(personas[0]["pain_points"])
+        audiences = structurer._parse_audiences_regex(text)
+        assert audiences[0].get("qa_pairs", []) == [] or "[Not found" not in str(audiences[0]["qa_pairs"])
 
     def test_empty_text(self, structurer):
-        assert structurer._parse_personas_regex("") == []
+        assert structurer._parse_audiences_regex("") == []
 
 
 # ── _merge_structures ─────────────────────────────────────────────────────────
 
 class TestMergeStructures:
     def test_single_chunk_returned_as_is(self, structurer):
-        h = StructuredHouse(name="X", summary="s", audience="a", brand_personality="b",
+        h = StructuredSpec(name="X", summary="s", audience="a", brand_personality="b",
                             positioning="p", tagline="t", differentiation="d",
-                            key_messages=[], personas=[])
+                            assertions=[], audiences=[])
         result = structurer._merge_structures([h], "X")
         assert result.name == "X"
 
     def test_deduplicates_key_messages(self, structurer):
-        msg = {"section_type": "benefit", "priority": 1, "content": "Reduce cost by 40%",
-               "variants": {}, "personas": [], "channels": ["all"]}
-        h1 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+        msg = {"assertion_type": "capability", "priority": 1, "content": "Reduce cost by 40%",
+               "variants": {}, "audiences": [], "channels": ["all"]}
+        h1 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[msg], personas=[])
-        h2 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+                             assertions=[msg], audiences=[])
+        h2 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[msg], personas=[])
+                             assertions=[msg], audiences=[])
         result = structurer._merge_structures([h1, h2], "A")
-        assert len(result.key_messages) == 1
+        assert len(result.assertions) == 1
 
     def test_merges_distinct_messages(self, structurer):
-        m1 = {"section_type": "benefit", "priority": 1, "content": "Save time",
-               "variants": {}, "personas": [], "channels": ["all"]}
-        m2 = {"section_type": "benefit", "priority": 1, "content": "Cut costs",
-               "variants": {}, "personas": [], "channels": ["all"]}
-        h1 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+        m1 = {"assertion_type": "capability", "priority": 1, "content": "Save time",
+               "variants": {}, "audiences": [], "channels": ["all"]}
+        m2 = {"assertion_type": "capability", "priority": 1, "content": "Cut costs",
+               "variants": {}, "audiences": [], "channels": ["all"]}
+        h1 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[m1], personas=[])
-        h2 = StructuredHouse(name="A", summary="s2", audience="a2", brand_personality="b2",
+                             assertions=[m1], audiences=[])
+        h2 = StructuredSpec(name="A", summary="s2", audience="a2", brand_personality="b2",
                              positioning="p2", tagline="t2", differentiation="d2",
-                             key_messages=[m2], personas=[])
+                             assertions=[m2], audiences=[])
         result = structurer._merge_structures([h1, h2], "A")
-        assert len(result.key_messages) == 2
+        assert len(result.assertions) == 2
 
     def test_takes_first_nonempty_fields(self, structurer):
-        h1 = StructuredHouse(name="", summary="", audience="a", brand_personality="b",
+        h1 = StructuredSpec(name="", summary="", audience="a", brand_personality="b",
                              positioning="p", tagline="", differentiation="d",
-                             key_messages=[], personas=[])
-        h2 = StructuredHouse(name="B", summary="s2", audience="a2", brand_personality="b2",
+                             assertions=[], audiences=[])
+        h2 = StructuredSpec(name="B", summary="s2", audience="a2", brand_personality="b2",
                              positioning="p2", tagline="t2", differentiation="d2",
-                             key_messages=[], personas=[])
+                             assertions=[], audiences=[])
         result = structurer._merge_structures([h1, h2], "fallback")
         assert result.summary == "s2"
         assert result.tagline == "t2"
 
-    def test_deduplicates_personas_by_name(self, structurer):
-        p = {"name": "DevOps Lead", "description": "Lead", "pain_points": [],
-              "buying_triggers": [], "objections": []}
-        h1 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+    def test_deduplicates_audiences_by_name(self, structurer):
+        p = {"name": "DevOps Lead", "description": "Lead",
+              "buying_triggers": [], "qa_pairs": []}
+        h1 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[], personas=[p])
-        h2 = StructuredHouse(name="A", summary="s", audience="a", brand_personality="b",
+                             assertions=[], audiences=[p])
+        h2 = StructuredSpec(name="A", summary="s", audience="a", brand_personality="b",
                              positioning="p", tagline="t", differentiation="d",
-                             key_messages=[], personas=[p])
+                             assertions=[], audiences=[p])
         result = structurer._merge_structures([h1, h2], "A")
-        assert len(result.personas) == 1
+        assert len(result.audiences) == 1
 
 
 # ── to_markdown ───────────────────────────────────────────────────────────────
 
 class TestToMarkdown:
     def test_roundtrip_preserves_name(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        md = structurer.to_markdown(house)
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        md = structurer.to_markdown(spec)
         assert "# Acme Cloud Security" in md
 
     def test_roundtrip_preserves_tagline(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        md = structurer.to_markdown(house)
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        md = structurer.to_markdown(spec)
         assert "Ship fast" in md
 
     def test_includes_key_messages(self, structurer):
-        house = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
-        md = structurer.to_markdown(house)
-        assert "## Key Messages" in md
+        spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
+        md = structurer.to_markdown(spec)
+        assert "## Assertions" in md

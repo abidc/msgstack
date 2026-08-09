@@ -16,12 +16,12 @@ mcp = FastMCP("MsgStack")
 
 
 @mcp.tool()
-def search_canon(
+def search_assertions(
     query: str,
-    section_types: Optional[list[str]] = None,
-    personas: Optional[list[str]] = None,
+    assertion_types: Optional[list[str]] = None,
+    audiences: Optional[list[str]] = None,
     channels: Optional[list[str]] = None,
-    canon_domains: Optional[list[str]] = None,
+    specs: Optional[list[str]] = None,
     include_variants: bool = True,
     min_priority: Optional[int] = None,
     min_confidence: Optional[float] = None,
@@ -31,24 +31,24 @@ def search_canon(
     include_unapproved: bool = False,
     department: Optional[str] = None,
 ) -> dict:
-    """Search approved organizational canon entries for grounding content.
+    """Search approved spec graph entries for grounding content.
 
     By default only returns entries with status APPROVED or LOCKED.
     Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
     OUTDATED entries are always excluded.
 
     Provide a natural language query and optional filters to retrieve relevant
-    canon entries from your organization's canon domains. Use this before
+    assertions from your organization's specs. Use this before
     generating or verifying content to ensure it aligns with approved truth.
 
     Args:
-        query: What canon content are you looking for? Include section types,
-               personas, and channels naturally (e.g., "headlines for CTOs on LinkedIn").
-        section_types: Filter by entry type: headline, subhead, benefit, use_case,
-                      proof_point, objection, social_proof, positioning, know_your_market.
-        personas: Filter by specific audience personas (e.g., SMB CTO, FinOps Manager).
+        query: What spec content are you looking for? Include section types,
+               audiences, and channels naturally (e.g., "headlines for CTOs on LinkedIn").
+        assertion_types: Filter by entry type: headline, subhead, benefit, use_case,
+                      proof_point, qa_pair, social_proof, positioning, know_your_market.
+        audiences: Filter by specific audience audiences (e.g., SMB CTO, FinOps Manager).
         channels: Filter by target destination channel: linkedin, email, landing, paid, twitter, blog.
-        canon_domains: Restrict to specific canon domains by ID or name.
+        specs: Restrict to specific specs by ID or name.
         include_variants: Include channel-specific variant rewrites in results.
         min_priority: Only return entries at or above this priority (1=highest).
         min_confidence: Warn if average result confidence is below this threshold (0.0–1.0).
@@ -61,14 +61,14 @@ def search_canon(
         department: Filter to a specific department (optional).
 
     Returns:
-        Matched canon entries with confidence scores and grounding context.
+        Matched assertions with confidence scores and grounding context.
     """
-    result = grounding_tools.search_messaging(
+    result = grounding_tools.search_assertions(
         query=query,
-        section_types=section_types,
-        personas=personas,
+        assertion_types=assertion_types,
+        audiences=audiences,
         channels=channels,
-        message_houses=canon_domains,
+        specs=specs,
         include_variants=include_variants,
         min_priority=min_priority,
         min_confidence=min_confidence,
@@ -82,11 +82,11 @@ def search_canon(
         store = get_store()
         filtered_results = []
         for r in result["results"]:
-            domain_id = r.get("source", {}).get("canon_domain_id") or r.get("source", {}).get("message_house_id")
+            domain_id = r.get("source", {}).get("spec_id") or r.get("source", {}).get("spec_id")
             if domain_id:
                 from uuid import UUID
                 try:
-                    domain = store.get_canon_domain(UUID(str(domain_id)))
+                    domain = store.get_spec(UUID(str(domain_id)))
                     if domain and domain.department.lower() == department.lower():
                         filtered_results.append(r)
                 except Exception:
@@ -99,166 +99,100 @@ def search_canon(
     # Align terminology in output keys
     if "results" in result:
         for r in result["results"]:
-            if "house_name" in r:
-                r["canon_domain_name"] = r["house_name"]
-            if "house_summary" in r:
-                r["canon_domain_summary"] = r["house_summary"]
-            if "message_house_id" in r:
-                r["canon_domain_id"] = r["message_house_id"]
-            if "key_message_id" in r:
-                r["canon_entry_id"] = r["key_message_id"]
+            if "spec_name" in r:
+                r["spec_name"] = r["spec_name"]
+            if "spec_summary" in r:
+                r["spec_summary"] = r["spec_summary"]
+            if "spec_id" in r:
+                r["spec_id"] = r["spec_id"]
+            if "assertion_id" in r:
+                r["assertion_id"] = r["assertion_id"]
 
     return result
 
 
 @mcp.tool()
-def search_messaging(
-    query: str,
-    section_types: Optional[list[str]] = None,
-    personas: Optional[list[str]] = None,
-    channels: Optional[list[str]] = None,
-    message_houses: Optional[list[str]] = None,
-    include_variants: bool = True,
-    min_priority: Optional[int] = None,
-    min_confidence: Optional[float] = None,
-    workspace_id: Optional[str] = None,
-    retrieval_mode: Optional[str] = None,
-    limit: Optional[int] = None,
-    include_unapproved: bool = False,
-) -> dict:
-    """[DEPRECATED] Search approved organizational canon entries for grounding content.
-
-    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
-    Please use `search_canon` instead.
-    """
-    import warnings
-    warnings.warn("search_messaging is deprecated, use search_canon instead", DeprecationWarning, stacklevel=2)
-    return search_canon(
-        query=query,
-        section_types=section_types,
-        personas=personas,
-        channels=channels,
-        canon_domains=message_houses,
-        include_variants=include_variants,
-        min_priority=min_priority,
-        min_confidence=min_confidence,
-        workspace_id=workspace_id,
-        retrieval_mode=retrieval_mode,
-        limit=limit,
-        include_unapproved=include_unapproved,
-    )
-
-
-@mcp.tool()
-def set_active_domain(domain_id: str) -> dict:
-    """Pin a canon domain as the active grounding context for the session.
+def set_active_spec(domain_id: str) -> dict:
+    """Pin a spec as the active grounding context for the session.
 
     Subsequent searches will default to this domain unless overridden.
-    Call this first when you know which canon domain to use.
+    Call this first when you know which spec to use.
     """
-    res = grounding_tools.set_active_house(domain_id)
+    res = grounding_tools.set_active_spec(domain_id)
     # Align terminology in output
     if isinstance(res, dict):
         if "message" in res:
-            res["message"] = res["message"].replace("Active house", "Active canon domain")
-        if "house_id" in res:
-            res["domain_id"] = res["house_id"]
-        if "house_name" in res:
-            res["domain_name"] = res["house_name"]
-        if "house_summary" in res:
-            res["domain_summary"] = res["house_summary"]
+            res["message"] = res["message"].replace("Active spec", "Active spec")
+        if "spec_id" in res:
+            res["domain_id"] = res["spec_id"]
+        if "spec_name" in res:
+            res["domain_name"] = res["spec_name"]
+        if "spec_summary" in res:
+            res["domain_summary"] = res["spec_summary"]
         if "key_messages_count" in res:
-            res["canon_entries_count"] = res["key_messages_count"]
+            res["assertion_count"] = res["key_messages_count"]
     return res
 
 
 @mcp.tool()
-def set_active_house(house_id: str) -> dict:
-    """[DEPRECATED] Pin a canon domain as the active grounding context for the session.
-
-    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
-    Please use `set_active_domain` instead.
-    """
-    import warnings
-    warnings.warn("set_active_house is deprecated, use set_active_domain instead", DeprecationWarning, stacklevel=2)
-    return set_active_domain(house_id)
-
-
-@mcp.tool()
-def get_canon_domain(
+def get_spec(
     domain_id: Optional[str] = None,
     domain_name: Optional[str] = None,
     include_unapproved: bool = False,
 ) -> dict:
-    """Retrieve full content of a canon domain for research.
+    """Retrieve full content of a spec for research.
 
     By default only returns entries with status APPROVED or LOCKED.
     Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
     OUTDATED entries are always excluded.
 
-    Use this tool to understand the positioning, target audience, and approved canon entries.
+    Use this tool to understand the positioning, target audience, and approved assertions.
     
     CRITICAL: Do NOT use the data returned here to manually write a one-pager or 
     artifact for the user. Instead, use 'generate_artifact' or 'build_ui_artifact'.
 
     Args:
-        domain_id: UUID of the canon domain.
-        domain_name: Name of the canon domain (alternative to domain_id).
+        domain_id: UUID of the spec.
+        domain_name: Name of the spec (alternative to domain_id).
         include_unapproved: If True, also include DRAFT and IN_REVIEW entries.
     """
-    res = grounding_tools.get_message_house(domain_id, domain_name, ["all"], include_unapproved=include_unapproved)
+    res = grounding_tools.get_spec(domain_id, domain_name, ["all"], include_unapproved=include_unapproved)
     # Align terminology in output keys
     if isinstance(res, dict):
         if "id" in res:
             res["domain_id"] = res["id"]
-            res["house_id"] = res["id"]
+            res["spec_id"] = res["id"]
         if "name" in res:
             res["domain_name"] = res["name"]
-            res["house_name"] = res["name"]
-        if "key_messages" in res:
-            res["canon_entries"] = res["key_messages"]
+            res["spec_name"] = res["name"]
+        if "assertions" in res:
+            res["assertions"] = res["assertions"]
     return res
 
 
 @mcp.tool()
-def get_message_house(
-    house_id: Optional[str] = None,
-    house_name: Optional[str] = None,
-    include_unapproved: bool = False,
-) -> dict:
-    """[DEPRECATED] Retrieve full content of a canon domain for research.
-
-    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
-    Please use `get_canon_domain` instead.
-    """
-    import warnings
-    warnings.warn("get_message_house is deprecated, use get_canon_domain instead", DeprecationWarning, stacklevel=2)
-    return get_canon_domain(domain_id=house_id, domain_name=house_name, include_unapproved=include_unapproved)
-
-
-@mcp.tool()
-def list_canon_domains(query: Optional[str] = None, workspace_id: Optional[str] = None, department: Optional[str] = None) -> dict:
-    """List all available canon domains with their IDs and summaries.
+def list_specs(query: Optional[str] = None, workspace_id: Optional[str] = None, department: Optional[str] = None) -> dict:
+    """List all available specs with their IDs and summaries.
 
     Call this FIRST whenever the user mentions a brand, product, company, or policy
     domain — before calling any generate or search tool. Use the returned
     domain_id (UUID) for all subsequent tool calls.
 
     IMPORTANT: The 'summary' in the response is a 2–3 sentence overview ONLY.
-    It does NOT contain the actual approved canon entries or proof points.
+    It does NOT contain the actual approved assertions or proof points.
     After identifying the domain_id:
     - To GENERATE an output → call generate_artifact(skill_id, domain_id)
-    - To READ full grounding content → call get_canon_domain(domain_id)
+    - To READ full grounding content → call get_spec(domain_id)
     Never write content yourself using only this tool's output.
 
     Args:
-        query: Optional text search across canon domain names and summaries.
+        query: Optional text search across spec names and summaries.
         workspace_id: Filter to a specific workspace (optional).
         department: Filter to a specific department (optional).
     """
-    res = grounding_tools.list_message_houses(query, workspace_id)
+    res = grounding_tools.list_specs(query, workspace_id)
     # Align terminology in output
-    if isinstance(res, dict) and "houses" in res:
+    if isinstance(res, dict) and "specs" in res:
         res["domains"] = [
             {
                 "domain_id": h.get("id"),
@@ -267,27 +201,15 @@ def list_canon_domains(query: Optional[str] = None, workspace_id: Optional[str] 
                 "summary": h.get("summary"),
                 "department": h.get("department", "General"),
             }
-            for h in res["houses"]
+            for h in res["specs"]
             if not department or h.get("department", "General").lower() == department.lower()
         ]
     return res
 
 
 @mcp.tool()
-def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str] = None) -> dict:
-    """[DEPRECATED] List all available canon domains with their IDs and summaries.
-
-    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
-    Please use `list_canon_domains` instead.
-    """
-    import warnings
-    warnings.warn("list_message_houses is deprecated, use list_canon_domains instead", DeprecationWarning, stacklevel=2)
-    return list_canon_domains(query, workspace_id)
-
-
-@mcp.tool()
-def compare_canon_domains(domain_ids: list[str], include_unapproved: bool = False) -> dict:
-    """Compare two or more canon domains side by side.
+def compare_specs(domain_ids: list[str], include_unapproved: bool = False) -> dict:
+    """Compare two or more specs side by side.
 
     By default only includes entries with status APPROVED or LOCKED.
     Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
@@ -295,101 +217,77 @@ def compare_canon_domains(domain_ids: list[str], include_unapproved: bool = Fals
     Useful for comparing different departments or product lines.
 
     Args:
-        domain_ids: UUIDs of the canon domains to compare.
+        domain_ids: UUIDs of the specs to compare.
         include_unapproved: If True, also include DRAFT and IN_REVIEW entries.
     """
-    return grounding_tools.compare_houses(domain_ids, include_unapproved=include_unapproved)
-
-
-@mcp.tool()
-def compare_houses(house_ids: list[str], include_unapproved: bool = False) -> dict:
-    """[DEPRECATED] Compare two or more canon domains side by side.
-
-    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
-    Please use `compare_canon_domains` instead.
-    """
-    import warnings
-    warnings.warn("compare_houses is deprecated, use compare_canon_domains instead", DeprecationWarning, stacklevel=2)
-    return compare_canon_domains(house_ids, include_unapproved=include_unapproved)
+    return grounding_tools.compare_specs(domain_ids, include_unapproved=include_unapproved)
 
 
 @mcp.tool()
 def get_grounding_context() -> dict:
     """Get the current grounding context for this session.
 
-    Returns which canon domain is active, which personas are in scope, and which
+    Returns which spec is active, which audiences are in scope, and which
     chunks have been used so far.
     """
     return grounding_tools.get_grounding_context().model_dump()
 
 
 @mcp.tool()
-def get_entry_history(entry_id: str) -> dict:
-    """Get the full approval/status-change audit trail for a specific canon entry.
+def get_assertion_history(entry_id: str) -> dict:
+    """Get the full approval/status-change audit trail for a specific assertion.
 
     Returns the complete history of status changes, reviews, and approvals
     for the given entry, ordered newest-first. Mirrors the review-trail data shape.
 
     Args:
-        entry_id: The UUID of the canon entry.
+        entry_id: The UUID of the assertion.
 
     Returns:
         dict with entry_id, current_status, trail (list of review log entries), and count.
     """
-    return grounding_tools.get_entry_history(entry_id)
+    return grounding_tools.get_assertion_history(entry_id)
 
 
-@mcp.tool()
-def get_message_history(entry_id: str) -> dict:
-    """[DEPRECATED] Get the full approval/status-change audit trail for a specific canon entry.
-
-    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
-    Please use `get_entry_history` instead.
-    """
-    import warnings
-    warnings.warn("get_message_history is deprecated, use get_entry_history instead", DeprecationWarning, stacklevel=2)
-    return get_entry_history(entry_id)
-
-
-def _resolve_house(store, house_id: Optional[str], house_name: Optional[str] = None):
-    """Resolve a message house by ID (UUID) or name, with fallback."""
+def _resolve_spec(store, spec_id: Optional[str], spec_name: Optional[str] = None):
+    """Resolve a message spec by ID (UUID) or name, with fallback."""
     from uuid import UUID as _UUID
-    house = None
-    if house_id:
+    spec = None
+    if spec_id:
         try:
-            house = store.get_house(_UUID(house_id))
+            spec = store.get_spec(_UUID(spec_id))
         except (ValueError, AttributeError):
             pass
-    if house is None and house_name:
-        house = store.get_house_by_name(house_name)
-    if house is None and house_id:
-        house = store.get_house_by_name(house_id)
-    return house
+    if spec is None and spec_name:
+        spec = store.get_spec_by_name(spec_name)
+    if spec is None and spec_id:
+        spec = store.get_spec_by_name(spec_id)
+    return spec
 
 
-def generate_one_pager_data(messaging_house_id: str) -> dict:
+def generate_one_pager_data(spec_id: str) -> dict:
     """Internal helper to get structured data for a one-pager."""
     store = get_store()
-    house = _resolve_house(store, messaging_house_id)
-    if not house:
-        return {"error": f"House not found."}
+    spec = _resolve_spec(store, spec_id)
+    if not spec:
+        return {"error": f"Spec not found."}
 
-    messages = store.get_key_messages(house.id)
-    personas = store.get_personas(house.id)
+    messages = store.get_key_messages(spec.id)
+    audiences = store.get_audiences(spec.id)
 
     grouped = {}
     for m in messages:
-        key = str(m.section_type)
+        key = str(m.assertion_type)
         grouped.setdefault(key, []).append(m.content)
 
     return {
-        "house_name": house.name,
-        "tagline": house.tagline,
-        "positioning": house.positioning,
-        "differentiation": house.differentiation,
-        "audience": house.audience,
-        "key_messages": grouped,
-        "personas": [{"name": p.name, "description": p.description, "pain_points": p.pain_points} for p in personas],
+        "spec_name": spec.name,
+        "tagline": spec.tagline,
+        "positioning": spec.positioning,
+        "differentiation": spec.differentiation,
+        "audience": spec.audience,
+        "assertions": grouped,
+        "audiences": [{"name": p.name, "description": p.description, "qa_pairs": p.qa_pairs} for p in audiences],
         "message_count": len(messages),
     }
 
@@ -400,11 +298,11 @@ def generate_artifact(
     domain_id: Optional[str] = None,
     domain_name: Optional[str] = None,
     custom_context: Optional[dict] = None,
-    house_id: Optional[str] = None,
-    house_name: Optional[str] = None,
+    spec_id: Optional[str] = None,
+    spec_name: Optional[str] = None,
     include_unapproved: bool = False,
 ) -> str:
-    """Generate an output draft from a canon domain using a derived template skill.
+    """Generate an output draft from a spec using a derived template skill.
 
     CALL THIS TOOL IMMEDIATELY — do not explain, do not show code, do not ask for confirmation —
     whenever the user says anything like: "generate", "create", "write", "build", "make", "draft",
@@ -419,13 +317,13 @@ def generate_artifact(
     Args:
         skill_id: Content type — one of: one_pager, linkedin_post, email_template,
                   battlecard, press_release, blog_post, faq_document, talk_track,
-                  objection_handler, event_brief, executive_summary, partner_brief.
-        domain_id: UUID of the canon domain (preferred over domain_name).
-        domain_name: Exact name of the canon domain (used if domain_id not available).
+                  qa_pair_handler, event_brief, executive_summary, partner_brief.
+        domain_id: UUID of the spec (preferred over domain_name).
+        domain_name: Exact name of the spec (used if domain_id not available).
         custom_context: Extra context dict, e.g. {"competitor": "Salesforce"} for battlecard
                         or {"stage": "decision"} for email_template.
-        house_id: UUID of the canon domain (legacy alias for domain_id).
-        house_name: Exact name of the canon domain (legacy alias for domain_name).
+        spec_id: UUID of the spec (legacy alias for domain_id).
+        spec_name: Exact name of the spec (legacy alias for domain_name).
         include_unapproved: If True, allow draft and in_review entries to ground the artifact.
     """
     from src.pipeline.generator import ArtifactGenerator
@@ -434,24 +332,24 @@ def generate_artifact(
 
     store = get_store()
 
-    actual_id = domain_id or house_id
-    actual_name = domain_name or house_name
+    actual_id = domain_id or spec_id
+    actual_name = domain_name or spec_name
 
-    house = None
+    spec = None
     if actual_id:
         try:
             from uuid import UUID as _UUID
-            house = store.get_house(_UUID(actual_id))
+            spec = store.get_spec(_UUID(actual_id))
         except (ValueError, AttributeError):
-            house = None
-    if house is None and actual_name:
-        house = store.get_house_by_name(actual_name)
-    if house is None and actual_id and not actual_name:
-        house = store.get_house_by_name(actual_id)
-    if house is None:
-        all_houses = store.list_houses()
-        names = ", ".join(h.name for h in all_houses)
-        return f"Domain not found. Call list_canon_domains to see valid options. Available: {names}"
+            spec = None
+    if spec is None and actual_name:
+        spec = store.get_spec_by_name(actual_name)
+    if spec is None and actual_id and not actual_name:
+        spec = store.get_spec_by_name(actual_id)
+    if spec is None:
+        all_specs = store.list_specs()
+        names = ", ".join(h.name for h in all_specs)
+        return f"Domain not found. Call list_specs to see valid options. Available: {names}"
 
     skills = SkillManager(skills_dir="data/skills")
 
@@ -471,19 +369,19 @@ def generate_artifact(
         )
 
     generator = ArtifactGenerator(store, skills)
-    artifact = generator.generate(skill_id, str(house.id), provided)
+    artifact = generator.generate(skill_id, str(spec.id), provided)
 
     try:
         from src.pipeline.alignment import AlignmentEngine
-        score = AlignmentEngine(store).score(house.id, artifact.raw_content).overall_score
+        score = AlignmentEngine(store).score(spec.id, artifact.raw_content).overall_score
     except Exception:
         score = None
 
     try:
         saved = store.save_artifact(
-            house_id=house.id,
+            spec_id=spec.id,
             skill_id=skill_id,
-            house_name=artifact.house_name,
+            spec_name=artifact.spec_name,
             sections=artifact.sections,
             raw_content=artifact.raw_content,
             alignment_score=score,
@@ -494,12 +392,12 @@ def generate_artifact(
 
     # Record in grounding session so get_grounding_context reflects this
     session = get_session()
-    workspace_id = store.get_house_workspace_id(house.id) or "default"
-    session.set_active_house(
-        house_id=house.id,
-        house_name=house.name,
-        house_summary=house.summary or "",
-        personas=[],
+    workspace_id = store.get_spec_workspace_id(spec.id) or "default"
+    session.set_active_spec(
+        spec_id=spec.id,
+        spec_name=spec.name,
+        spec_summary=spec.summary or "",
+        audiences=[],
         workspace_id=workspace_id,
     )
 
@@ -509,7 +407,7 @@ def generate_artifact(
     if getattr(artifact, "used_drafts_fallback", False):
         content = (
             "> [!WARNING]\n"
-            "> Grounded in draft (unapproved) canon entries because no approved entries exist for this domain.\n\n"
+            "> Grounded in draft (unapproved) assertions because no approved entries exist for this domain.\n\n"
             + content
         )
     url = None
@@ -526,7 +424,7 @@ def generate_artifact(
         artifact_type = skill_config.get("prefab_template", skill_id) if skill_config else skill_id
         
         if artifact_type in visual_types:
-            url = f"{base_url}/artifact/{artifact_type}/{house.id}"
+            url = f"{base_url}/artifact/{artifact_type}/{spec.id}"
             params = []
             if skill_id == "battlecard" and provided.get("competitor"):
                 params.append(f"competitor={provided['competitor']}")
@@ -551,10 +449,10 @@ def build_ui_artifact(
     domain_name: Optional[str] = None,
     stage: Optional[str] = None,
     channels: Optional[list[str]] = None,
-    house_id: Optional[str] = None,
-    house_name: Optional[str] = None,
+    spec_id: Optional[str] = None,
+    spec_name: Optional[str] = None,
 ) -> str:
-    """Return a visual HTML page URL for a canon domain — does NOT run the AI generator.
+    """Return a visual HTML page URL for a spec — does NOT run the AI generator.
 
     Use this ONLY when the user asks for a "link", "page", "visual", or "web view"
     of a domain that already exists — NOT to generate new content.
@@ -564,20 +462,20 @@ def build_ui_artifact(
 
     Args:
         artifact_type: one_pager | social_posts | email_template | battlecard
-        domain_id: UUID of the canon domain (preferred).
-        domain_name: Exact name of the canon domain.
+        domain_id: UUID of the spec (preferred).
+        domain_name: Exact name of the spec.
         stage: For email_template only: awareness | consideration | decision
         channels: For social_posts only: e.g. ["linkedin"]
-        house_id: UUID of the canon domain (legacy alias).
-        house_name: Exact name of the canon domain (legacy alias).
+        spec_id: UUID of the spec (legacy alias).
+        spec_name: Exact name of the spec (legacy alias).
     """
     store = get_store()
-    actual_id = domain_id or house_id
-    actual_name = domain_name or house_name
-    house = _resolve_house(store, actual_id, actual_name)
-    if not house:
-        all_houses = store.list_houses()
-        return "Canon domain not found. Available: " + ", ".join(h.name for h in all_houses)
+    actual_id = domain_id or spec_id
+    actual_name = domain_name or spec_name
+    spec = _resolve_spec(store, actual_id, actual_name)
+    if not spec:
+        all_specs = store.list_specs()
+        return "Spec domain not found. Available: " + ", ".join(h.name for h in all_specs)
 
     valid_types = ["one_pager", "social_posts", "email_template", "battlecard"]
     if artifact_type not in valid_types:
@@ -590,8 +488,8 @@ def build_ui_artifact(
     elif artifact_type == "social_posts" and channels:
         params = f"?channels={','.join(channels)}"
 
-    url = f"{base_url}/artifact/{artifact_type}/{house.id}{params}"
-    return f"Open the {artifact_type.replace('_', ' ')} for **{house.name}**: {url}"
+    url = f"{base_url}/artifact/{artifact_type}/{spec.id}{params}"
+    return f"Open the {artifact_type.replace('_', ' ')} for **{spec.name}**: {url}"
 
 
 @mcp.tool()
@@ -631,18 +529,18 @@ def list_mcp_tools() -> dict:
     grounding, research, generation, and visual artifact creation.
     """
     tool_defs = [
-        {"name": "search_canon", "description": "Search approved canon domains for grounding content (headlines, proof points, etc)."},
-        {"name": "list_canon_domains", "description": "List all available canon domains/categories."},
-        {"name": "get_canon_domain", "description": "Retrieve full canon domain content for deep research (positioning, personas)."},
+        {"name": "search_assertions", "description": "Search approved specs for grounding content (headlines, proof points, etc)."},
+        {"name": "list_specs", "description": "List all available specs/categories."},
+        {"name": "get_spec", "description": "Retrieve full spec content for deep research (positioning, audiences)."},
         {"name": "list_skills", "description": "List all 12+ types of output templates you can generate (Email, PR, Blog, etc)."},
-        {"name": "generate_artifact", "description": "MANDATORY: Generate a full document draft grounded in approved canon."},
-        {"name": "build_ui_artifact", "description": "Get a visual HTML link for a specific canon domain artifact."},
-        {"name": "set_active_domain", "description": "Focus the session on a specific canon domain."},
-        {"name": "check_canon_completeness", "description": "Audit a canon domain for missing critical entries/metadata."},
-        {"name": "get_framework_spec", "description": "See the requirements for a complete canon domain."},
+        {"name": "generate_artifact", "description": "MANDATORY: Generate a full document draft grounded in approved assertions."},
+        {"name": "build_ui_artifact", "description": "Get a visual HTML link for a specific spec artifact."},
+        {"name": "set_active_spec", "description": "Focus the session on a specific spec."},
+        {"name": "check_spec_completeness", "description": "Audit a spec for missing critical entries/metadata."},
+        {"name": "get_schema", "description": "See the requirements for a complete spec."},
         {"name": "export_to_penpot", "description": "Export a MsgStack artifact to Penpot design file and return the edit link."},
         {"name": "set_penpot_project", "description": "Link a Penpot project to a MsgStack workspace for design sync."},
-        {"name": "get_entry_history", "description": "Get the full approval/status-change audit trail for a specific canon entry."},
+        {"name": "get_assertion_history", "description": "Get the full approval/status-change audit trail for a specific assertion."},
     ]
     return {"tools": tool_defs}
 
@@ -652,7 +550,7 @@ def export_to_penpot(
     artifact_id: str,
     workspace_id: str,
     domain_id: Optional[str] = None,
-    house_id: Optional[str] = None,
+    spec_id: Optional[str] = None,
 ) -> dict:
     """Export a MsgStack artifact to Penpot and return the edit link.
 
@@ -662,15 +560,15 @@ def export_to_penpot(
     Args:
         artifact_id: The artifact ID to export.
         workspace_id: The workspace ID (to find the linked Penpot project).
-        domain_id: The canon domain ID (to get brand tokens and approved entries).
-        house_id: The canon domain ID (legacy alias for domain_id).
+        domain_id: the spec ID (to get brand tokens and approved entries).
+        spec_id: the spec ID (legacy alias for domain_id).
 
     Returns:
         dict with file_id, edit_url, and creation status.
     """
-    actual_id = domain_id or house_id
+    actual_id = domain_id or spec_id
     if not actual_id:
-        return {"error": "domain_id or house_id is required"}
+        return {"error": "domain_id or spec_id is required"}
     return grounding_tools.export_to_penpot(artifact_id, workspace_id, actual_id)
 
 
@@ -693,47 +591,47 @@ def reset_conversation() -> dict:
     """Reset the grounding session context.
 
     Clears the active domain, recent searches, and used chunks.
-    Use when starting a new topic or switching canon domains.
+    Use when starting a new topic or switching specs.
     """
     reset_session()
-    return {"message": "Session reset. No active canon domain."}
+    return {"message": "Session reset. No active spec."}
 
 
 @mcp.tool()
-def get_framework_spec() -> dict:
-    """Return the specification for a complete MsgStack canon domain.
+def get_schema() -> dict:
+    """Return the specification for a complete MsgStack spec.
 
-    Use this to understand what a fully-populated canon domain should contain:
-    required fields, section types, entry counts, persona structure, and
+    Use this to understand what a fully-populated spec should contain:
+    required fields, section types, entry counts, audience structure, and
     channel variants. Also returns a completeness checklist.
     """
-    from src.models import COMPLETE_FRAMEWORK_SPEC
-    return COMPLETE_FRAMEWORK_SPEC
+    from src.models import COMPLETE_SCHEMA_SPEC
+    return COMPLETE_SCHEMA_SPEC
 
 
 @mcp.tool()
-def check_canon_completeness(domain_id: Optional[str] = None, domain_name: Optional[str] = None) -> dict:
-    """Check how complete a canon domain is against the specification.
+def check_spec_completeness(domain_id: Optional[str] = None, domain_name: Optional[str] = None) -> dict:
+    """Check how complete a spec is against the specification.
 
     Returns a completeness report with what's present, what's missing, and a score.
 
     Args:
-        domain_id: UUID of the canon domain.
-        domain_name: Name of the canon domain (alternative to domain_id).
+        domain_id: UUID of the spec.
+        domain_name: Name of the spec (alternative to domain_id).
     """
-    from src.models import COMPLETE_FRAMEWORK_SPEC, SectionType
+    from src.models import COMPLETE_SCHEMA_SPEC, AssertionType
 
     store = get_store()
-    house = _resolve_house(store, domain_id, domain_name)
-    if not house:
-        return {"error": "Domain not found. Use list_canon_domains to find valid IDs."}
+    spec = _resolve_spec(store, domain_id, domain_name)
+    if not spec:
+        return {"error": "Domain not found. Use list_specs to find valid IDs."}
 
-    messages = store.get_key_messages(house.id)
-    personas = store.get_personas(house.id)
+    messages = store.get_key_messages(spec.id)
+    audiences = store.get_audiences(spec.id)
 
     by_section = {}
     for m in messages:
-        key = str(m.section_type)
+        key = str(m.assertion_type)
         by_section.setdefault(key, []).append(m)
 
     checks = []
@@ -748,22 +646,21 @@ def check_canon_completeness(domain_id: Optional[str] = None, domain_name: Optio
             passed += 1
         checks.append({"check": label, "passed": result})
 
-    check("Positioning field filled (50+ chars)", len(house.positioning or "") >= 50)
-    check("Tagline present and under 60 chars", bool(house.tagline) and len(house.tagline) < 60)
-    check("Differentiation is specific (30+ chars)", len(house.differentiation or "") >= 30)
-    check("Audience defined", bool(house.audience))
-    check("Brand personality defined", bool(house.brand_personality))
+    check("Positioning field filled (50+ chars)", len(spec.positioning or "") >= 50)
+    check("Tagline present and under 60 chars", bool(spec.tagline) and len(spec.tagline) < 60)
+    check("Differentiation is specific (30+ chars)", len(spec.differentiation or "") >= 30)
+    check("Audience defined", bool(spec.audience))
+    check("Brand personality defined", bool(spec.brand_personality))
 
-    required_min = {"headline": 3, "subhead": 3, "benefit": 3, "proof_point": 3, "objection": 3, "social_proof": 3, "positioning": 1}
+    required_min = {"headline": 3, "subhead": 3, "benefit": 3, "proof_point": 3, "qa_pair": 3, "social_proof": 3, "positioning": 1}
     for section, min_count in required_min.items():
         msgs = by_section.get(section, [])
         check(f"{section}: {min_count}+ entries (has {len(msgs)})", len(msgs) >= min_count)
 
-    check("2+ personas defined", len(personas) >= 2)
-    for p in personas[:3]:
-        check(f"Persona '{p.name}': pain_points defined", bool(p.pain_points))
-        check(f"Persona '{p.name}': buying_triggers defined", bool(p.buying_triggers))
-        check(f"Persona '{p.name}': objections defined", bool(p.objections))
+    check("2+ audiences defined", len(audiences) >= 2)
+    for p in audiences[:3]:
+        check(f"Audience '{p.name}': Q&A pairs defined", bool(p.qa_pairs))
+        check(f"Audience '{p.name}': qa_pairs defined", bool(p.qa_pairs))
 
     msgs_with_linkedin = sum(1 for m in messages if (m.variants or {}).get("linkedin"))
     msgs_with_email = sum(1 for m in messages if (m.variants or {}).get("email"))
@@ -787,8 +684,8 @@ def check_canon_completeness(domain_id: Optional[str] = None, domain_name: Optio
                 recommendations.append("Define the primary target audience in the domain metadata.")
             elif "Brand personality" in label:
                 recommendations.append("Add brand personality traits (e.g., bold, empathetic, technical).")
-            elif "personas" in label.lower():
-                recommendations.append("Define at least 2 distinct buyer personas with pain points and triggers.")
+            elif "audiences" in label.lower():
+                recommendations.append("Define at least 2 distinct buyer audiences with pain points and triggers.")
             elif "LinkedIn" in label:
                 recommendations.append("Add LinkedIn channel variants to at least 5 entries.")
             elif "Email" in label:
@@ -799,38 +696,29 @@ def check_canon_completeness(domain_id: Optional[str] = None, domain_name: Optio
                 recommendations.append(f"Add more {section} entries (minimum required not met).")
 
     return {
-        "domain_name": house.name,
-        "house_name": house.name,
+        "domain_name": spec.name,
+        "spec_name": spec.name,
         "score": score,
         "passed": passed,
         "total": total,
         "checks": checks,
         "missing": [c["check"] for c in checks if not c["passed"]],
         "recommendations": recommendations,
-        "canon_entries_count": len(messages),
+        "assertion_count": len(messages),
         "message_count": len(messages),
-        "persona_count": len(personas),
+        "audience_count": len(audiences),
         "sections_covered": list(by_section.keys()),
     }
 
 
 @mcp.tool()
-def check_framework_completeness(house_id: Optional[str] = None, house_name: Optional[str] = None) -> dict:
-    """[DEPRECATED] Check how complete a canon domain is against the specification.
-
-    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
-    Please use `check_canon_completeness` instead.
+def score_alignment_report(text: str, domain_id: str) -> str:
     """
-    import warnings
-    warnings.warn("check_framework_completeness is deprecated, use check_canon_completeness instead", DeprecationWarning, stacklevel=2)
-    return check_canon_completeness(domain_id=house_id, domain_name=house_name)
-
-
-@mcp.tool()
-def score_content_alignment(text: str, domain_id: str) -> str:
-    """
-    Audit and score draft text against approved domain canon.
+    Audit and score draft text against the approved spec.
     Returns a formatted markdown alignment report indicating hard and soft conflicts.
+
+    Use `score_alignment` instead when you want structured JSON. These two run
+    different engines and are a dedup candidate — see STRATEGY_V2.md.
     """
     from uuid import UUID
     from src.store import get_store
@@ -842,9 +730,9 @@ def score_content_alignment(text: str, domain_id: str) -> str:
     except ValueError:
         return "Error: Invalid domain_id UUID format."
 
-    domain = store.get_canon_domain(uid)
+    domain = store.get_spec(uid)
     if not domain:
-        return f"Error: Canon domain with ID '{domain_id}' not found."
+        return f"Error: Spec domain with ID '{domain_id}' not found."
 
     try:
         report = score_alignment(text, uid, store)
@@ -855,19 +743,19 @@ def score_content_alignment(text: str, domain_id: str) -> str:
 
 
 @mcp.tool()
-def score_canon_alignment(
+def score_alignment(
     domain_id: str,
     content: str,
 ) -> dict:
-    """Score arbitrary content against the canon domain.
+    """Score arbitrary content against the spec.
 
     This tool evaluates a piece of content (like a drafted blog post, email, 
-    or any external text) against the approved entries in the specified canon domain.
+    or any external text) against the approved entries in the specified spec.
     It returns a JSON report containing an overall alignment score (0-100), section-by-section
-    breakdown, any contradictions found, and missing canon entries.
+    breakdown, any contradictions found, and missing assertions.
 
     Args:
-        domain_id: UUID of the canon domain to score against.
+        domain_id: UUID of the spec to score against.
         content: The raw text content to evaluate.
     """
     from src.pipeline.alignment import AlignmentEngine
@@ -875,76 +763,61 @@ def score_canon_alignment(
     
     store = get_store()
     try:
-        house_uuid = UUID(domain_id)
+        spec_uuid = UUID(domain_id)
     except Exception:
         return {"error": "Invalid domain_id"}
 
     engine = AlignmentEngine(store)
     try:
-        report = engine.score(house_uuid, content)
+        report = engine.score(spec_uuid, content)
         res = report.model_dump()
-        if "house_id" in res:
-            res["domain_id"] = res["house_id"]
+        if "spec_id" in res:
+            res["domain_id"] = res["spec_id"]
         return res
     except Exception as e:
         return {"error": str(e)}
 
 
 @mcp.tool()
-def score_alignment(
-    house_id: str,
-    content: str,
-) -> dict:
-    """[DEPRECATED] Score arbitrary content against the canon domain.
-
-    DEPRECATION WARNING: This tool is deprecated and will be removed in a future major version.
-    Please use `score_canon_alignment` instead.
-    """
-    import warnings
-    warnings.warn("score_alignment is deprecated, use score_canon_alignment instead", DeprecationWarning, stacklevel=2)
-    return score_canon_alignment(domain_id=house_id, content=content)
-
-
-@mcp.tool()
 def get_graph_connections(
     domain_id: Optional[str] = None,
-    persona: Optional[str] = None,
+    audience: Optional[str] = None,
     channel: Optional[str] = None,
-    house_id: Optional[str] = None,
+    spec_id: Optional[str] = None,
 ) -> dict:
-    """Retrieve verbatim approved canon entries via deterministic graph traversal.
+    """Retrieve verbatim approved assertions via deterministic graph traversal.
 
-    Unlike search_messaging (which uses vector approximation), this tool queries
+    Unlike search_assertions (which uses vector approximation), this tool queries
     the knowledge graph directly — returning exactly the content associated with
-    a domain, persona, or channel via typed relationships. Use this when you need:
+    a domain, audience, or channel via typed relationships. Use this when you need:
     - An exact approved tagline or headline (not the nearest neighbor)
-    - All entries that apply to a specific persona
+    - All entries that apply to a specific audience
     - All entries approved for a specific channel
 
     Args:
-        domain_id: UUID of the canon domain to query.
-        persona: Optional persona name to filter by ADDRESSES relationship.
+        domain_id: UUID of the spec to query.
+        audience: Optional audience name to filter by ADDRESSES relationship.
         channel: Optional channel to filter by APPLIES_TO relationship.
-        house_id: UUID of the canon domain to query (legacy alias).
+        spec_id: UUID of the spec to query (legacy alias).
 
     Returns:
         List of content chunks retrieved via graph traversal (confidence=1.0).
     """
-    actual_id = domain_id or house_id
+    actual_id = domain_id or spec_id
     if not actual_id:
-        return {"error": "domain_id or house_id is required"}
+        return {"error": "domain_id or spec_id is required"}
 
     from src.grounding.graph import get_graph_engine
     engine = get_graph_engine()
-    chunks = engine.get_connections(actual_id, persona=persona, channel=channel)
+    chunks = engine.get_connections(actual_id, audience=audience, channel=channel)
     return {
         "retrieval_mode": "graph",
         "domain_id": actual_id,
-        "house_id": actual_id,
-        "persona_filter": persona,
+        "spec_id": actual_id,
+        "audience_filter": audience,
         "channel_filter": channel,
         "count": len(chunks),
-        "chunks": [{"content": c.get("content", ""), "section_type": c.get("section_type", ""),
+        "chunks": [{"content": c.get("content", ""), "assertion_type": c.get("assertion_type", ""),
                     "priority": c.get("priority", 3)} for c in chunks],
     }
 
@@ -955,7 +828,7 @@ def list_channels() -> dict:
 
     Returns the full channel registry — both the default channels (email, linkedin,
     twitter, etc.) and any custom channels added by the team. Use channel IDs as
-    the 'channels' filter in search_canon or get_graph_connections.
+    the 'channels' filter in search_assertions or get_graph_connections.
     """
     store = get_store()
     return {"channels": store.get_channels()}
@@ -965,10 +838,10 @@ def list_channels() -> dict:
 def list_departments() -> dict:
     """List all departments, their default primary grounding types, and domain counts.
 
-    Use this tool to see the departmental organization of the organizational canon.
+    Use this tool to see the departmental organization of your specs.
     """
     store = get_store()
-    domains = store.list_canon_domains()
+    domains = store.list_specs()
     depts = store.list_departments()
     
     counts = {}
@@ -980,7 +853,7 @@ def list_departments() -> dict:
         name = dept["name"]
         result.append({
             "department": name,
-            "primary_grounding_type": dept["primary_grounding_type"],
+            "primary_schema_type": dept["primary_schema_type"],
             "description": dept["description"],
             "domain_count": counts.get(name, 0),
         })
@@ -988,30 +861,102 @@ def list_departments() -> dict:
 
 
 @mcp.tool()
-def get_query_audit_log(
-    limit: int = 100,
-    source: Optional[str] = None,
-    caller: Optional[str] = None,
-    domain_id: Optional[str] = None,
+def traverse_graph(
+    assertion_ids: list[str],
+    hops: int = 2,
+    rel_types: Optional[list[str]] = None,
+    limit: int = 25,
 ) -> dict:
-    """Retrieve a log of all grounding query activity for auditing and compliance.
+    """Walk the knowledge graph outward from one or more assertions.
 
-    Returns the most recent queries submitted through the system, including
-    the query text, entries returned, domains touched, top confidence, and
-    latency. Use this tool to review usage patterns, verify compliance, or
-    debug retrieval issues.
+    Follows typed relationships — DEPENDS_ON, INFORMS, SUPERSEDES, CONTRADICTS,
+    IMPLEMENTS, MENTIONS — in both directions, and crosses spec boundaries:
+    an assertion in a different spec that references the same entity, or that
+    a dependency edge points at, is reachable here but not via search.
+
+    Use this to answer "what else is affected by this?" or "what does this
+    depend on?" rather than "what is similar to this?".
 
     Args:
-        limit: Maximum number of log entries to return (default 100, max 1000).
-        source: Filter by source (e.g. 'mcp:search_canon', 'web:chat'). All sources if omitted.
-        caller: Filter by caller identity (API-key name, 'mcp-session', 'web').
-        domain_id: Filter to queries whose results touched this canon domain.
+        assertion_ids: UUIDs of the assertions to start from.
+        hops: Maximum path length. 2 is usually right — 1 finds only direct
+            neighbours, 3+ tends to reach weakly related material.
+        rel_types: Restrict to these relationships. All types if omitted.
+        limit: Maximum assertions to return.
+    """
+    from src.grounding.graph import get_graph_engine
+    found = get_graph_engine().expand(
+        assertion_ids, hops=hops, rel_types=rel_types, limit=limit
+    )
+    return {
+        "seeds": assertion_ids,
+        "hops": hops,
+        "results": [{
+            "assertion_id": f.get("id"),
+            "content": f.get("content"),
+            "assertion_type": f.get("assertion_type"),
+            "status": f.get("status"),
+            "weight": f.get("graph_weight"),
+            "hops": f.get("hops"),
+            "path": f.get("graph_path"),
+        } for f in found],
+        "count": len(found),
+    }
+
+
+@mcp.tool()
+def get_impact(node_id: str, node_type: str = "assertion") -> dict:
+    """Show everything that goes stale if this node changes.
+
+    Walks inbound DEPENDS_ON and INFORMS edges transitively. Call this before
+    editing an assertion to see the blast radius — the same traversal that runs
+    automatically on write and marks dependents outdated.
     """
     store = get_store()
-    log = store.get_query_log(
-        limit=min(limit, 1000), source=source, caller=caller, domain_id=domain_id
-    )
-    return {"entries": log, "count": len(log)}
+    direct = store.get_dependents(node_type, node_id)
+    return {
+        "node": {"type": node_type, "id": node_id},
+        "direct_dependents": direct,
+        "direct_count": len(direct),
+    }
+
+
+@mcp.tool()
+def link_assertions(
+    src_assertion_id: str,
+    dst_assertion_id: str,
+    rel_type: str = "DEPENDS_ON",
+    provenance: str = "",
+) -> dict:
+    """Create a typed relationship between two assertions.
+
+    DEPENDS_ON and INFORMS are propagating: when the destination changes, the
+    source is automatically marked outdated. SUPERSEDES, CONTRADICTS,
+    IMPLEMENTS and OWNS are navigational — they shape traversal without
+    cascading staleness.
+
+    Args:
+        src_assertion_id: The dependent / referring assertion.
+        dst_assertion_id: The assertion depended on / referred to.
+        rel_type: One of DEPENDS_ON, INFORMS, SUPERSEDES, CONTRADICTS,
+            IMPLEMENTS, OWNS, MENTIONS.
+        provenance: Free text recording why this link exists.
+    """
+    from src.models import RelType
+    store = get_store()
+    try:
+        rel = RelType(rel_type).value
+    except ValueError:
+        return {"error": f"Unknown rel_type {rel_type!r}. Valid: {[r.value for r in RelType]}"}
+    try:
+        edge_id = store.add_edge(
+            "assertion", src_assertion_id, "assertion", dst_assertion_id,
+            rel, provenance=provenance, created_by="mcp",
+        )
+    except ValueError as e:
+        return {"error": str(e)}
+    return {"edge_id": edge_id, "rel_type": rel,
+            "src": src_assertion_id, "dst": dst_assertion_id}
 
 
 # ── MCP Prompts ──────────────────────────────────────────────────────────────
@@ -1021,7 +966,7 @@ def get_query_audit_log(
 @mcp.prompt()
 def system_instructions() -> str:
     """Complete operating guide for MsgStack tools. Inject at conversation start."""
-    return """You are connected to MsgStack, the organization's authoritative canon grounding layer.
+    return """You are connected to MsgStack, the organization's authoritative spec graph grounding layer.
 
 ## Tool Selection Rules
 
@@ -1030,29 +975,29 @@ Triggers: "build", "make", "create", "generate", "write", "draft", "give me", "s
 "put together", "can you make" + any of: one-pager, datasheet, battlecard, email, post,
 release, FAQ, script, or other document.
 
-**SEARCH the canon** — call `search_messaging` when:
-- User asks what approved canon entries exist for a topic, persona, or channel
+**SEARCH the spec graph** — call `search_assertions` when:
+- User asks what approved assertions exist for a topic, audience, or channel
 - You need grounding before writing any copy yourself
-- User asks for headlines, proof points, objections, or talking points
+- User asks for headlines, proof points, qa_pairs, or talking points
 
-**LIST / BROWSE** — use `list_message_houses` when the user hasn't specified a domain,
+**LIST / BROWSE** — use `list_specs` when the user hasn't specified a domain,
 and `list_skills` when they haven't specified an artifact/output type.
 
-**RESEARCH a domain** — call `get_message_house` when the user wants to understand
-a domain's positioning, personas, or approved canon entries.
+**RESEARCH a domain** — call `get_spec` when the user wants to understand
+a domain's positioning, audiences, or approved assertions.
 
 ## Output Rules
 
 - When `generate_artifact` returns content, paste it **verbatim and in full**. Do not
   summarize, paraphrase, or describe it. The user wants the actual document.
-- When `search_messaging` returns results, quote the canon chunks directly.
+- When `search_assertions` returns results, quote the returned assertions directly.
 - Always include visual links when returned by the tool.
 
 ## Standard Generation Workflow
 
-1. If no domain is specified → call `list_message_houses` and ask the user to pick one.
+1. If no domain is specified → call `list_specs` and ask the user to pick one.
 2. If no artifact type is specified → call `list_skills` and ask which they want.
-3. Call `generate_artifact` with `skill_id` + `house_id` (+ `custom_context` if needed).
+3. Call `generate_artifact` with `skill_id` + `spec_id` (+ `custom_context` if needed).
 4. Paste the full returned content. Done.
 
 ## Required custom_context per skill
@@ -1063,23 +1008,23 @@ a domain's positioning, personas, or approved canon entries.
 - event_brief: `custom_context={"event_name": "<name>"}` — REQUIRED
 - email_template: `custom_context={"stage": "awareness|consideration|decision"}` — optional
 
-## When to use get_graph_connections vs search_messaging
+## When to use get_graph_connections vs search_assertions
 
 - Use `get_graph_connections` when you need **exact, verbatim approved content** — locked taglines,
-  specific proof points, or all entries for a persona. Confidence is always 1.0 (no approximation).
-- Use `search_messaging` for **exploratory or semantic queries** where you want the closest match
+  specific proof points, or all entries for a audience. Confidence is always 1.0 (no approximation).
+- Use `search_assertions` for **exploratory or semantic queries** where you want the closest match
   to a natural language request. Use `retrieval_mode="graph"` as a shortcut for the same effect.
 
 ## Content Tier Contract
 
-Canon entries carry a `content_tier` that governs how you may use them:
+Spec entries carry a `content_tier` that governs how you may use them:
 
 - **tier_1_locked** — Sacrosanct. Reproduce the entry text VERBATIM wherever its content is used.
   Never paraphrase, shorten, restyle, or approximate a Tier 1 entry. If it doesn't fit, use a
   different entry — do not alter it.
 - **tier_2_structured** — Substance-locked. Keep the meaning, claims, and positioning intact;
   you may adapt phrasing to fit the output format.
-- **tier_3_grounded** (or untagged) — Flexible. Stay consistent with the canon's direction and
+- **tier_3_grounded** (or untagged) — Flexible. Stay consistent with the spec graph's direction and
   tone; phrasing and structure are yours.
 """
 
@@ -1087,9 +1032,9 @@ Canon entries carry a `content_tier` that governs how you may use them:
 @mcp.prompt()
 def quick_start() -> str:
     """One-paragraph quick-start guide shown to users new to MsgStack."""
-    return """MsgStack gives you AI-generated marketing and technical artifacts grounded in your approved canon.
+    return """MsgStack gives you AI-generated marketing and technical artifacts grounded in your approved assertions.
 
-Call `list_message_houses` to see available canon domains, then use the returned house_id for all other tools.
+Call `list_specs` to see available specs, then use the returned spec_id for all other tools.
 
 **To generate a document**, just say what you want and which domain/product, e.g.:
 - "Write a one-pager for [domain name]"
@@ -1097,7 +1042,7 @@ Call `list_message_houses` to see available canon domains, then use the returned
 - "Draft a post for [domain name]"
 
 Available artifact types: one-pager, battlecard, email template, post, blog post,
-press release, FAQ, talk track, objection handler, executive summary, partner brief, event brief.
+press release, FAQ, talk track, qa_pair handler, executive summary, partner brief, event brief.
 """
 
 

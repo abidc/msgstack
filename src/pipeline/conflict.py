@@ -1,17 +1,17 @@
-"""Ingestion Conflict Detection — scan files for contradictions against stored canon."""
+"""Ingestion Conflict Detection — scan files for contradictions against stored spec graph."""
 
 import logging
 from typing import Optional
 from uuid import UUID
 from openai import OpenAI
 from src.store import Store
-from src.models import CanonEntry
+from src.models import Assertion
 
 log = logging.getLogger(__name__)
 
 def check_ingest_conflicts(
     domain_id: UUID,
-    new_entries: list[CanonEntry],
+    new_entries: list[Assertion],
     store: Store,
     openai_client: Optional[OpenAI] = None
 ) -> list[dict]:
@@ -22,8 +22,8 @@ def check_ingest_conflicts(
     client = openai_client or OpenAI()
     conflicts = []
 
-    # 1. Fetch existing approved canon entries
-    existing_entries = store.get_canon_entries(domain_id, include_unapproved=False)
+    # 1. Fetch existing approved assertions
+    existing_entries = store.get_assertions(domain_id, include_unapproved=False)
     if not existing_entries:
         return []
 
@@ -31,7 +31,7 @@ def check_ingest_conflicts(
     for new_entry in new_entries:
         for old_entry in existing_entries:
             # Only compare entries of matching section types to avoid noise
-            if new_entry.section_type != old_entry.section_type:
+            if new_entry.assertion_type != old_entry.assertion_type:
                 continue
 
             # Compare contents using simple keyword intersection or LLM verification

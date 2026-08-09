@@ -11,10 +11,10 @@ _SESSION_TTL_SECONDS = 1800  # 30 minutes
 
 class Session:
     def __init__(self):
-        self.active_house_id: Optional[UUID] = None
-        self.active_house_name: str = ""
-        self.active_house_summary: str = ""
-        self.active_personas: list[str] = []
+        self.active_spec_id: Optional[UUID] = None
+        self.active_spec_name: str = ""
+        self.active_spec_summary: str = ""
+        self.active_audiences: list[str] = []
         self.active_workspace_id: str = "default"
         self.recent_searches: list[str] = []
         self.used_chunks: list[str] = []
@@ -28,30 +28,30 @@ class Session:
     def touch(self) -> None:
         self._last_used = time.time()
 
-    def set_active_house(
-        self, house_id: UUID, house_name: str, house_summary: str, personas: list[str], workspace_id: str = "default"
+    def set_active_spec(
+        self, spec_id: UUID, spec_name: str, spec_summary: str, audiences: list[str], workspace_id: str = "default"
     ) -> GroundingContext:
-        self.active_house_id = house_id
-        self.active_house_name = house_name
-        self.active_house_summary = house_summary
-        self.active_personas = personas
+        self.active_spec_id = spec_id
+        self.active_spec_name = spec_name
+        self.active_spec_summary = spec_summary
+        self.active_audiences = audiences
         self.active_workspace_id = workspace_id
         self._context = GroundingContext(
-            active_house_id=house_id,
-            house_name=house_name,
-            house_summary=house_summary,
-            active_personas=personas,
+            active_spec_id=spec_id,
+            spec_name=spec_name,
+            spec_summary=spec_summary,
+            active_audiences=audiences,
         )
         return self._context
 
     def update_from_search(self, results: list[GroundingResult], ctx: GroundingContext) -> None:
-        if ctx.active_house_id and not self.active_house_id:
-            self.active_house_id = ctx.active_house_id
-            self.active_house_name = ctx.house_name
-            self.active_house_summary = ctx.house_summary
+        if ctx.active_spec_id and not self.active_spec_id:
+            self.active_spec_id = ctx.active_spec_id
+            self.active_spec_name = ctx.spec_name
+            self.active_spec_summary = ctx.spec_summary
 
-        if ctx.active_personas:
-            self.active_personas = list(set(self.active_personas + ctx.active_personas))
+        if ctx.active_audiences:
+            self.active_audiences = list(set(self.active_audiences + ctx.active_audiences))
 
         self.used_chunks.extend([r.chunk_id for r in results])
 
@@ -60,10 +60,10 @@ class Session:
 
     def get_context(self) -> GroundingContext:
         return GroundingContext(
-            active_house_id=self.active_house_id,
-            house_name=self.active_house_name,
-            house_summary=self.active_house_summary,
-            active_personas=self.active_personas,
+            active_spec_id=self.active_spec_id,
+            spec_name=self.active_spec_name,
+            spec_summary=self.active_spec_summary,
+            active_audiences=self.active_audiences,
             used_chunks=len(self.used_chunks),
             confidence=self._context.confidence,
             coverage=self._context.coverage,

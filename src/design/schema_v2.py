@@ -24,7 +24,7 @@ class ZoneType(str, Enum):
     POSITIONING_BLOCK = "positioning_block"
     PILLAR_GRID = "pillar_grid"
     MESSAGE_LIST = "message_list"
-    PERSONA_STRIP = "persona_strip"
+    PERSONA_STRIP = "audience_strip"
     PROOF_BLOCK = "proof_block"
     CTA_FOOTER = "cta_footer"
 

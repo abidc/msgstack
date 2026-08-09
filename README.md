@@ -8,55 +8,70 @@
 [![FastMCP](https://img.shields.io/badge/MCP-FastMCP-3E4E80)](https://github.com/jlowin/fastmcp)
 [![GitHub Stars](https://img.shields.io/github/stars/abidc/msgstack?style=social)](https://github.com/abidc/msgstack)
 
-**The organizational canon layer for AI grounding.**
+**A self-hosted memory layer for your agents.**
 
-> Departments own their domains of truth. AI tools and content workflows ground on that canon. When canon changes, downstream outputs stay aligned.
+> Facts about your services — API constraints, SLAs, deprecation timelines, config defaults — stored as typed nodes in a graph. Agents query it over MCP. When one fact changes, everything downstream that depends on it is invalidated automatically.
 
-MsgStack is an open source MCP server + admin UI that turns your organization's authoritative content (the **"canon"**) into a governed, machine-readable knowledge layer. Every AI tool on your team — Claude, Cursor, ChatGPT, or your own agents — queries it before generating content, so what comes out is anchored in approved truth: verbatim where it must be, flexible where it may be, and auditable either way. Product marketing message houses are the first wedge; the same model hosts canon domains for product, legal, HR, security, sales enablement, and support.
+MsgStack is an open source MCP server + admin UI. It turns the things your team knows about its services into **assertions**: atomic, typed, versioned facts that live in **specs** and are connected by typed **edges**. Retrieval fuses vector search with graph traversal, so an agent asking about a rate limit also finds the gateway policy that constrains it — even when that lives in a different spec.
 
 ---
 
 ## Why MsgStack?
 
-When teams adopt AI for content generation, a critical problem emerges: **AI agents don't know what is actually approved and true for your organization.**
+Teams ship faster than their documentation. The facts an agent needs are scattered across Confluence, Jira, Slack and stale READMEs, and RAG over that pile returns confident, unversioned, unattributable answers.
 
-- An SDR asks Claude to write a cold email. Claude doesn't know your positioning or legal constraints, so it freelances.
-- A product engineer uses Copilot to draft release notes. It hallucinates integration details.
-- A regional team uses ChatGPT to localize a datasheet. The output contradicts the latest security or compliance facts.
+- A copilot drafts release notes and invents a rate limit that was lowered last sprint.
+- A support agent quotes an SLA from a page nobody has reviewed in a year.
+- An integration guide keeps promising a parameter that was deprecated two versions ago.
 
-MsgStack fixes this by making the canon **structured, governed, and directly queryable** via the [Model Context Protocol](https://modelcontextprotocol.io/). Department SMEs curate their own domains; entries carry an approval lifecycle, a content tier that tells the LLM how much latitude it has, and a named owner (DRI). Before any AI generates content, it retrieves from the approved canon — and every query is logged.
+The common failure is not retrieval quality. It is that **a fact has dependencies and an embedding does not**. Vector search finds text resembling your question; it cannot tell you the number you just quoted is downstream of a policy that changed on Tuesday.
+
+MsgStack stores facts as typed nodes with typed relationships — `DEPENDS_ON`, `SUPERSEDES`, `CONTRADICTS` — and walks them. Retrieval crosses spec boundaries. Edits cascade.
 
 ---
 
 ## What it does
 
 ```
-Source Document (PDF / DOCX / PPTX / XLSX / Drive)
-         ↓  extract → LLM structure → conflict check against existing canon
-   Canon Domain  (positioning · tagline · personas · canon entries · pillars)
-         ↓  embed → Turbovec  +  build → Knowledge Graph
-    ┌─────────────────────────────────────────┐
-    │  Semantic Search   │  Graph Traversal   │
-    │  (vector approx.)  │  (verbatim exact)  │
-    └────────────────────┴────────────────────┘
+Source Document (PDF / DOCX / MD / Drive)
+         ↓  extract → LLM structure → conflict check against existing assertions
+   Spec  (positioning · audiences · assertions · pillars)
+         ↓  embed → Turbovec        build → Knowledge Graph (NetworkX)
+    ┌──────────────────────┬──────────────────────────────────┐
+    │   Vector recall      │  Graph traversal                 │
+    │   (open questions)   │  (dependencies, cross-spec)      │
+    └──────────┬───────────┴───────────────┬──────────────────┘
+               └── reciprocal rank fusion ─┘
          ↓  skill template + tier-annotated grounding context + LLM
-Derived Artifact  (datasheet · email · battlecard · deck · post · …)
-         ↓  alignment scoring · Tier 1 verbatim validation · query audit log
+Derived Artifact  (release notes · ADR · runbook · changelog · …)
+         ↓  alignment scoring · Tier 1 verbatim validation
 ```
 
-**Two retrieval modes — neither approximates approved content:**
-- **Vector (Turbovec):** local in-process semantic similarity for exploratory queries — no external vector DB, <0.1ms query latency
-- **Graph (NetworkX):** deterministic traversal for verbatim approved content — exact taglines, locked proof points, objection responses — never approximated
+**Retrieval is two routes, fused.** Vector recall answers open questions. Graph
+traversal answers dependency questions — and crosses spec boundaries, so an
+assertion in another spec that shares an entity or sits behind a `DEPENDS_ON`
+edge can surface. Results found by both routes rank above results found by
+either alone.
 
-**Governance built in:**
-- **Approval lifecycle** — `Draft → In Review → Approved / Locked / Outdated`; grounding and generation only see approved canon by default
-- **Content tiers** — a per-entry generation contract: Tier 1 *Locked* (reproduce verbatim — enforced with post-generation validation), Tier 2 *Structured* (substance preserved), Tier 3 *Grounded* (full phrasing latitude)
-- **Alignment scoring** — score any draft against the canon; hard vs. soft conflicts, with a paraphrased Tier 1 claim always a hard conflict
-- **DRI ownership** — a named accountable person per entry/domain, with transfer trail and an unowned-items accountability view
-- **Query audit log** — every grounding query recorded: caller, query, entries returned, confidence, latency
-- **Sub-canons** — nested domains with four inheritance policies (full, selective override, vocabulary-constrained, autonomous)
+**Typed relationships.** `DEPENDS_ON`, `INFORMS`, `SUPERSEDES`, `CONTRADICTS`,
+`OWNS`, `IMPLEMENTS`, `MENTIONS` — each with confidence and provenance.
 
----
+**Change propagation.** `DEPENDS_ON` and `INFORMS` cascade staleness: edit an
+assertion and everything downstream is marked outdated, transitively, across
+specs, and drops out of grounding results. The other relationships are
+navigational.
+
+**Content tiers.** A per-assertion generation contract: Tier 1 *Locked*
+(reproduced verbatim, validated after generation), Tier 2 *Structured*
+(substance preserved), Tier 3 *Grounded* (full phrasing latitude).
+
+**Assertion types.** `constraint`, `sla`, `deprecation`, `config_default`,
+`dependency`, `capability`, `limitation`, `security_posture`,
+`interface_contract`, `version_policy`, `runbook_step`, `decision`.
+
+**Not included, deliberately.** No RBAC, no approval routing, no SLA breach
+notifications, no compliance audit log. This is a developer tool, not a
+governance platform — see `STRATEGY_V2.md`.
 
 ## Quick Start
 
@@ -125,43 +140,47 @@ Once connected, your AI assistant discovers all tools automatically via the `sys
 
 | Tool | What it does |
 |------|-------------|
-| `list_canon_domains` | List all Canon Domains — call first to orient yourself |
-| `search_canon` | Semantic + keyword search across approved Canon Entries (drafts hidden by default) |
-| `get_graph_connections` | Deterministic graph traversal — verbatim approved Canon Entries |
-| `set_active_domain` | Pin a Canon Domain as active for the session |
-| `get_canon_domain` | Retrieve a full Canon Domain (entries carry status, tier, and DRI) |
-| `compare_canon_domains` | Side-by-side comparison of Canon Domains |
-| `generate_artifact` | Generate a derived output grounded in the active canon, with tier enforcement |
+| `list_specs` | List all Specs — call first to orient yourself |
+| `search_assertions` | Fused retrieval: vector recall + graph expansion across Specs |
+| `traverse_graph` | Walk typed edges outward from one or more Assertions; returns the path to each result |
+| `get_impact` | Blast radius before you edit — what goes stale if this changes |
+| `link_assertions` | Create a typed edge (`DEPENDS_ON`, `SUPERSEDES`, `CONTRADICTS`, …) |
+| `get_graph_connections` | Structural view of one Spec — sections, audiences, channels |
+| `set_active_spec` | Pin a Spec as active for the session |
+| `get_spec` | Retrieve a full Spec (assertions carry status, tier, owner) |
+| `compare_specs` | Side-by-side comparison of Specs |
+| `generate_artifact` | Generate a derived output grounded in the active Spec, with tier enforcement |
 | `build_ui_artifact` | Get a visual HTML page URL for a generated artifact |
 | `list_skills` | List available artifact types with required context parameters |
-| `score_content_alignment` / `score_canon_alignment` | Score a draft against the approved canon — hard/soft conflict report |
-| `check_canon_completeness` | Score a Canon Domain against the completeness spec (0–100) |
-| `get_entry_history` | Full audit trail for a Canon Entry (status, tier, and DRI changes) |
-| `get_query_audit_log` | Review grounding query activity — caller, entries returned, confidence |
-| `get_grounding_context` | Current session state: active domain, used entries, confidence |
-| `list_channels` / `list_departments` | Publication channels and department grounding types |
+| `score_alignment` / `score_alignment_report` | Score a draft against approved Assertions — JSON or markdown |
+| `check_spec_completeness` | Score a Spec against the schema (0–100) |
+| `get_assertion_history` | Change trail for an Assertion (status and tier transitions) |
+| `get_grounding_context` | Current session state: active Spec, used Assertions, confidence |
+| `list_channels` / `list_departments` | Publication channels and department schemas |
 | `export_to_penpot` / `set_penpot_project` | Export a visual artifact to Penpot for design handoff |
-| `get_framework_spec` / `list_mcp_tools` / `reset_conversation` | Spec, tool discovery, session reset |
+| `get_schema` / `list_mcp_tools` / `reset_conversation` | Schema, tool discovery, session reset |
 
-*Legacy aliases (`list_message_houses`, `search_messaging`, `set_active_house`, `get_message_house`, `compare_houses`, `get_message_history`, `check_framework_completeness`) are preserved as deprecated delegates.*
+*The `message_house` / `spec_id` aliases from the pre-v1 vocabulary have been
+removed. `canon_*` field names are accepted for one more version.*
 
 ### Artifact types (`skill_id`)
 
 | Skill | Required context |
 |-------|----------------|
-| `one_pager` | — |
-| `email_template` | `stage`: awareness \| consideration \| decision |
-| `linkedin_post` | — |
-| `battlecard` | `competitor`: competitor name |
-| `press_release` | `announcement`: announcement summary |
-| `blog_post` | `topic`: blog topic |
-| `talk_track` | — |
-| `objection_handler` | — |
-| `executive_summary` | — |
-| `partner_brief` | — |
-| `event_brief` | `event_name`: event name |
-| `faq_document` | — |
-| `sales_deck` / `event_presentation` / `executive_readout` | — (rendered as reveal.js presentations) |
+| `release_notes` | — |
+| `api_changelog` | — |
+| `deprecation_notice` | — |
+| `adr` | — |
+| `incident_comms` | — |
+| `runbook` | — |
+| `rfc_summary` | — |
+| `onboarding_doc` | — |
+| `integration_guide` | — |
+| `faq_document` / `executive_summary` / `one_pager` / `blog_post` | — |
+
+*The product-marketing templates (battlecard, sales_deck, press_release,
+linkedin_post, …) were retired in v2 and archived under
+`data/archive/skills-pmm/`.*
 
 ---
 
@@ -171,15 +190,14 @@ Navigate to `http://localhost:8001/` for the web interface (styled with the [ATL
 
 | Section | What you can do |
 |---------|----------------|
-| **Dashboard** | Canon health gauge, stats, graph widget, Canon Navigator chat agent |
-| **Canon Domains** | Browse by department, tabbed detail (Overview / Entries / Personas), status + tier + DRI controls |
+| **Dashboard** | Graph health gauge, stats, graph widget, Graph Navigator chat agent |
+| **Specs** | Browse by department, tabbed detail (Overview / Assertions / Audiences), status + tier + owner controls |
 | **Upload** | Drop PDF / DOCX / PPTX / XLSX → extract, structure, conflict-check, preview before saving |
 | **Artifacts** | Pick domain + skill, tonal sliders, generate, preview, visual pages |
 | **Alignment Scoring** | Paste a draft → per-section alignment report with hard/soft conflicts |
-| **Governance** | DRI accountability view (unowned first) + filterable query audit log with CSV export |
 | **Skills / Channels** | Manage artifact templates and publication channels |
 | **Connections** | Google Drive folder sync — auto-ingest changed source documents |
-| **Graph Explorer** | Interactive Cytoscape.js canon graph, drawn on night like a star chart |
+| **Graph Explorer** | Interactive Cytoscape.js graph graph, drawn on night like a star chart |
 | **Settings / API Keys** | Workspace brand tokens (colors, fonts, logo), scoped API keys, theme |
 
 ---
@@ -192,29 +210,29 @@ run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
 ├── src/web_app.py       # FastAPI admin REST API
 ├── src/web/             # Jinja2 admin SPA (base.html tokens + dashboard.html)
 │
-├── src/models.py        # Pydantic models — CanonDomain, CanonEntry (status/tier/DRI), QueryAuditLog
+├── src/models.py        # Pydantic models — Spec, Assertion, Entity, Edge, RelType
 ├── src/store.py         # SQLAlchemy ORM → SQLite (default) / PostgreSQL, additive migrations
 │
 ├── src/pipeline/
 │   ├── extract.py       # PDF / DOCX / PPTX / XLSX / TXT → structured text
-│   ├── structure.py     # Text → structured Canon Domain via LLM
-│   ├── conflict.py      # Ingestion conflict detection vs existing canon
+│   ├── structure.py     # Text → structured Spec via LLM
+│   ├── conflict.py      # Ingestion conflict detection vs existing graph
 │   ├── generator.py     # Tier-annotated grounding → artifact + Tier 1 verbatim validation
 │   ├── alignment.py     # Alignment scoring engine (hard/soft conflicts)
 │   ├── vocabulary.py    # Controlled-vocabulary sweep on generated output
-│   ├── agents.py        # Governance / Voice / Structure agents + Canon Navigator
+│   ├── agents.py        # Voice / Structure agents + Graph Navigator
 │   └── skills.py        # JSON skill template manager
 │
 ├── src/grounding/
 │   ├── search.py        # Turbovec local vector search + keyword fallback
 │   ├── graph.py         # NetworkX DiGraph — deterministic retrieval
 │   ├── session.py       # In-memory grounding session
-│   └── tools.py         # Grounding tool implementations + query audit hook
+│   └── tools.py         # Grounding tool implementations
 │
 ├── src/design/          # Design spec schema, template registry, Penpot sync
 ├── src/rendering/       # HTML / Fabric.js / reveal.js / Penpot renderers
 ├── src/sources/         # Source connectors (Google Drive sync)
-└── seed_data/seed.py    # Sample canon domains for development
+└── seed_data/seed.py    # Sample specs for development
 ```
 
 **Single server, two interfaces:**
@@ -226,29 +244,29 @@ run_server.py            # PathRouter: /mcp → FastMCP, /* → FastAPI
 
 ## Data Model
 
-### Canon Domain (`canon_domains`)
+### Spec (`specs`)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | str | Canon domain name |
-| `grounding_type` | enum | `message_house` / `brand_guide` / `competitive_brief` / `corp_narrative` / `persona_library` |
+| `name` | str | Spec name |
+| `schema_type` | enum | `engineering_spec` / `brand_guide` / `competitive_brief` / `corp_narrative` / `persona_library` |
 | `positioning` / `tagline` / `differentiation` / `audience` / `brand_personality` | str | Brand foundation fields |
 | `department` | str | Owning department (drives Browse UX and API-key scoping) |
-| `parent_domain_id` + `inheritance_policy` | — | Sub-canons: `full` / `selective_override` / `vocab_constrained` / `autonomous` |
+| `parent_domain_id` + `inheritance_policy` | — | Child specs: `full` / `selective_override` / `vocab_constrained` / `autonomous` |
 | `dri` | str | Directly Responsible Individual for the domain |
 | `status` | enum | `active` / `archived` / `needs_review` |
 
-### Canon Entry (`canon_entries`)
+### Assertion (`assertions`)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `section_type` | enum | `headline` / `benefit` / `proof_point` / `objection` / `brand_voice` / `word_list` / … |
+| `assertion_type` | enum | `headline` / `benefit` / `proof_point` / `objection` / `brand_voice` / `word_list` / … |
 | `content` | str | The approved canonical copy |
 | `status` | enum | `draft` / `in_review` / `approved` / `outdated` / `locked` — grounding sees approved+locked only |
 | `content_tier` | enum | `tier_1_locked` (verbatim) / `tier_2_structured` / `tier_3_grounded` — required before approval |
-| `dri` | str | Entry-level owner (falls back to the domain DRI) |
+| `dri` | str | Assertion-level owner (falls back to the Spec owner) |
 | `priority` | int 1–5 | Importance ranking |
-| `variants` / `personas` / `channels` | — | Channel rewrites and targeting |
+| `variants` / `audiences` / `channels` | — | Channel rewrites and targeting |
 
 ---
 
@@ -286,8 +304,8 @@ See [ROADMAP.md](ROADMAP.md) for the full versioned roadmap.
 
 **Recently shipped:**
 - `v0.8` — Visual Artifact Engine: Fabric.js canvas, reveal.js presentations, Penpot export, workspace brand tokens; Turbovec local vector search; Markdown translation layer for full-content RAG
-- `v0.9 (wave 1)` — Alignment scoring engine, ingestion conflict detection, controlled vocabulary, sub-canons with inheritance, artifact-entry bindings with drift flagging, multi-agent layer + Canon Navigator
-- `v0.9 (wave 2)` — Content tiering with verbatim enforcement, DRI ownership with transfer trail, query audit log, ATLAS design system across the app
+- `v0.9 (wave 1)` — Alignment scoring engine, ingestion conflict detection, controlled vocabulary, child specs with inheritance, artifact-entry bindings with drift flagging, multi-agent layer + Graph Navigator
+- `v0.9 (wave 2)` — Content tiering with verbatim enforcement, ATLAS design system across the app
 
 **Coming next:**
 - `v0.9` — Content SLA & freshness triggers, dual-output citation-marked review copy, tier-aware graph-only retrieval routing

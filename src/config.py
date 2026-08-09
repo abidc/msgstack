@@ -31,7 +31,6 @@ class Settings:
         self.basic_auth_enabled: bool = _bool("MSGSTACK_BASIC_AUTH_ENABLED", True)
         self.basic_auth_user: str = os.environ.get("MSGSTACK_BASIC_USER", "")
         self.basic_auth_pass: str = os.environ.get("MSGSTACK_BASIC_PASS", "")
-        self.query_log_retention_days: int = _int("QUERY_LOG_RETENTION_DAYS", 90)
         self.pricing: dict = {
             "gpt-4o-mini": {"input": 0.15, "output": 0.60},
             "gpt-4o": {"input": 5.00, "output": 15.00},

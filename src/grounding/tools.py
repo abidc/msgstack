@@ -2,7 +2,6 @@
 
 import logging
 import os
-import time
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -12,7 +11,7 @@ from dotenv import load_dotenv
 
 from src.grounding.search import GroundingEngine
 from src.grounding.session import get_session
-from src.models import GroundingResponse, MessageHouse, SearchFilters
+from src.models import GroundingResponse, Spec, SearchFilters
 
 log = logging.getLogger(__name__)
 from src.store import Store
@@ -36,8 +35,8 @@ def _get_engine(workspace_id: Optional[str] = None) -> GroundingEngine:
     namespace = workspace_id or "default"
     if not workspace_id:
         session = get_session()
-        if session.active_house_id:
-            ws_id = store.get_house_workspace_id(session.active_house_id)
+        if session.active_spec_id:
+            ws_id = store.get_spec_workspace_id(session.active_spec_id)
             namespace = ws_id or "default"
 
     return GroundingEngine(
@@ -48,12 +47,12 @@ def _get_engine(workspace_id: Optional[str] = None) -> GroundingEngine:
     )
 
 
-def search_messaging(
+def search_assertions(
     query: str,
-    section_types: Optional[list[str]] = None,
-    personas: Optional[list[str]] = None,
+    assertion_types: Optional[list[str]] = None,
+    audiences: Optional[list[str]] = None,
     channels: Optional[list[str]] = None,
-    message_houses: Optional[list[str]] = None,
+    specs: Optional[list[str]] = None,
     include_variants: bool = True,
     min_priority: Optional[int] = None,
     min_confidence: Optional[float] = None,
@@ -69,12 +68,12 @@ def search_messaging(
 
     Args:
         query: Natural language search query. Include section types (headline, benefit),
-               personas (SMB, enterprise), and channels (LinkedIn, email) in the query
+               audiences (SMB, enterprise), and channels (LinkedIn, email) in the query
                and the engine will infer them automatically.
-        section_types: Explicitly filter by message section types.
-        personas: Filter by specific personas.
+        assertion_types: Explicitly filter by message section types.
+        audiences: Filter by specific audiences.
         channels: Filter by marketing channels.
-        message_houses: Restrict to specific message houses by ID.
+        specs: Restrict to specific message specs by ID.
         include_variants: Include channel-specific message variants in results.
         min_priority: Only return messages at or above this priority (1=highest).
         min_confidence: Warn if average result confidence is below this threshold (0.0–1.0).
@@ -85,10 +84,10 @@ def search_messaging(
         GroundingResponse with matched chunks and confidence context.
     """
     filters = SearchFilters(
-        section_types=section_types,
-        personas=personas,
+        assertion_types=assertion_types,
+        audiences=audiences,
         channels=channels,
-        message_houses=message_houses,
+        specs=specs,
         include_variants=include_variants,
         min_priority=min_priority,
         min_confidence=min_confidence,
@@ -98,146 +97,101 @@ def search_messaging(
     engine = _get_engine(workspace_id)
     session = get_session()
 
-    _t0 = time.monotonic()
     response = engine.search(
         query=query,
         filters=filters,
-        active_house_id=session.active_house_id,
+        active_spec_id=session.active_spec_id,
         retrieval_mode=retrieval_mode,
     )
 
     session.update_from_search(response.results, response.grounding_context)
-    _log_search_query(
-        query=query,
-        response=response,
-        tool="search_canon",
-        workspace_id=workspace_id,
-        latency_ms=(time.monotonic() - _t0) * 1000,
-    )
     return response
 
 
-def _log_search_query(
-    query: str,
-    response: GroundingResponse,
-    tool: str,
-    workspace_id: Optional[str] = None,
-    latency_ms: float = 0.0,
-    caller: str = "mcp-session",
-    surface: str = "mcp",
-) -> None:
-    """Write a query-audit row for a grounding search. Never raises — a
-    logging failure must not fail or slow the query."""
-    try:
-        from src.models import QueryAuditLog
+def set_active_spec(spec_id: str) -> dict:
+    """Pin a message spec as the active grounding context for this session.
 
-        store = _get_store()
-        results = getattr(response, "results", None) or []
-        entry_ids = [r.chunk_id for r in results]
-        domain_ids = sorted({
-            str(r.source.get("house_id"))
-            for r in results
-            if isinstance(r.source, dict) and r.source.get("house_id")
-        })
-        top_confidence = max((r.confidence for r in results), default=0.0)
-        store.log_query(QueryAuditLog(
-            workspace_id=workspace_id or "default",
-            user_id=caller,
-            query_text=query,
-            entries_used=entry_ids,
-            domain_ids=domain_ids,
-            top_confidence=top_confidence,
-            latency_ms=round(latency_ms, 1),
-            source=f"{surface}:{tool}",
-        ))
-    except Exception as e:
-        log.warning("Query audit logging failed (non-blocking): %s", e)
-
-
-def set_active_house(house_id: str) -> dict:
-    """Pin a message house as the active grounding context for this session.
-
-    Subsequent searches will default to this house unless overridden.
+    Subsequent searches will default to this spec unless overridden.
     """
     engine = _get_engine()
     store = engine.store
     session = get_session()
 
-    house = None
+    spec = None
     try:
-        house = store.get_house(UUID(house_id))
+        spec = store.get_spec(UUID(spec_id))
     except (ValueError, AttributeError):
         pass
-    if not house:
-        house = store.get_house_by_name(house_id)
-    if not house:
-        all_houses = store.list_houses()
-        names = ", ".join(h.name for h in all_houses)
-        return {"error": f"House '{house_id}' not found. Available: {names}"}
+    if not spec:
+        spec = store.get_spec_by_name(spec_id)
+    if not spec:
+        all_specs = store.list_specs()
+        names = ", ".join(h.name for h in all_specs)
+        return {"error": f"Spec '{spec_id}' not found. Available: {names}"}
 
-    personas = store.get_personas(house.id)
-    persona_names = [p.name for p in personas]
-    workspace_id = store.get_house_workspace_id(house.id) or "default"
+    audiences = store.get_audiences(spec.id)
+    audience_names = [p.name for p in audiences]
+    workspace_id = store.get_spec_workspace_id(spec.id) or "default"
 
-    ctx = session.set_active_house(
-        house_id=house.id,
-        house_name=house.name,
-        house_summary=house.summary,
-        personas=persona_names,
+    ctx = session.set_active_spec(
+        spec_id=spec.id,
+        spec_name=spec.name,
+        spec_summary=spec.summary,
+        audiences=audience_names,
         workspace_id=workspace_id,
     )
 
     return {
-        "message": f"Active house set to '{house.name}'",
-        "house_id": str(house.id),
-        "house_name": house.name,
-        "house_summary": house.summary,
-        "personas": persona_names,
-        "key_messages_count": len(store.get_key_messages(house.id)),
+        "message": f"Active spec set to '{spec.name}'",
+        "spec_id": str(spec.id),
+        "spec_name": spec.name,
+        "spec_summary": spec.summary,
+        "audiences": audience_names,
+        "key_messages_count": len(store.get_key_messages(spec.id)),
     }
 
 
-def get_message_house(
-    house_id: Optional[str] = None,
-    house_name: Optional[str] = None,
+def get_spec(
+    spec_id: Optional[str] = None,
+    spec_name: Optional[str] = None,
     include: Optional[list[str]] = None,
     include_unapproved: bool = False,
 ) -> dict:
-    """Retrieve a full message house with key messages and personas.
+    """Retrieve a full message spec with key messages and audiences.
 
     By default only returns entries with status APPROVED or LOCKED.
     Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
     OUTDATED entries are always excluded.
 
     Args:
-        house_id: UUID of the message house.
-        house_name: Name of the message house (alternative to house_id).
-        include: Sections to include: ['key_messages'], ['personas'], ['positioning'], or ['all'].
+        spec_id: UUID of the message spec.
+        spec_name: Name of the message spec (alternative to spec_id).
+        include: Sections to include: ['assertions'], ['audiences'], ['positioning'], or ['all'].
                  Defaults to ['all'].
         include_unapproved: If True, also include DRAFT and IN_REVIEW entries.
     """
     engine = _get_engine()
     store = engine.store
 
-    if house_id:
-        house = store.get_house(UUID(house_id))
-    elif house_name:
-        house = store.get_house_by_name(house_name)
+    if spec_id:
+        spec = store.get_spec(UUID(spec_id))
+    elif spec_name:
+        spec = store.get_spec_by_name(spec_name)
     else:
         session = get_session()
-        if session.active_house_id:
-            house = store.get_house(session.active_house_id)
+        if session.active_spec_id:
+            spec = store.get_spec(session.active_spec_id)
         else:
-            return {"error": "Provide house_id or house_name, or set an active house first"}
+            return {"error": "Provide spec_id or spec_name, or set an active spec first"}
 
-    if not house:
-        return {"error": "House not found"}
+    if not spec:
+        return {"error": "Spec not found"}
 
     session = get_session()
-    workspace_id = store.get_house_workspace_id(house.id) or "default"
-    session.set_active_house(
-        house.id, house.name, house.summary,
-        [p.name for p in store.get_personas(house.id)],
+    workspace_id = store.get_spec_workspace_id(spec.id) or "default"
+    session.set_active_spec(
+        spec.id, spec.name, spec.summary,
+        [p.name for p in store.get_audiences(spec.id)],
         workspace_id=workspace_id,
     )
 
@@ -246,71 +200,68 @@ def get_message_house(
     elif isinstance(include, str):
         include = [include]
     result = {
-        "id": str(house.id),
-        "name": house.name,
-        "source": house.source,
-        "status": house.status,
-        "last_synced": house.last_synced.isoformat() if house.last_synced else None,
+        "id": str(spec.id),
+        "name": spec.name,
+        "source": spec.source,
+        "status": spec.status,
+        "last_synced": spec.last_synced.isoformat() if spec.last_synced else None,
     }
 
     if "all" in include or "positioning" in include:
         result.update(
             {
-                "summary": house.summary,
-                "audience": house.audience,
-                "positioning": house.positioning,
-                "tagline": house.tagline,
-                "differentiation": house.differentiation,
-                "brand_personality": house.brand_personality,
+                "summary": spec.summary,
+                "audience": spec.audience,
+                "positioning": spec.positioning,
+                "tagline": spec.tagline,
+                "differentiation": spec.differentiation,
             }
         )
 
-    if "all" in include or "key_messages" in include:
-        messages = store.get_key_messages(house.id, include_unapproved=include_unapproved)
-        house_dri = getattr(house, "dri", "") or ""
-        result["key_messages"] = [
+    if "all" in include or "assertions" in include:
+        messages = store.get_key_messages(spec.id, include_unapproved=include_unapproved)
+        spec_dri = getattr(spec, "dri", "") or ""
+        result["assertions"] = [
             {
                 "id": str(m.id),
-                "section_type": str(m.section_type),
+                "assertion_type": str(m.assertion_type),
                 "priority": m.priority,
                 "content": m.content,
                 "status": str(m.status),
                 "content_tier": str(m.content_tier) if getattr(m, "content_tier", None) else None,
-                "dri": getattr(m, "dri", "") or house_dri,
+                "dri": getattr(m, "dri", "") or spec_dri,
                 "variants": m.variants,
-                "personas": m.personas,
+                "audiences": m.audiences,
                 "channels": [str(c) for c in m.channels],
             }
             for m in messages
         ]
 
-    if "all" in include or "personas" in include:
-        personas = store.get_personas(house.id)
-        result["personas"] = [
+    if "all" in include or "audiences" in include:
+        audiences = store.get_audiences(spec.id)
+        result["audiences"] = [
             {
                 "id": str(p.id),
                 "name": p.name,
                 "description": p.description,
-                "pain_points": p.pain_points,
-                "buying_triggers": p.buying_triggers,
-                "objections": p.objections,
+                "qa_pairs": p.qa_pairs,
             }
-            for p in personas
+            for p in audiences
         ]
 
     return result
 
 
-def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str] = None) -> dict:
+def list_specs(query: Optional[str] = None, workspace_id: Optional[str] = None) -> dict:
     """List available messaging frameworks.
 
     Args:
-        query: Optional text search across house names and summaries.
+        query: Optional text search across spec names and summaries.
         workspace_id: Filter to a specific workspace.
     """
     engine = _get_engine()
     store = engine.store
-    houses = store.list_houses(workspace_id=workspace_id)
+    specs = store.list_specs(workspace_id=workspace_id)
 
     results = [
         {
@@ -320,7 +271,7 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
             "status": h.status,
             "summary": h.summary,
             "department": h.department,
-            "persona_count": len(store.get_personas(h.id)),
+            "audience_count": len(store.get_audiences(h.id)),
             "message_count": len(store.get_key_messages(h.id)),
             "last_synced": h.last_synced.isoformat() if h.last_synced else None,
             "last_reviewed": h.last_reviewed.isoformat() if h.last_reviewed else None,
@@ -329,7 +280,7 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
                 (datetime.utcnow() - h.last_reviewed).days if h.last_reviewed else None
             ),
         }
-        for h in houses
+        for h in specs
     ]
 
     if query:
@@ -337,22 +288,22 @@ def list_message_houses(query: Optional[str] = None, workspace_id: Optional[str]
         results = [r for r in results if q in r["name"].lower() or q in r["summary"].lower()]
 
     return {
-        "houses": results,
+        "specs": results,
         "count": len(results),
         "_MANDATORY_NEXT_ACTION": (
             "STOP. Do NOT explain anything to the user. Do NOT show code. Do NOT ask for confirmation. "
             "If the user's request was to generate a document, call generate_artifact RIGHT NOW "
-            "using the house_id from this response. "
-            "generate_artifact(skill_id='one_pager', house_id='<id from above>') — call it immediately. "
+            "using the spec_id from this response. "
+            "generate_artifact(skill_id='one_pager', spec_id='<id from above>') — call it immediately. "
             "The only acceptable responses are: (1) call generate_artifact now, "
-            "(2) call get_message_house if the user asked to read/explore the framework, or "
-            "(3) ask which house to use if there are multiple and the user didn't specify."
+            "(2) call get_spec if the user asked to read/explore the framework, or "
+            "(3) ask which spec to use if there are multiple and the user didn't specify."
         ),
     }
 
 
-def compare_houses(house_ids: list[str], include_unapproved: bool = False) -> dict:
-    """Pull multiple message houses side-by-side for comparison.
+def compare_specs(spec_ids: list[str], include_unapproved: bool = False) -> dict:
+    """Pull multiple message specs side-by-side for comparison.
 
     By default only returns entries with status APPROVED or LOCKED.
     Use include_unapproved=True to include DRAFT and IN_REVIEW entries.
@@ -361,33 +312,33 @@ def compare_houses(house_ids: list[str], include_unapproved: bool = False) -> di
     engine = _get_engine()
     store = engine.store
 
-    houses_data = []
-    for hid in house_ids:
-        house = store.get_house(UUID(hid))
-        if not house:
-            houses_data.append({"id": hid, "error": "not found"})
+    specs_data = []
+    for hid in spec_ids:
+        spec = store.get_spec(UUID(hid))
+        if not spec:
+            specs_data.append({"id": hid, "error": "not found"})
             continue
-        messages = store.get_key_messages(house.id, include_unapproved=include_unapproved)
-        personas = store.get_personas(house.id)
-        houses_data.append(
+        messages = store.get_key_messages(spec.id, include_unapproved=include_unapproved)
+        audiences = store.get_audiences(spec.id)
+        specs_data.append(
             {
-                "id": str(house.id),
-                "name": house.name,
-                "positioning": house.positioning,
-                "tagline": house.tagline,
+                "id": str(spec.id),
+                "name": spec.name,
+                "positioning": spec.positioning,
+                "tagline": spec.tagline,
                 "key_messages_count": len(messages),
                 "messages_by_section": _group_by_section(messages),
-                "personas": [{"name": p.name, "description": p.description} for p in personas],
+                "audiences": [{"name": p.name, "description": p.description} for p in audiences],
             }
         )
 
-    return {"houses": houses_data}
+    return {"specs": specs_data}
 
 
 def _group_by_section(messages: list) -> dict:
     grouped: dict = {}
     for msg in messages:
-        st = str(msg.section_type)
+        st = str(msg.assertion_type)
         grouped.setdefault(st, []).append(msg.content)
     return grouped
 
@@ -401,7 +352,7 @@ def get_grounding_context() -> GroundingResponse:
 
 def generate_artifact(
     skill_id: str,
-    house_id: str,
+    spec_id: str,
     custom_context: Optional[dict] = None,
     workspace_id: Optional[str] = None,
 ) -> dict:
@@ -409,7 +360,7 @@ def generate_artifact(
 
     Args:
         skill_id: The skill ID (e.g., "one_pager", "battlecard")
-        house_id: The message house ID or name
+        spec_id: The message spec ID or name
         custom_context: Additional context to pass to the skill template
         workspace_id: Optional workspace ID for scoping
 
@@ -423,22 +374,22 @@ def generate_artifact(
     skills = SkillManager()
     generator = ArtifactGenerator(store=store, skills=skills)
 
-    # Resolve house_id to UUID if needed
+    # Resolve spec_id to UUID if needed
     try:
         from uuid import UUID
-        hid = UUID(house_id)
+        hid = UUID(spec_id)
     except (ValueError, AttributeError):
-        house = store.get_house_by_name(house_id)
-        if not house:
-            return {"error": f"House '{house_id}' not found"}
-        hid = house.id
+        spec = store.get_spec_by_name(spec_id)
+        if not spec:
+            return {"error": f"Spec '{spec_id}' not found"}
+        hid = spec.id
 
     result = generator.generate(skill_id, str(hid), custom_context)
 
     response = {
         "skill_id": result.skill_id,
-        "house_id": result.house_id,
-        "house_name": result.house_name,
+        "spec_id": result.spec_id,
+        "spec_name": result.spec_name,
         "sections": result.sections,
         "raw_content": result.raw_content,
         "grounded_messages": result.grounded_messages,
@@ -459,14 +410,14 @@ def generate_artifact(
 
 
 def build_presentation(
-    house_id: str,
+    spec_id: str,
     skill_id: str = "executive_summary",
     custom_context: Optional[dict] = None,
 ) -> dict:
     """Build a presentation using RevealRenderer.
 
     Args:
-        house_id: The message house ID or name
+        spec_id: The message spec ID or name
         skill_id: Skill to use for content generation (default: executive_summary)
         custom_context: Additional context
 
@@ -476,14 +427,14 @@ def build_presentation(
     from src.rendering.renderer import get_renderer
 
     # Generate artifact first
-    artifact_result = generate_artifact(skill_id, house_id, custom_context)
+    artifact_result = generate_artifact(skill_id, spec_id, custom_context)
     if "error" in artifact_result:
         return artifact_result
 
     # Use RevealRenderer to generate presentation
     renderer = get_renderer("reveal")
     context = custom_context or {}
-    context["house_name"] = artifact_result.get("house_name", "Untitled")
+    context["spec_name"] = artifact_result.get("spec_name", "Untitled")
 
     render_output = renderer.render_reveal(
         artifact_result.get("sections", {}),
@@ -492,8 +443,8 @@ def build_presentation(
 
     return {
         "skill_id": artifact_result["skill_id"],
-        "house_id": artifact_result["house_id"],
-        "house_name": artifact_result["house_name"],
+        "spec_id": artifact_result["spec_id"],
+        "spec_name": artifact_result["spec_name"],
         "renderer_type": "reveal",
         "presentation_html": render_output.content,
         "metadata": render_output.metadata,
@@ -501,14 +452,14 @@ def build_presentation(
 
 
 def generate_penpot_render(
-    house_id: str,
+    spec_id: str,
     skill_id: str = "one_pager_visual",
     custom_context: Optional[dict] = None,
 ) -> dict:
     """Generate an artifact and render it to Penpot JSON format (no file creation).
 
     Args:
-        house_id: The message house ID or name
+        spec_id: The message spec ID or name
         skill_id: Skill to use (default: one_pager_visual)
         custom_context: Additional context
 
@@ -518,14 +469,14 @@ def generate_penpot_render(
     from src.rendering.renderer import get_renderer
 
     # Generate artifact first
-    artifact_result = generate_artifact(skill_id, house_id, custom_context)
+    artifact_result = generate_artifact(skill_id, spec_id, custom_context)
     if "error" in artifact_result:
         return artifact_result
 
     # Use PenpotRenderer to generate Penpot data
     renderer = get_renderer("penpot")
     context = custom_context or {}
-    context["house_name"] = artifact_result.get("house_name", "Untitled")
+    context["spec_name"] = artifact_result.get("spec_name", "Untitled")
 
     render_output = renderer.render_penpot(
         artifact_result.get("sections", {}),
@@ -534,50 +485,50 @@ def generate_penpot_render(
 
     return {
         "skill_id": artifact_result["skill_id"],
-        "house_id": artifact_result["house_id"],
-        "house_name": artifact_result["house_name"],
+        "spec_id": artifact_result["spec_id"],
+        "spec_name": artifact_result["spec_name"],
         "renderer_type": "penpot",
         "penpot_data": render_output.content,
         "metadata": render_output.metadata,
     }
 
 
-def get_usage_heatmap(house_id: str) -> dict:
-    """Get chunk usage heatmap for a message house.
+def get_usage_heatmap(spec_id: str) -> dict:
+    """Get chunk usage heatmap for a message spec.
 
     Shows how many times each chunk was used in artifacts, with which ratings.
     """
     engine = _get_engine()
     store = engine.store
     try:
-        hid = UUID(house_id)
+        hid = UUID(spec_id)
     except (ValueError, AttributeError):
-        return {"error": "Invalid house_id — must be a valid UUID"}
+        return {"error": "Invalid spec_id — must be a valid UUID"}
 
     heatmap = store.get_chunk_usage_heatmap(hid)
     return heatmap
 
 
-def get_coverage_report(house_id: str) -> dict:
-    """Get a coverage report for a message house.
+def get_coverage_report(spec_id: str) -> dict:
+    """Get a coverage report for a message spec.
 
-    Shows which parts of the message house are used most vs ignored.
+    Shows which parts of the message spec are used most vs ignored.
     """
     engine = _get_engine()
     store = engine.store
     try:
-        hid = UUID(house_id)
+        hid = UUID(spec_id)
     except (ValueError, AttributeError):
-        return {"error": "Invalid house_id — must be a valid UUID"}
+        return {"error": "Invalid spec_id — must be a valid UUID"}
 
-    coverage = store.get_message_house_coverage(hid)
+    coverage = store.get_spec_coverage(hid)
     return coverage
 
 
 def export_to_penpot(
     artifact_id: str,
     workspace_id: str,
-    house_id: str,
+    spec_id: str,
 ) -> dict:
     """Export a MsgStack artifact to Penpot and return the edit link.
 
@@ -587,7 +538,7 @@ def export_to_penpot(
     Args:
         artifact_id: The artifact ID to export.
         workspace_id: The workspace ID (to find the linked Penpot project).
-        house_id: The message house ID (to get brand tokens and messages).
+        spec_id: The message spec ID (to get brand tokens and messages).
 
     Returns:
         dict with file_id, edit_url, and creation status.
@@ -597,18 +548,18 @@ def export_to_penpot(
 
     store = get_store()
 
-    # Get the house
+    # Get the spec
     try:
-        house_uuid = UUID(house_id)
+        spec_uuid = UUID(spec_id)
     except (ValueError, AttributeError):
-        return {"error": "Invalid house_id — must be a valid UUID"}
+        return {"error": "Invalid spec_id — must be a valid UUID"}
 
-    house = store.get_house(house_uuid)
-    if not house:
-        return {"error": f"House {house_id} not found"}
+    spec = store.get_spec(spec_uuid)
+    if not spec:
+        return {"error": f"Spec {spec_id} not found"}
 
     # Export to Penpot
-    result = export_artifact_to_penpot(artifact_id, workspace_id, house)
+    result = export_artifact_to_penpot(artifact_id, workspace_id, spec)
 
     if "error" in result:
         return result
@@ -627,14 +578,14 @@ def export_to_penpot(
     return result
 
 
-def get_entry_history(entry_id: str) -> dict:
-    """Get the full approval/status-change audit trail for a specific canon entry.
+def get_assertion_history(entry_id: str) -> dict:
+    """Get the full approval/status-change audit trail for a specific assertion.
 
     Returns the complete history of status changes, reviews, and approvals
     for the given entry, ordered newest-first.
 
     Args:
-        entry_id: The UUID of the canon entry.
+        entry_id: The UUID of the assertion.
 
     Returns:
         dict with entry_id, trail (list of review log entries), and count.
@@ -645,22 +596,20 @@ def get_entry_history(entry_id: str) -> dict:
     except (ValueError, AttributeError):
         return {"error": "Invalid entry_id — must be a valid UUID"}
 
-    entry = store.get_canon_entry(entry_uuid)
+    entry = store.get_assertion(entry_uuid)
     if not entry:
         return {"error": f"Entry {entry_id} not found"}
 
     trail = store.get_entry_review_trail(entry_id)
     return {
-        "entry_id": entry_id,
-        "message_id": entry_id,
-        "canon_domain_id": str(entry.canon_domain_id),
-        "message_house_id": str(entry.canon_domain_id),
+        "assertion_id": entry_id,
+        "spec_id": str(entry.spec_id),
         "current_status": str(entry.status),
         "trail": trail,
         "count": len(trail),
     }
 
-get_message_history = get_entry_history  # Deprecated alias
+get_assertion_history = get_assertion_history  # Deprecated alias
 
 
 def set_penpot_project(workspace_id: str, project_id: str) -> dict:

@@ -1,0 +1,36 @@
+{
+  "id": "runbook",
+  "name": "Runbook",
+  "description": "Operational procedure assembled from the spec's runbook steps and dependencies.",
+  "channels": [
+    "all"
+  ],
+  "sections": [
+    {
+      "key": "when_to_use",
+      "label": "When To Use",
+      "required": true
+    },
+    {
+      "key": "preconditions",
+      "label": "Preconditions",
+      "required": true
+    },
+    {
+      "key": "steps",
+      "label": "Steps",
+      "required": false
+    },
+    {
+      "key": "verification",
+      "label": "Verification",
+      "required": false
+    },
+    {
+      "key": "rollback",
+      "label": "Rollback",
+      "required": false
+    }
+  ],
+  "prompt_template": "You are writing a runbook for the service described by this spec.\n\n{grounding_context}\n\nUse ONLY the assertions above. Every claim must trace to one. If a required fact is absent, write '[not specified in spec]' rather than inventing it. Reproduce any assertion marked Tier 1 verbatim.\n\nProduce these sections: when_to_use, preconditions, steps, verification, rollback."
+}

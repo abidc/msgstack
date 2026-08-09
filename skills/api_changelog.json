@@ -1,0 +1,36 @@
+{
+  "id": "api_changelog",
+  "name": "API Changelog",
+  "description": "A versioned changelog entry: what changed in the interface contract, and whether it breaks compatibility.",
+  "channels": [
+    "all"
+  ],
+  "sections": [
+    {
+      "key": "version",
+      "label": "Version",
+      "required": true
+    },
+    {
+      "key": "breaking_changes",
+      "label": "Breaking Changes",
+      "required": true
+    },
+    {
+      "key": "additions",
+      "label": "Additions",
+      "required": false
+    },
+    {
+      "key": "fixes",
+      "label": "Fixes",
+      "required": false
+    },
+    {
+      "key": "migration",
+      "label": "Migration",
+      "required": false
+    }
+  ],
+  "prompt_template": "You are writing a api changelog for the service described by this spec.\n\n{grounding_context}\n\nUse ONLY the assertions above. Every claim must trace to one. If a required fact is absent, write '[not specified in spec]' rather than inventing it. Reproduce any assertion marked Tier 1 verbatim.\n\nProduce these sections: version, breaking_changes, additions, fixes, migration."
+}

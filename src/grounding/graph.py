@@ -2,19 +2,21 @@
 
 Graph schema
 ------------
-MessageHouse
-  ├─[HAS_SECTION]──► Section (one per section_type present in the house)
-  │                    └─[CONTAINS]──► KeyMessage
-  ├─[HAS_PILLAR]───► MessagingPillar (optional user grouping, orthogonal to sections)
-  │                    └─[GROUPS]────► KeyMessage
-  └─[TARGETS]──────► Persona
-                       ├─[HAS_PAIN_POINT]──► PainPoint
-                       ├─[HAS_TRIGGER]─────► BuyingTrigger
-                       └─[HAS_OBJECTION]───► Objection
+Spec
+  ├─[HAS_SECTION]──► Section (one per assertion_type present in the spec)
+  │                    └─[CONTAINS]──► Assertion
+  ├─[HAS_PILLAR]───► Pillar (optional user grouping, orthogonal to sections)
+  │                    └─[GROUPS]────► Assertion
+  └─[TARGETS]──────► Audience
+                       └─[HAS_QA_PAIR]───► QAPair
 
-KeyMessage
-  ├─[ADDRESSES]──► Persona
-  └─[APPLIES_TO]─► Channel
+Assertion
+  ├─[ADDRESSES]──► Audience
+  ├─[APPLIES_TO]─► Channel
+  └─[MENTIONS]───► Entity        ← crosses spec boundaries
+
+Typed cross-spec edges (DEPENDS_ON, INFORMS, SUPERSEDES, CONTRADICTS, OWNS,
+IMPLEMENTS) connect any two nodes and are loaded from the `edges` table.
 """
 
 import logging
@@ -30,56 +32,45 @@ except ImportError:
     log.warning("networkx not installed — graph engine disabled. Run: pip install networkx")
 
 _SECTION_LABELS: dict[str, str] = {
-    "headline":            "Headlines",
-    "subhead":             "Sub-headlines",
-    "benefit":             "Benefits",
-    "use_case":            "Use Cases",
-    "proof_point":         "Proof Points",
-    "objection":           "Objections",
-    "social_proof":        "Social Proof",
+    "constraint":          "Constraints",
+    "sla":                 "SLAs",
+    "deprecation":         "Deprecations",
+    "config_default":      "Config Defaults",
+    "dependency":          "Dependencies",
+    "capability":          "Capabilities",
+    "limitation":          "Limitations",
+    "security_posture":    "Security Posture",
+    "interface_contract":  "Interface Contracts",
+    "version_policy":      "Version Policy",
+    "runbook_step":        "Runbook Steps",
+    "decision":            "Decisions",
     "positioning":         "Positioning",
-    "know_your_market":    "Know Your Market",
-    "brand_voice":         "Brand Voice",
-    "style_rule":          "Style Rules",
-    "word_list":           "Word List",
-    "competitor_strength":   "Competitor Strengths",
-    "competitor_weakness":   "Competitor Weaknesses",
-    "competitive_response":  "Competitive Responses",
-    "narrative_pillar":    "Narrative Pillars",
-    "company_value":       "Company Values",
-    "founding_story":      "Founding Story",
-    "persona_detail":      "Persona Details",
+    "source_markdown":     "Source Document",
 }
 
 _SECTION_ORDER: dict[str, int] = {
-    "positioning": 0, "headline": 1, "subhead": 2, "benefit": 3,
-    "use_case": 4, "proof_point": 5, "social_proof": 6, "objection": 7,
-    "know_your_market": 8, "brand_voice": 9, "style_rule": 10,
-    "word_list": 11, "competitor_strength": 12, "competitor_weakness": 13,
-    "competitive_response": 14, "narrative_pillar": 15,
-    "company_value": 16, "founding_story": 17, "persona_detail": 18,
+    "positioning": 0, "capability": 1, "interface_contract": 2,
+    "constraint": 3, "sla": 4, "dependency": 5, "config_default": 6,
+    "limitation": 7, "security_posture": 8, "version_policy": 9,
+    "deprecation": 10, "decision": 11, "runbook_step": 12,
+    "source_markdown": 13,
 }
 
 _SECTION_COLORS: dict[str, str] = {
-    "headline":            "#3b82f6",
-    "subhead":             "#60a5fa",
-    "benefit":             "#22c55e",
-    "proof_point":         "#f59e0b",
-    "objection":           "#ef4444",
-    "social_proof":        "#a855f7",
-    "positioning":         "#0ea5e9",
-    "use_case":            "#14b8a6",
-    "know_your_market":    "#f97316",
-    "brand_voice":         "#ec4899",
-    "style_rule":          "#84cc16",
-    "word_list":           "#64748b",
-    "competitor_strength":   "#fbbf24",
-    "competitor_weakness":   "#fb923c",
-    "competitive_response":  "#f43f5e",
-    "narrative_pillar":    "#8b5cf6",
-    "company_value":       "#06b6d4",
-    "founding_story":      "#d97706",
-    "persona_detail":      "#6366f1",
+    "constraint":          "#f59e0b",
+    "sla":                 "#22c55e",
+    "deprecation":         "#ef4444",
+    "config_default":      "#64748b",
+    "dependency":          "#8b5cf6",
+    "capability":          "#3b82f6",
+    "limitation":          "#fb923c",
+    "security_posture":    "#14b8a6",
+    "interface_contract":  "#0ea5e9",
+    "version_policy":      "#a855f7",
+    "runbook_step":        "#84cc16",
+    "decision":            "#ec4899",
+    "positioning":         "#6366f1",
+    "source_markdown":     "#9ca3af",
 }
 
 _STATUS_COLORS: dict[str, str] = {
@@ -103,110 +94,82 @@ class GraphEngine:
         store = get_store()
 
         g = nx.DiGraph()
-        houses = store.list_houses()
+        specs = store.list_specs()
         ch_meta_map = {c["id"]: c for c in store.get_channels()}
 
-        for house in houses:
-            house_node = f"house:{house.id}"
-            g.add_node(house_node, type="MessageHouse",
-                       id=str(house.id), name=house.name,
-                       document_type=str(house.document_type),
-                       tagline=getattr(house, "tagline", ""),
-                       positioning=getattr(house, "positioning", ""),
-                       summary=house.summary,
+        for spec in specs:
+            spec_node = f"spec:{spec.id}"
+            g.add_node(spec_node, type="Spec",
+                       id=str(spec.id), name=spec.name,
+                       schema_type=str(spec.schema_type),
+                       tagline=getattr(spec, "tagline", ""),
+                       positioning=getattr(spec, "positioning", ""),
+                       summary=spec.summary,
                        # Phase 2 additions:
-                       parent_domain_id=str(house.parent_domain_id) if house.parent_domain_id else None,
-                       inheritance_policy=str(house.inheritance_policy))
+                       parent_domain_id=str(spec.parent_domain_id) if spec.parent_domain_id else None,
+                       inheritance_policy=str(spec.inheritance_policy))
 
             # Add relationship edge to parent if linked
-            if house.parent_domain_id:
-                parent_node = f"house:{house.parent_domain_id}"
-                g.add_edge(house_node, parent_node, rel="INHERITS_FROM")
+            if spec.parent_domain_id:
+                parent_node = f"spec:{spec.parent_domain_id}"
+                g.add_edge(spec_node, parent_node, rel="INHERITS_FROM")
 
             # Pillars — optional user-defined groupings (orthogonal to sections)
-            pillars = store.list_pillars(house.id)
+            pillars = store.list_pillars(spec.id)
             pillar_map: dict[int, str] = {}
             for pillar in pillars:
                 pil_node = f"pillar:{pillar.id}"
-                g.add_node(pil_node, type="MessagingPillar",
+                g.add_node(pil_node, type="Pillar",
                            id=str(pillar.id), name=pillar.name,
                            description=pillar.description or "",
-                           house_id=str(house.id))
-                g.add_edge(house_node, pil_node, rel="HAS_PILLAR")
+                           spec_id=str(spec.id))
+                g.add_edge(spec_node, pil_node, rel="HAS_PILLAR")
                 pillar_map[pillar.id] = pil_node
 
-            # Personas + sub-nodes (built before messages so edges can reference them)
-            for persona in store.get_personas(house.id):
-                pnode = f"persona:{house.id}:{persona.name}"
-                g.add_node(pnode, type="Persona", name=persona.name,
-                           house_id=str(house.id),
-                           description=getattr(persona, "description", ""))
-                g.add_edge(house_node, pnode, rel="TARGETS")
+            # Audiences + their QA pairs (built before assertions so edges resolve)
+            for audience in store.get_audiences(spec.id):
+                pnode = f"audience:{spec.id}:{audience.name}"
+                g.add_node(pnode, type="Audience", name=audience.name,
+                           spec_id=str(spec.id),
+                           description=getattr(audience, "description", ""))
+                g.add_edge(spec_node, pnode, rel="TARGETS")
 
-                db_pps = store.list_pain_points(str(persona.id))
-                if db_pps:
-                    for pp in db_pps:
-                        n = f"pain_point_db:{pp.id}"
-                        g.add_node(n, type="PainPoint", id=str(pp.id), content=pp.content,
-                                   persona_name=persona.name, house_id=str(house.id))
-                        g.add_edge(pnode, n, rel="HAS_PAIN_POINT")
-                else:
-                    for i, txt in enumerate(persona.pain_points or []):
-                        n = f"pain_point:{house.id}:{persona.name}:{i}"
-                        g.add_node(n, type="PainPoint", id=n, content=str(txt),
-                                   persona_name=persona.name, house_id=str(house.id))
-                        g.add_edge(pnode, n, rel="HAS_PAIN_POINT")
-
-                db_trigs = store.list_buying_triggers(str(persona.id))
-                if db_trigs:
-                    for bt in db_trigs:
-                        n = f"trigger_db:{bt.id}"
-                        g.add_node(n, type="BuyingTrigger", id=str(bt.id), content=bt.content,
-                                   persona_name=persona.name, house_id=str(house.id))
-                        g.add_edge(pnode, n, rel="HAS_TRIGGER")
-                else:
-                    for i, txt in enumerate(persona.buying_triggers or []):
-                        n = f"trigger:{house.id}:{persona.name}:{i}"
-                        g.add_node(n, type="BuyingTrigger", id=n, content=str(txt),
-                                   persona_name=persona.name, house_id=str(house.id))
-                        g.add_edge(pnode, n, rel="HAS_TRIGGER")
-
-                db_obs = store.list_objections(str(persona.id))
+                db_obs = store.list_qa_pairs(str(audience.id))
                 if db_obs:
                     for ob in db_obs:
-                        n = f"objection_db:{ob.id}"
-                        g.add_node(n, type="Objection", id=str(ob.id),
+                        n = f"qa_pair_db:{ob.id}"
+                        g.add_node(n, type="QAPair", id=str(ob.id),
                                    statement=ob.statement, response=ob.response or "",
-                                   persona_name=persona.name, house_id=str(house.id))
-                        g.add_edge(pnode, n, rel="HAS_OBJECTION")
+                                   audience_name=audience.name, spec_id=str(spec.id))
+                        g.add_edge(pnode, n, rel="HAS_QA_PAIR")
                 else:
-                    for i, ob in enumerate(persona.objections or []):
-                        n = f"objection:{house.id}:{persona.name}:{i}"
+                    for i, ob in enumerate(audience.qa_pairs or []):
+                        n = f"qa_pair:{spec.id}:{audience.name}:{i}"
                         stmt = ob.get("statement", "") if isinstance(ob, dict) else str(ob)
                         resp = ob.get("response", "") if isinstance(ob, dict) else ""
-                        g.add_node(n, type="Objection", id=n, statement=stmt, response=resp,
-                                   persona_name=persona.name, house_id=str(house.id))
-                        g.add_edge(pnode, n, rel="HAS_OBJECTION")
+                        g.add_node(n, type="QAPair", id=n, statement=stmt, response=resp,
+                                   audience_name=audience.name, spec_id=str(spec.id))
+                        g.add_edge(pnode, n, rel="HAS_QA_PAIR")
 
             # Sections + KeyMessages
             by_section: dict[str, list] = {}
-            for msg in store.get_key_messages(house.id):
-                by_section.setdefault(str(msg.section_type), []).append(msg)
+            for msg in store.get_key_messages(spec.id):
+                by_section.setdefault(str(msg.assertion_type), []).append(msg)
 
-            for section_type, msgs in by_section.items():
-                sec_node = f"section:{house.id}:{section_type}"
-                label = _SECTION_LABELS.get(section_type,
-                                             section_type.replace("_", " ").title())
+            for assertion_type, msgs in by_section.items():
+                sec_node = f"section:{spec.id}:{assertion_type}"
+                label = _SECTION_LABELS.get(assertion_type,
+                                             assertion_type.replace("_", " ").title())
                 g.add_node(sec_node, type="Section",
-                           id=sec_node, section_type=section_type, label=label,
-                           house_id=str(house.id), count=len(msgs))
-                g.add_edge(house_node, sec_node, rel="HAS_SECTION")
+                           id=sec_node, assertion_type=assertion_type, label=label,
+                           spec_id=str(spec.id), count=len(msgs))
+                g.add_edge(spec_node, sec_node, rel="HAS_SECTION")
 
                 for msg in msgs:
                     chunk_node = f"chunk:{msg.id}"
-                    g.add_node(chunk_node, type="KeyMessage",
+                    g.add_node(chunk_node, type="Assertion",
                                id=str(msg.id), content=msg.content,
-                               section_type=section_type, priority=msg.priority,
+                               assertion_type=assertion_type, priority=msg.priority,
                                status=getattr(msg, "status", "draft"),
                                variants=msg.variants or {})
                     g.add_edge(sec_node, chunk_node, rel="CONTAINS")
@@ -214,12 +177,12 @@ class GraphEngine:
                     if msg.pillar_id and msg.pillar_id in pillar_map:
                         g.add_edge(pillar_map[msg.pillar_id], chunk_node, rel="GROUPS")
 
-                    for persona_name in (msg.personas or []):
-                        pnode = f"persona:{house.id}:{persona_name}"
+                    for audience_name in (msg.audiences or []):
+                        pnode = f"audience:{spec.id}:{audience_name}"
                         if not g.has_node(pnode):
-                            g.add_node(pnode, type="Persona", name=persona_name,
-                                       house_id=str(house.id), description="")
-                            g.add_edge(house_node, pnode, rel="TARGETS")
+                            g.add_node(pnode, type="Audience", name=audience_name,
+                                       spec_id=str(spec.id), description="")
+                            g.add_edge(spec_node, pnode, rel="TARGETS")
                         g.add_edge(chunk_node, pnode, rel="ADDRESSES")
 
                     for ch in (msg.channels or []):
@@ -236,6 +199,32 @@ class GraphEngine:
                                            description="", is_custom=True)
                         g.add_edge(chunk_node, cnode, rel="APPLIES_TO")
 
+        # ── Entities + typed edges ───────────────────────────────────────
+        # Everything above is containment: each edge stays inside one spec.
+        # These two loops are what make the structure an actual graph — entity
+        # nodes join assertions across specs, and typed edges express explicit
+        # cross-spec relationships.
+        for ent in store.list_entities():
+            g.add_node(f"entity:{ent['id']}", type="Entity",
+                       id=ent["id"], name=ent["name"],
+                       entity_type=ent["entity_type"],
+                       description=ent.get("description", ""),
+                       aliases=ent.get("aliases", []))
+
+        for m in store.list_entity_mentions():
+            a_node, e_node = f"chunk:{m['assertion_id']}", f"entity:{m['entity_id']}"
+            if g.has_node(a_node) and g.has_node(e_node):
+                g.add_edge(a_node, e_node, rel="MENTIONS", confidence=m.get("confidence", 1.0))
+
+        _PREFIX = {"assertion": "chunk:", "spec": "spec:", "entity": "entity:"}
+        for e in store.list_edges():
+            src = _PREFIX.get(e["src_type"], "") + e["src_id"]
+            dst = _PREFIX.get(e["dst_type"], "") + e["dst_id"]
+            if g.has_node(src) and g.has_node(dst):
+                g.add_edge(src, dst, rel=e["rel_type"],
+                           confidence=e.get("confidence", 1.0),
+                           edge_id=e["id"], provenance=e.get("provenance", ""))
+
         self._graph = g
         self._built = True
         log.debug("Graph rebuilt: %d nodes, %d edges",
@@ -245,43 +234,173 @@ class GraphEngine:
         if not self._built:
             self.rebuild()
 
-    def _house_chunk_nodes(self, house_id: str) -> set[str]:
-        """All KeyMessage node IDs for a house, traversing through Section nodes."""
-        house_node = f"house:{house_id}"
+    def _spec_chunk_nodes(self, spec_id: str) -> set[str]:
+        """All Assertion node IDs for a spec, traversing through Section nodes."""
+        spec_node = f"spec:{spec_id}"
         chunk_nodes: set[str] = set()
-        for _, sec_node, d in self._graph.out_edges(house_node, data=True):
+        for _, sec_node, d in self._graph.out_edges(spec_node, data=True):
             if d.get("rel") == "HAS_SECTION":
                 for _, chunk_node, d2 in self._graph.out_edges(sec_node, data=True):
                     if d2.get("rel") == "CONTAINS":
                         chunk_nodes.add(chunk_node)
         return chunk_nodes
 
-    def get_chunks_for_house(self, house_id: str) -> list[dict]:
-        """All KeyMessages for a house, sorted by priority."""
+    # ── Traversal ────────────────────────────────────────────────────────
+    #: Edges worth walking during retrieval expansion, and what a hop costs.
+    #: Lower decay = the relationship carries less relevance across the hop.
+    _TRAVERSAL_DECAY: dict[str, float] = {
+        "MENTIONS": 0.75,      # assertion -> entity: the cross-spec bridge
+        "DEPENDS_ON": 0.85,
+        "INFORMS": 0.80,
+        "IMPLEMENTS": 0.75,
+        "SUPERSEDES": 0.90,
+        "CONTRADICTS": 0.85,   # a contradiction is highly relevant to surface
+        "OWNS": 0.60,
+        "GROUPS": 0.50,
+        "INHERITS_FROM": 0.70,
+        "ADDRESSES": 0.55,
+    }
+
+    #: Relationships never walked during retrieval. APPLIES_TO connects every
+    #: assertion to the channel it publishes on, and almost everything carries
+    #: channel "all" — so traversing it makes every assertion two hops from
+    #: every other one and the graph degenerates into a complete graph.
+    #: CONTAINS is the Section containment edge and has the same problem within
+    #: a spec. Both remain in the graph for structural queries; they are simply
+    #: not paths for relevance.
+    _NON_TRAVERSABLE: frozenset = frozenset({"APPLIES_TO", "CONTAINS", "HAS_SECTION"})
+
+    #: A node connected to more than this many others is a hub, not a
+    #: relationship. Traversal may *reach* it but never continues *through* it.
+    #: Guards against any future node type acquiring hub-like degree.
+    _HUB_DEGREE = 25
+
+    def _is_hub(self, node: str) -> bool:
+        return (self._graph.in_degree(node) + self._graph.out_degree(node)) > self._HUB_DEGREE
+
+    def expand(
+        self,
+        seed_assertion_ids: list[str],
+        hops: int = 2,
+        rel_types: list[str] | None = None,
+        min_weight: float = 0.15,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Breadth-first k-hop expansion from seed assertions.
+
+        Walks edges in both directions — a dependency is relevant read either
+        way — decaying a path weight per hop by relationship type. Returns
+        assertion nodes only (entities are waypoints, not results), each with
+        the weight and the path that reached it, best first.
+
+        This is the traversal the previous `graph` retrieval mode claimed to do
+        and did not: it filtered chunks by spec id and never left the spec.
+        """
+        self._ensure_built()
+        if not _NX_AVAILABLE or self._graph is None:
+            return []
+
+        allowed = set(rel_types) if rel_types else None
+        g = self._graph
+        seeds = [f"chunk:{a}" for a in seed_assertion_ids]
+
+        best: dict[str, float] = {}
+        path_to: dict[str, list[str]] = {}
+        frontier: list[tuple[str, float, list[str]]] = []
+        for s in seeds:
+            if g.has_node(s):
+                best[s] = 1.0
+                path_to[s] = []
+                frontier.append((s, 1.0, []))
+
+        for _ in range(max(0, hops)):
+            nxt: list[tuple[str, float, list[str]]] = []
+            for node, weight, path in frontier:
+                # Stop at hubs: reaching one is fine, continuing through it
+                # would connect every node to every other node.
+                if path and self._is_hub(node):
+                    continue
+                neighbours = (
+                    [(v, d, "out") for _, v, d in g.out_edges(node, data=True)]
+                    + [(u, d, "in") for u, _, d in g.in_edges(node, data=True)]
+                )
+                for other, data, direction in neighbours:
+                    rel = data.get("rel", "")
+                    if rel in self._NON_TRAVERSABLE:
+                        continue
+                    if allowed is not None and rel not in allowed:
+                        continue
+                    decay = self._TRAVERSAL_DECAY.get(rel, 0.4)
+                    w = weight * decay * float(data.get("confidence", 1.0))
+                    if w < min_weight or w <= best.get(other, 0.0):
+                        continue
+                    best[other] = w
+                    arrow = "->" if direction == "out" else "<-"
+                    path_to[other] = path + [f"{arrow}{rel}"]
+                    nxt.append((other, w, path_to[other]))
+            if not nxt:
+                break
+            frontier = nxt
+
+        out: list[dict] = []
+        seed_set = set(seeds)
+        for node, weight in best.items():
+            if node in seed_set or not node.startswith("chunk:"):
+                continue
+            attrs = dict(g.nodes[node])
+            attrs["graph_weight"] = round(weight, 4)
+            attrs["graph_path"] = path_to.get(node, [])
+            attrs["hops"] = len(path_to.get(node, []))
+            out.append(attrs)
+
+        out.sort(key=lambda a: a["graph_weight"], reverse=True)
+        return out[:limit]
+
+    def neighbours(self, node_type: str, node_id: str) -> dict:
+        """Immediate typed neighbourhood of a node, grouped by relationship."""
+        self._ensure_built()
+        if not _NX_AVAILABLE or self._graph is None:
+            return {}
+        prefix = {"assertion": "chunk:", "spec": "spec:", "entity": "entity:"}.get(node_type, "")
+        node = f"{prefix}{node_id}"
+        if not self._graph.has_node(node):
+            return {}
+        g = self._graph
+        grouped: dict[str, list[dict]] = {}
+        for _, v, d in g.out_edges(node, data=True):
+            grouped.setdefault(d.get("rel", "?"), []).append(
+                {"direction": "out", "node": v, **dict(g.nodes[v])})
+        for u, _, d in g.in_edges(node, data=True):
+            grouped.setdefault(d.get("rel", "?"), []).append(
+                {"direction": "in", "node": u, **dict(g.nodes[u])})
+        return grouped
+
+    def get_chunks_for_spec(self, spec_id: str) -> list[dict]:
+        """All KeyMessages for a spec, sorted by priority."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        house_node = f"house:{house_id}"
-        if house_node not in self._graph:
+        spec_node = f"spec:{spec_id}"
+        if spec_node not in self._graph:
             return []
         chunks: list[dict] = []
-        for _, sec_node, d in self._graph.out_edges(house_node, data=True):
+        for _, sec_node, d in self._graph.out_edges(spec_node, data=True):
             if d.get("rel") == "HAS_SECTION":
                 for _, chunk_node, d2 in self._graph.out_edges(sec_node, data=True):
                     if d2.get("rel") == "CONTAINS":
                         chunks.append(dict(self._graph.nodes[chunk_node]))
         return sorted(chunks, key=lambda c: c.get("priority", 3))
 
-    def get_sections_for_house(self, house_id: str) -> list[dict]:
-        """Section nodes for a house with their KeyMessages nested, ordered by section type."""
+    def get_sections_for_spec(self, spec_id: str) -> list[dict]:
+        """Section nodes for a spec with their KeyMessages nested, ordered by section type."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        house_node = f"house:{house_id}"
-        if house_node not in self._graph:
+        spec_node = f"spec:{spec_id}"
+        if spec_node not in self._graph:
             return []
         sections: list[dict] = []
-        for _, sec_node, d in self._graph.out_edges(house_node, data=True):
+        for _, sec_node, d in self._graph.out_edges(spec_node, data=True):
             if d.get("rel") == "HAS_SECTION":
                 sec_attrs = dict(self._graph.nodes[sec_node])
                 messages: list[dict] = []
@@ -291,51 +410,51 @@ class GraphEngine:
                 sec_attrs["messages"] = sorted(messages, key=lambda m: m.get("priority", 3))
                 sections.append(sec_attrs)
         return sorted(sections,
-                      key=lambda s: _SECTION_ORDER.get(s.get("section_type", ""), 99))
+                      key=lambda s: _SECTION_ORDER.get(s.get("assertion_type", ""), 99))
 
-    def get_chunks_for_persona(self, house_id: str, persona_name: str) -> list[dict]:
-        """KeyMessages that ADDRESS a specific persona within a house."""
+    def get_chunks_for_audience(self, spec_id: str, audience_name: str) -> list[dict]:
+        """KeyMessages that ADDRESS a specific audience within a spec."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        persona_node = f"persona:{house_id}:{persona_name}"
-        if persona_node not in self._graph:
+        audience_node = f"audience:{spec_id}:{audience_name}"
+        if audience_node not in self._graph:
             return []
         return [dict(self._graph.nodes[n]) for n, _, d
-                in self._graph.in_edges(persona_node, data=True)
+                in self._graph.in_edges(audience_node, data=True)
                 if d.get("rel") == "ADDRESSES"]
 
-    def get_chunks_for_channel(self, house_id: str, channel: str) -> list[dict]:
-        """KeyMessages that APPLY_TO a specific channel within a house."""
+    def get_chunks_for_channel(self, spec_id: str, channel: str) -> list[dict]:
+        """KeyMessages that APPLY_TO a specific channel within a spec."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
         channel_node = f"channel:{channel}"
         if channel_node not in self._graph:
             return []
-        house_chunks = self._house_chunk_nodes(house_id)
+        spec_chunks = self._spec_chunk_nodes(spec_id)
         return [dict(self._graph.nodes[n]) for n, _, d
                 in self._graph.in_edges(channel_node, data=True)
-                if d.get("rel") == "APPLIES_TO" and n in house_chunks]
+                if d.get("rel") == "APPLIES_TO" and n in spec_chunks]
 
-    def get_connections(self, house_id: str,
-                        persona: str | None = None,
+    def get_connections(self, spec_id: str,
+                        audience: str | None = None,
                         channel: str | None = None) -> list[dict]:
-        """Graph query entry point — filter by optional persona and/or channel."""
+        """Graph query entry point — filter by optional audience and/or channel."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        if persona and channel:
-            by_p = {c["id"] for c in self.get_chunks_for_persona(house_id, persona)}
-            by_c = {c["id"] for c in self.get_chunks_for_channel(house_id, channel)}
+        if audience and channel:
+            by_p = {c["id"] for c in self.get_chunks_for_audience(spec_id, audience)}
+            by_c = {c["id"] for c in self.get_chunks_for_channel(spec_id, channel)}
             ids = by_p & by_c
-            results = [c for c in self.get_chunks_for_house(house_id) if c.get("id") in ids]
-        elif persona:
-            results = self.get_chunks_for_persona(house_id, persona)
+            results = [c for c in self.get_chunks_for_spec(spec_id) if c.get("id") in ids]
+        elif audience:
+            results = self.get_chunks_for_audience(spec_id, audience)
         elif channel:
-            results = self.get_chunks_for_channel(house_id, channel)
+            results = self.get_chunks_for_channel(spec_id, channel)
         else:
-            results = self.get_chunks_for_house(house_id)
+            results = self.get_chunks_for_spec(spec_id)
         # Filter out nodes with no content (fix #8)
         return [c for c in results if c.get("content", "").strip()]
 
@@ -348,59 +467,52 @@ class GraphEngine:
         nodes: list[dict] = []
         for nid, attrs in g.nodes(data=True):
             ntype = attrs.get("type", "unknown")
-            if ntype == "Objection":
+            if ntype == "QAPair":
                 raw = attrs.get("statement", "") or ""
                 label = (raw[:32] + "…") if len(raw) > 32 else raw or nid
-            elif ntype in ("PainPoint", "BuyingTrigger"):
-                raw = attrs.get("content", "") or ""
-                label = (raw[:32] + "…") if len(raw) > 32 else raw or nid
             elif ntype == "Section":
-                label = attrs.get("label", attrs.get("section_type", nid))
+                label = attrs.get("label", attrs.get("assertion_type", nid))
             else:
                 content = attrs.get("content", "")
                 label = (attrs.get("name")
                          or (content[:35] + "…" if len(content) > 35 else content)
                          or nid)
             entry: dict[str, Any] = {"id": nid, "type": ntype, "label": label}
-            if ntype == "MessageHouse":
+            if ntype == "Spec":
                 entry.update({"name": attrs.get("name", ""),
-                               "document_type": attrs.get("document_type", ""),
+                               "schema_type": attrs.get("schema_type", ""),
                                "tagline": attrs.get("tagline", ""),
                                "summary": (attrs.get("summary") or "")[:150]})
             elif ntype == "Section":
-                entry.update({"section_type": attrs.get("section_type", ""),
+                entry.update({"assertion_type": attrs.get("assertion_type", ""),
                                "label": attrs.get("label", ""),
                                "count": attrs.get("count", 0),
-                               "house_id": attrs.get("house_id", "")})
-                entry["color"] = _SECTION_COLORS.get(attrs.get("section_type", ""), "#6366f1")
-            elif ntype == "KeyMessage":
-                entry.update({"section_type": attrs.get("section_type", ""),
+                               "spec_id": attrs.get("spec_id", "")})
+                entry["color"] = _SECTION_COLORS.get(attrs.get("assertion_type", ""), "#6366f1")
+            elif ntype == "Assertion":
+                entry.update({"assertion_type": attrs.get("assertion_type", ""),
                                "priority": attrs.get("priority"),
                                "content": (attrs.get("content") or "")[:150],
                                "status": attrs.get("status", "draft")})
                 entry["color"] = _STATUS_COLORS.get(attrs.get("status", "draft"), "#9ca3af")
-            elif ntype == "MessagingPillar":
+            elif ntype == "Pillar":
                 entry.update({"name": attrs.get("name", ""),
                                "description": attrs.get("description", ""),
-                               "house_id": attrs.get("house_id", "")})
-            elif ntype == "Persona":
+                               "spec_id": attrs.get("spec_id", "")})
+            elif ntype == "Audience":
                 entry.update({"name": attrs.get("name", ""),
-                               "house_id": attrs.get("house_id", "")})
+                               "spec_id": attrs.get("spec_id", "")})
             elif ntype == "Channel":
                 entry["name"] = attrs.get("name", "")
-            elif ntype == "PainPoint":
-                entry.update({"content": (attrs.get("content") or "")[:150],
-                               "persona_name": attrs.get("persona_name", ""),
-                               "house_id": attrs.get("house_id", "")})
-            elif ntype == "BuyingTrigger":
-                entry.update({"content": (attrs.get("content") or "")[:150],
-                               "persona_name": attrs.get("persona_name", ""),
-                               "house_id": attrs.get("house_id", "")})
-            elif ntype == "Objection":
+            elif ntype == "Entity":
+                entry.update({"name": attrs.get("name", ""),
+                               "entity_type": attrs.get("entity_type", ""),
+                               "description": (attrs.get("description") or "")[:150]})
+            elif ntype == "QAPair":
                 entry.update({"statement": (attrs.get("statement") or "")[:150],
                                "response": (attrs.get("response") or "")[:150],
-                               "persona_name": attrs.get("persona_name", ""),
-                               "house_id": attrs.get("house_id", "")})
+                               "audience_name": attrs.get("audience_name", ""),
+                               "spec_id": attrs.get("spec_id", "")})
             nodes.append(entry)
         edges = [{"source": s, "target": t, "rel": d.get("rel", "")}
                  for s, t, d in g.edges(data=True)]

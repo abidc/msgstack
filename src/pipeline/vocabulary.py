@@ -9,17 +9,17 @@ log = logging.getLogger(__name__)
 
 def apply_controlled_vocabulary(text: str, domain_id: UUID, store: Store) -> str:
     """
-    Query the 'word_list' entries in the active brand guide or canon domain
+    Query the 'word_list' entries in the active brand guide or spec
     representing banned terms or owned language. Applies replacements or flags warnings.
     """
-    entries = store.get_canon_entries(domain_id, include_unapproved=False)
+    entries = store.get_assertions(domain_id, include_unapproved=False)
     
     # Extract banned word rules
     # Expected format: "Banned: term1, term2 -> replacement" or "term1 -> term2"
     replacements = {}
     
     for entry in entries:
-        if entry.section_type == "word_list":
+        if entry.assertion_type == "word_list":
             content = entry.content.strip()
             # Parse lines of banned mappings
             for line in content.split("\n"):

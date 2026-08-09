@@ -1,0 +1,31 @@
+{
+  "id": "deprecation_notice",
+  "name": "Deprecation Notice",
+  "description": "A notice for a sunsetting capability: what is going, when, what replaces it, and what callers must do.",
+  "channels": [
+    "all"
+  ],
+  "sections": [
+    {
+      "key": "what_is_deprecated",
+      "label": "What Is Deprecated",
+      "required": true
+    },
+    {
+      "key": "timeline",
+      "label": "Timeline",
+      "required": true
+    },
+    {
+      "key": "replacement",
+      "label": "Replacement",
+      "required": false
+    },
+    {
+      "key": "required_action",
+      "label": "Required Action",
+      "required": false
+    }
+  ],
+  "prompt_template": "You are writing a deprecation notice for the service described by this spec.\n\n{grounding_context}\n\nUse ONLY the assertions above. Every claim must trace to one. If a required fact is absent, write '[not specified in spec]' rather than inventing it. Reproduce any assertion marked Tier 1 verbatim.\n\nProduce these sections: what_is_deprecated, timeline, replacement, required_action."
+}

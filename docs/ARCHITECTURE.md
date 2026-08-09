@@ -2,7 +2,7 @@
 
 ## Overview
 
-MsgStack MCP is a dual-protocol server: it exposes an **MCP (Model Context Protocol) interface** for AI agents and a **FastAPI web application** for human operators. Both share the same process, database, and pipeline code. The core purpose is to transform raw source documents into structured "Canon Domains" (which implement B2B Message Houses and other departmental knowledge sets) and generate on-brand content artifacts grounded in that approved canon.
+MsgStack MCP is a dual-protocol server: it exposes an **MCP (Model Context Protocol) interface** for AI agents and a **FastAPI web application** for human operators. Both share the same process, database, and pipeline code. The core purpose is to transform raw source documents into structured "Specs" (which implement B2B Specs and other departmental knowledge sets) and generate on-brand content artifacts grounded in that approved graph.
 
 ---
 
@@ -15,7 +15,7 @@ MsgStack MCP is a dual-protocol server: it exposes an **MCP (Model Context Proto
 │   PathRouter (ASGI)                                                     │
 │   ├── /mcp*  ──────────────────────► FastMCP Server (server.py)        │
 │   │                                   30 tools over streamable-HTTP     │
-│   │                                   (Grounded in Canon Domains)       │
+│   │                                   (Grounded in Specs)       │
 │   └── /*     ──────────────────────► FastAPI App (web_app.py)          │
 │                                        REST API + Jinja2 frontend       │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -41,7 +41,7 @@ Both apps share the same OS process and Python interpreter, so they share the mo
 
 ### 2. MCP Server — `src/server.py`
 
-Built on **FastMCP 3.x** using the `streamable-http` transport. Exposes 30 tools (20 canonical + 10 deprecated aliases) to any MCP-capable AI client (Claude Desktop, Claude Code, custom agents).
+Built on **FastMCP 3.x** using the `streamable-http` transport. Exposes 24 tools to any MCP-capable AI client (Claude Desktop, Claude Code, custom agents).
 
 **Tools by category:**
 
@@ -52,14 +52,14 @@ Built on **FastMCP 3.x** using the `streamable-http` transport. Exposes 30 tools
 | Comparison | `compare_houses` |
 | Generation | `generate_one_pager`, `generate_social_posts`, `generate_email_template`, `generate_artifact`, `build_ui_artifact` |
 | Skills | `list_skills` |
-| Inspection | `check_framework_completeness`, `get_framework_spec` |
+| Inspection | `check_framework_completeness`, `get_schema` |
 | Admin | `seed_database`, `reset_conversation` |
 
 **Domain resolution workflow** (enforced in tool descriptions):
 ```
 list_message_houses → set_active_house → [any other tool]
 ```
-Tools that need a domain accept `house_id` (UUID) or `house_name` (string) and call `_resolve_house()` to canonicalise.
+Tools that need a spec accept `spec_id` (UUID) or `spec_name` (string) and call `_resolve_spec()` to normalise.
 
 ---
 
@@ -83,7 +83,7 @@ REST API + Jinja2 dashboard. All routes are under `/api/*` except the dashboard 
 |---|---|
 | Houses | `GET/POST /api/houses`, `GET/PATCH/DELETE /api/houses/{id}` |
 | Messages | `POST /api/messages`, `PATCH/DELETE /api/messages/{id}`, `POST /api/messages/{id}/improve`, `POST /api/messages/{id}/generate-variant` |
-| Personas | `POST /api/personas`, `PATCH/DELETE /api/personas/{id}`, `POST /api/generate-persona` |
+| Audiences | `POST /api/audiences`, `PATCH/DELETE /api/audiences/{id}`, `POST /api/generate-audience` |
 | Upload & Structure | `POST /api/upload`, `POST /api/extract`, `POST /api/preview-structure`, `POST /api/confirm-structure` |
 | Generation | `POST /api/generate`, `POST /api/generate-section` |
 | Tone | `POST /api/houses/{id}/check-tone` |
@@ -93,7 +93,7 @@ REST API + Jinja2 dashboard. All routes are under `/api/*` except the dashboard 
 | Auth admin | `POST /api/api-keys`, `GET /api/api-keys`, `DELETE /api/api-keys/{id}` |
 | Workspaces | `GET/POST /api/workspaces`, `GET/PATCH /api/workspaces/{id}` |
 | Observability | `GET /health`, `GET /api/metrics`, `GET /api/token-usage`, `GET /api/cost-estimate` |
-| Renderer | `GET /artifact/{type}/{house_id}` |
+| Renderer | `GET /artifact/{type}/{spec_id}` |
 
 ---
 
@@ -134,12 +134,12 @@ Raw text
         └── NO  → _split_text()  [paragraph-boundary chunks, 20k/1k overlap]
                     └── _structure_single_chunk() × N
                           └── _merge_structures()
-                                └── dedup messages + personas, first-nonempty fields
+                                └── dedup messages + audiences, first-nonempty fields
 
 Each LLM call accumulates to self._usage → returned as (StructuredHouse, usage_dict)
 ```
 
-Persona extraction uses a **second LLM call** (`response_format=json_object`) to parse persona markdown reliably, with regex fallback.
+Audience extraction uses a **second LLM call** (`response_format=json_object`) to parse audience markdown reliably, with regex fallback.
 
 #### 4c. Skills — `skills.py`
 Skills are JSON files stored in `data/skills/` (runtime) mirrored in `skills/` (git-tracked). `SkillManager._ensure_defaults()` seeds from the 12 `DEFAULT_SKILLS` defined in code.
@@ -151,12 +151,12 @@ Each skill defines:
 
 #### 4d. Generator — `generator.py`
 ```
-skill_id + domain_id (house_id)
-  → load skill + domain + ALL approved canon entries + ALL personas
+skill_id + domain_id (spec_id)
+  → load skill + domain + ALL approved assertions + ALL audiences
   → _build_context()
-        → group canon entries by section_type, sort by priority within each group
-        → build full persona blocks: description + pain_points + buying_triggers + objections
-        → structured context_block: "## Canon Entries (N total, all sections)\n### HEADLINE (3)\n  - ..."
+        → group assertions by assertion_type, sort by priority within each group
+        → build full audience blocks: description + pain_points + buying_triggers + objections
+        → structured context_block: "## Assertions (N total, all sections)\n### HEADLINE (3)\n  - ..."
   → skills.fill_prompt()      [template.format(**context)]
   → grounding preamble        ["GROUNDING CONTEXT — do not introduce claims not present here"]
   → prompt = preamble + context_block + "---" + skill_task
@@ -175,7 +175,7 @@ Three rendering paths replace the current server-rendered HTML artifact pages. E
 **Path A — Fabric.js (visual & graphic artifacts)**
 
 ```
-generate_artifact(skill_id, house_id)
+generate_artifact(skill_id, spec_id)
   → GeneratedArtifact with sections JSON
   → POST /api/artifacts/{id}/render?renderer=fabric
   → server returns design JSON spec:
@@ -194,13 +194,13 @@ Target artifact types: `one_pager`, `battlecard`, `social_card`, `event_brief`
 **Path B — reveal.js (presentations)**
 
 ```
-generate_artifact(skill_id="sales_deck", house_id)
+generate_artifact(skill_id="sales_deck", spec_id)
   → LLM returns structured slide JSON:
       { slides: [{type:"title", heading, subhead, notes},
                  {type:"value_prop", headline, bullets, image_zone},
                  {type:"proof", stat, quote, logo_zone}, ...] }
   → server: Jinja2 render → reveal.js HTML page
-  → GET /artifact/presentation/{house_id}?type=sales_deck
+  → GET /artifact/presentation/{spec_id}?type=sales_deck
   → browser: reveal.js initializes, loads custom workspace theme CSS
   → export: ?print-pdf → window.print() → browser PDF engine
 ```
@@ -212,7 +212,7 @@ Target skill types: `sales_deck`, `event_presentation`, `executive_readout`
 **Path C — Penpot (design export)**
 
 ```
-export_to_penpot(house_id, artifact_type)
+export_to_penpot(spec_id, artifact_type)
   → resolve workspace Penpot project ID (stored on workspace record)
   → Penpot API: create page in project
   → create frames: hero frame, body frame, sidebar frame
@@ -237,7 +237,7 @@ Query string
   │
   ├── TurbovecIndex.query(vector, top_k=20)
   │     └── in-memory IdMapIndex (4-bit quantized, <0.1ms)
-  │     └── post-filter: section_types, personas, channels, house_ids (via metadata store)
+  │     └── post-filter: section_types, audiences, channels, house_ids (via metadata store)
   │
   ├── _keyword_overlap_score(query, chunk_content)
   │     └── token intersection / query token count
@@ -247,9 +247,9 @@ Query string
   └── return top-k GroundingResult[]
 ```
 
-**Index schema:** each Turbovec vector is keyed by a `uint64` hash of the chunk ID. Metadata (`house_id`, `house_name`, `section_type`, `priority`, `persona`, `channel`, `content`, `last_synced`) stored in a parallel SQLite `vector_metadata` table.
+**Index schema:** each Turbovec vector is keyed by a `uint64` hash of the chunk ID. Metadata (`spec_id`, `spec_name`, `assertion_type`, `priority`, `audience`, `channel`, `content`, `last_synced`) stored in a parallel SQLite `vector_metadata` table.
 
-**Source Markdown indexing** (`v0.8.2`): on ingest, the raw extracted Markdown proxy (`data/sources/{house_id}.md`) is chunked with 1200-char window / 200-char overlap and indexed under the `source_markdown` section type alongside structured message chunks. This ensures tables, headings, and complex formatting from source documents are retrievable verbatim during grounding.
+**Source Markdown indexing** (`v0.8.2`): on ingest, the raw extracted Markdown proxy (`data/sources/{spec_id}.md`) is chunked with 1200-char window / 200-char overlap and indexed under the `source_markdown` section type alongside structured message chunks. This ensures tables, headings, and complex formatting from source documents are retrievable verbatim during grounding.
 
 Grounding degrades gracefully — if the Turbovec index file is missing or empty, the engine returns an empty vector result set and the MCP tools fall back to direct DB lookups. Graph traversal always works regardless of vector index status.
 
@@ -259,7 +259,7 @@ Grounding degrades gracefully — if the Turbovec index file is missing or empty
 
 Separates deterministic retrieval from semantic search. The graph layer guarantees that verbatim approved content is returned exactly when queried by relationship — the vector layer handles thematic similarity for exploratory queries.
 
-**Design rationale:** vector nearest-neighbor search can return a *similar but not approved* message when messaging governance matters. Graph traversal from `(GroundingDocument)-[:CONTAINS]->(GroundingChunk)` returns exactly the messages associated with a Canon Domain, with no approximation.
+**Design rationale:** vector nearest-neighbor search can return a *similar but not approved* message when messaging governance matters. Graph traversal from `(GroundingDocument)-[:CONTAINS]->(GroundingChunk)` returns exactly the messages associated with a Spec, with no approximation.
 
 **Implementation:** NetworkX `DiGraph` built in-memory from SQLite/PostgreSQL on server start and on each `rebuild()` call. `GraphEngine` is a process-level singleton. The `_ensure_built()` guard rebuilds lazily on first access.
 
@@ -268,12 +268,12 @@ Separates deterministic retrieval from semantic search. The graph layer guarante
 | Node Type | Attributes | Backed By |
 |---|---|---|
 | `GroundingDocument` | id, name, document_type, summary | `message_houses` row |
-| `MessagingPillar` | id, name, description, house_id | `pillars` row |
-| `GroundingChunk` | id, content, section_type, priority | `key_messages` row |
-| `Persona` | id, name, description, house_id | `personas` row |
+| `MessagingPillar` | id, name, description, spec_id | `pillars` row |
+| `GroundingChunk` | id, content, assertion_type, priority | `key_messages` row |
+| `Audience` | id, name, description, spec_id | `audiences` row |
 | `Channel` | name | in-memory from message channel lists |
-| `PainPoint` | id, content, persona_name, house_id | `pain_points` row (Phase 2) or JSON array (Phase 1) |
-| `BuyingTrigger` | id, content, persona_name, house_id | `buying_triggers` row (Phase 2) or JSON array (Phase 1) |
+| `PainPoint` | id, content, persona_name, spec_id | `pain_points` row (Phase 2) or JSON array (Phase 1) |
+| `BuyingTrigger` | id, content, persona_name, spec_id | `buying_triggers` row (Phase 2) or JSON array (Phase 1) |
 | `Objection` | id, statement, response, persona_name | `objections` row (Phase 2) or JSON array (Phase 1) |
 
 #### Graph Relationships (implemented)
@@ -281,15 +281,15 @@ Separates deterministic retrieval from semantic search. The graph layer guarante
 ```
 (GroundingDocument) -[:CONTAINS]-> (MessagingPillar)
 (GroundingDocument) -[:CONTAINS]-> (GroundingChunk)    # chunks not assigned to a pillar
-(GroundingDocument) -[:TARGETS]-> (Persona)
+(GroundingDocument) -[:TARGETS]-> (Audience)
 (MessagingPillar)   -[:CONTAINS]-> (GroundingChunk)    # chunks assigned to a pillar
 (GroundingChunk)    -[:APPLIES_TO]-> (Channel)
-(GroundingChunk)    -[:ADDRESSES]-> (Persona)
+(GroundingChunk)    -[:ADDRESSES]-> (Audience)
 (GroundingChunk)    -[:ADDRESSES]-> (PainPoint)
 (GroundingChunk)    -[:RESOLVES]-> (Objection)
-(Persona)           -[:HAS_PAIN_POINT]-> (PainPoint)
-(Persona)           -[:HAS_TRIGGER]-> (BuyingTrigger)
-(Persona)           -[:HAS_OBJECTION]-> (Objection)
+(Audience)           -[:HAS_PAIN_POINT]-> (PainPoint)
+(Audience)           -[:HAS_TRIGGER]-> (BuyingTrigger)
+(Audience)           -[:HAS_OBJECTION]-> (Objection)
 ```
 
 Planned v0.9 cross-document edge:
@@ -301,17 +301,17 @@ Planned v0.9 cross-document edge:
 
 ```python
 engine.rebuild()                                    # Rebuild from DB
-engine.get_connections(house_id, persona?, channel?) # Entry point — routes to:
-engine.get_chunks_for_house(house_id)               # All chunks via CONTAINS traversal
-engine.get_chunks_for_persona(house_id, persona)    # Chunks via ADDRESSES edge
-engine.get_chunks_for_channel(house_id, channel)    # Chunks via APPLIES_TO edge
+engine.get_connections(spec_id, audience?, channel?) # Entry point — routes to:
+engine.get_chunks_for_house(spec_id)               # All chunks via CONTAINS traversal
+engine.get_chunks_for_persona(spec_id, audience)    # Chunks via ADDRESSES edge
+engine.get_chunks_for_channel(spec_id, channel)    # Chunks via APPLIES_TO edge
 engine.get_graph_data()                             # Full serialized graph for UI
 engine.get_stats()                                  # Node/edge counts by type
 ```
 
 #### Phase 1 vs Phase 2 Sub-attributes
 
-Phase 1 (current): PainPoint, BuyingTrigger, Objection nodes built from JSON arrays on PersonaModel — no schema migration required. Node IDs are synthetic: `pain_point:{house_id}:{persona_name}:{i}`.
+Phase 1 (current): PainPoint, BuyingTrigger, Objection nodes built from JSON arrays on PersonaModel — no schema migration required. Node IDs are synthetic: `pain_point:{spec_id}:{persona_name}:{i}`.
 
 Phase 2 (planned): Normalized DB tables (`pain_points`, `buying_triggers`, `objections`) with real UUIDs. Graph engine uses DB-first with JSON fallback: if `store.list_pain_points(persona_id)` returns rows, use them; otherwise fall back to JSON array.
 
@@ -324,9 +324,9 @@ Single `Store` class wrapping a SQLAlchemy session factory. Exposed as a process
 > [!NOTE]
 > **Database & Terminology Mapping:**  
 > For backward compatibility with existing databases and tools, the underlying database schema and codebase reuse the original `message_houses` and `key_messages` names. The conceptual translation layer maps them as follows:
-> - **`message_houses` Table** ──► Represents a **Canon Domain** (e.g., product specification, legal compliance, HR handbook, or B2B marketing message house).
-> - **`key_messages` Table** ──► Represents **Canon Entries** (approved statements, facts, or guidelines within a domain).
-> - **`document_type` Column** ──► Dictates the department or purpose (`message_house`, `product_spec`, `legal_rules`, `hr_policies`, `security_specs`).
+> - **`message_houses` Table** ──► Represents a **Spec** (e.g., product specification, legal compliance, HR handbook, or B2B marketing specs).
+> - **`key_messages` Table** ──► Represents **Assertions** (approved statements, facts, or guidelines within a domain).
+> - **`document_type` Column** ──► Dictates the department or purpose (`engineering_spec`, `product_spec`, `legal_rules`, `hr_policies`, `security_specs`).
 
 **Schema:**
 
@@ -344,25 +344,25 @@ message_houses (idx: workspace_id)
 ├── id (PK)
 ├── workspace_id
 ├── name, source, source_id
-├── document_type (enum: message_house|brand_guide|competitive_brief|corp_narrative|persona_library — default: message_house) [Planned v0.7]
+├── document_type (enum: engineering_spec|brand_guide|competitive_brief|corp_narrative|persona_library — default: engineering_spec) [Planned v0.7]
 ├── summary, audience, brand_personality (Text — no length limit)
 ├── positioning, tagline, differentiation (Text)
 ├── status, last_synced
 │
 ├── key_messages (idx: message_house_id)
 │   ├── id (PK)
-│   ├── section_type, priority, content (Text)
-│   └── variants (JSON), personas (JSON), channels (JSON)
+│   ├── assertion_type, priority, content (Text)
+│   └── variants (JSON), audiences (JSON), channels (JSON)
 │
-└── personas (idx: message_house_id)
+└── audiences (idx: message_house_id)
     ├── id (PK)
     ├── name, description
     └── pain_points, buying_triggers, objections (JSON)
 
-snapshots (idx: house_id)           artifact_history (idx: house_id)
+snapshots (idx: spec_id)           artifact_history (idx: spec_id)
 ├── id (PK)                         ├── id (PK)
-├── house_id (FK)                   ├── house_id (FK)
-├── label                           ├── skill_id, house_name
+├── spec_id (FK)                   ├── spec_id (FK)
+├── label                           ├── skill_id, spec_name
 ├── snapshot_json (JSON)            ├── sections_json (JSON)
 └── created_at                      ├── raw_content (Text)
                                     └── created_at
@@ -424,7 +424,7 @@ Jinja2 template system. No build step — rendered server-side by FastAPI via `J
 | Section | Key Implementation |
 |---|---|
 | Dashboard | Stats cards + graph stats widget (nodes/edges by type) |
-| Canon Domains | Domain list + tabbed detail (Overview / Messages / Personas) |
+| Specs | Domain list + tabbed detail (Overview / Messages / Audiences) |
 | Artifacts | Skill selector + context inputs + generator UI |
 | Upload | Drag-drop → preview → confirm flow |
 | Skills | CRUD for skill templates |
@@ -456,7 +456,7 @@ Browser                 FastAPI              Pipeline              External
   │                         │                    │  gpt-4o-mini         │ (structure)
   │                         │                    │◄──────────────────────┤
   │                         │                    ├──────────────────────► OpenAI
-  │                         │                    │  gpt-4o-mini         │ (personas JSON)
+  │                         │                    │  gpt-4o-mini         │ (audiences JSON)
   │                         │                    │◄──────────────────────┤
   │                         ├──store.upsert_house()                     │
   │                         ├──store.upsert_key_message() × N           │
@@ -485,7 +485,7 @@ AI Agent (Claude)       FastMCP              Store/Pipeline        External
   │  GroundingResult[]      │                    │                     │
   │                         │                    │                     │
   ├─build_ui_artifact()─────►│                    │                     │
-  │  (skill_id, house_id)   ├──ArtifactGenerator.generate()           │
+  │  (skill_id, spec_id)   ├──ArtifactGenerator.generate()           │
   │                         │                    ├──────────────────────► OpenAI
   │                         │                    │  gpt-4o-mini         │
   │                         │                    │◄──────────────────────┤
@@ -515,7 +515,7 @@ localhost:8001
         ├── PathRouter → FastMCP + FastAPI
         ├── SQLite: msgstack.db
         ├── Turbovec: data/msgstack_vectors.tvim (in-process, no external service)
-        └── Markdown proxies: data/sources/{house_id}.md
+        └── Markdown proxies: data/sources/{spec_id}.md
 
 Cloudflare Tunnel (cloudflared-tunnel container)
   └── mcp.abidc.dev → http://localhost:8001
@@ -548,7 +548,7 @@ msgstack-mcp/
 ├── src/
 │   ├── server.py          # FastMCP server + 20+ tools + MCP prompts
 │   ├── web_app.py         # FastAPI app — REST API + Jinja2 rendering
-│   ├── models.py          # Pydantic models (MessageHouse and KeyMessage back Canon Domain/Entry structures)
+│   ├── models.py          # Pydantic models (MessageHouse and KeyMessage back Spec/Entry structures)
 │   ├── store.py           # SQLAlchemy ORM + Store class (includes Pillar, PainPoint, etc.)
 │   ├── config.py          # Settings from env vars
 │   ├── auth.py            # API key auth, AuthContext
@@ -557,7 +557,7 @@ msgstack-mcp/
 │   ├── pipeline/
 │   │   ├── extract.py     # PDF/DOCX extraction — doc-order, heading structure, table dedup
 │   │   ├── structure.py   # LLM structuring → StructuredHouse (pillars, objections as {statement, response})
-│   │   ├── generator.py   # Artifact generation — full-context grounding, all messages + personas
+│   │   ├── generator.py   # Artifact generation — full-context grounding, all messages + audiences
 │   │   └── skills.py      # SkillManager + DEFAULT_SKILLS (12) — always-overwrite on start
 │   ├── grounding/
 │   │   ├── search.py      # Turbovec local vector search + source_markdown proxy indexing
