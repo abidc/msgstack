@@ -32,7 +32,7 @@
             </div>
             <div class="stat">
                 <div class="stat-value" id="stat-entries">—</div>
-                <div class="stat-label">Spec Entrys</div>
+                <div class="stat-label">Assertions</div>
             </div>
             <div class="stat">
                 <div class="stat-value" id="stat-artifacts">—</div>
@@ -41,23 +41,6 @@
             <div class="stat">
                 <div class="stat-value" id="stat-tokens">—</div>
                 <div class="stat-label">Tokens Used</div>
-            </div>
-        </div>
-
-        <!-- Spec Health Score gauge -->
-        <div class="card" style="margin-bottom:24px;display:flex;flex-direction:row;align-items:center;gap:24px;">
-            <div style="position:relative;display:flex;align-items:center;justify-content:center;width:110px;height:110px;flex-shrink:0;">
-                <svg style="width:100%;height:100%;transform:rotate(-90deg);">
-                    <circle cx="55" cy="55" r="46" stroke="var(--bg-3)" stroke-width="8" fill="transparent" />
-                    <circle cx="55" cy="55" r="46" stroke="var(--primary)" stroke-width="8" fill="transparent"
-                            stroke-dasharray="289" stroke-dashoffset="17.3" />
-                </svg>
-                <span style="position:absolute;font-size:24px;font-weight:700;font-family:var(--font-display);color:var(--text);">94%</span>
-            </div>
-            <div style="min-width:0;">
-                <h3 style="font-size:18px;font-weight:700;font-family:var(--font-display);margin-bottom:4px;color:var(--text);">Spec Health Score</h3>
-                <p style="font-size:14px;color:var(--text-2);">Your organizational messaging has a high narrative coherence. 1 active alignment gap flagged in HR specifications.</p>
-                <button class="btn btn-ghost btn-xs" style="margin-top:12px;" onclick="showSection('graph')">Explore Graph Gaps</button>
             </div>
         </div>
 
@@ -92,45 +75,6 @@
             </div>
         </div>
 
-        <!-- Pending Suggestions & Review Queue -->
-        <div class="card" style="margin-bottom:24px;background:var(--bg-1);border:1px solid var(--border);">
-            <h3 style="font-size:15px;font-weight:700;font-family:var(--font-display);margin-bottom:0;padding-bottom:10px;border-bottom:1px solid var(--border);color:var(--text);">Pending Suggestions & Review Queue</h3>
-            <div style="overflow-x:auto;margin-top:16px;">
-                <table class="table" style="width:100%;">
-                    <thead>
-                        <tr>
-                            <th>Element Type</th>
-                            <th>Target Domain</th>
-                            <th>Proposed Wording</th>
-                            <th>Suggested By</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><span class="doc-type-badge doc-type-spec">QAPair</span></td>
-                            <td><strong>Helix HR Solution</strong></td>
-                            <td><span style="font-family:monospace;font-size:12px;">"SLA updated to 99.9% support availability"</span></td>
-                            <td>PMM Team (Suggester)</td>
-                            <td>
-                                <button class="btn btn-primary btn-xs" style="background:var(--primary);margin-right:8px;">Accept</button>
-                                <button class="btn btn-ghost btn-xs" style="color:var(--danger);">Decline</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><span class="doc-type-badge doc-type-brand_guide">Style Rule</span></td>
-                            <td><strong>Brand Center</strong></td>
-                            <td><span style="font-family:monospace;font-size:12px;">"Do not use competitor terms in general release disclaimers."</span></td>
-                            <td>Legal Team (Suggester)</td>
-                            <td>
-                                <button class="btn btn-primary btn-xs" style="background:var(--primary);margin-right:8px;">Accept</button>
-                                <button class="btn btn-ghost btn-xs" style="color:var(--danger);">Decline</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
     </div>
 </section>
 
@@ -139,8 +83,8 @@
     <div class="page">
         <div class="page-header">
             <div>
-                <div class="page-title">Spec Domains</div>
-                <div class="page-subtitle">Your library of structured brand and product messaging</div>
+                <div class="page-title">Specs</div>
+                <div class="page-subtitle">Your services, contracts and policies — structured and queryable</div>
             </div>
         </div>
         <!-- Department Tabs -->
@@ -173,11 +117,10 @@
             <div class="form-group" style="margin-bottom:14px;">
                 <label class="form-label" for="uploadDocType">Document Type</label>
                 <select class="form-select" id="uploadDocType" style="max-width:320px;">
-                    <option value="spec" selected>Spec Domain</option>
-                    <option value="brand_guide">Brand Guide</option>
-                    <option value="competitive_brief">Competitive Brief</option>
-                    <option value="corp_narrative">Corporate Narrative</option>
-                    <option value="audience_library">Audience Library</option>
+                    <option value="engineering_spec" selected>Engineering Spec</option>
+                    <option value="service_catalog">Service Catalog</option>
+                    <option value="policy_shield">Policy Shield</option>
+                    <option value="incident_record">Incident Record</option>
                 </select>
                 <div style="font-size:11px;color:var(--text-3);margin-top:5px;">The document type determines how the AI structures the content.</div>
             </div>
@@ -371,7 +314,7 @@
                 </div>
                 
                 <div id="scoring-missing-container" style="display:none;">
-                    <div style="font-weight:600;color:var(--warning);margin-bottom:8px;">Missing Spec Entrys</div>
+                    <div style="font-weight:600;color:var(--warning);margin-bottom:8px;">Missing Assertions</div>
                     <ul id="scoring-missing" style="font-size:13px;color:var(--text-2);padding-left:20px;margin:0;"></ul>
                 </div>
             </div>
@@ -874,11 +817,10 @@
                     <div class="form-group" style="margin-bottom:10px;">
                         <label class="form-label" for="new-dept-grounding">Primary Grounding Type</label>
                         <select id="new-dept-grounding" class="form-select">
-                            <option value="spec" selected>Message Spec</option>
-                            <option value="brand_guide">Brand Guide</option>
-                            <option value="competitive_brief">Competitive Brief</option>
-                            <option value="corp_narrative">Corporate Narrative</option>
-                            <option value="audience_library">Audience Library</option>
+                            <option value="engineering_spec" selected>Engineering Spec</option>
+                    <option value="service_catalog">Service Catalog</option>
+                    <option value="policy_shield">Policy Shield</option>
+                    <option value="incident_record">Incident Record</option>
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom:12px;">
@@ -897,7 +839,7 @@
     <!-- Existing domain modal content -->
 </div>
 
-<!-- Floating Spec Navigator Button -->
+<!-- Floating Graph Navigator Button -->
 <div id="navigator-launcher" style="position:fixed;bottom:24px;right:24px;z-index:50;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);border-radius:50%;width:54px;height:54px;background:var(--primary);border:2px solid var(--border);"
      onclick="toggleNavigator()">
     <span style="color:#fff;font-size:22px;line-height:1;">✦</span>
@@ -908,14 +850,14 @@
     
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);background:var(--bg-2);border-radius:12px 12px 0 0;">
-        <h3 style="font-weight:700;font-family:var(--font-display);font-size:14px;color:var(--text);">Spec Navigator</h3>
+        <h3 style="font-weight:700;font-family:var(--font-display);font-size:14px;color:var(--text);">Graph Navigator</h3>
         <button style="font-size:13px;background:none;border:none;cursor:pointer;color:var(--text-3);padding:0;" onclick="toggleNavigator()">✕</button>
     </div>
 
     <!-- Messages Container -->
     <div id="chat-messages" style="flex:1;padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;background:var(--bg);">
         <div style="padding:12px;border-radius:8px;font-size:13px;background:var(--bg-2);color:var(--text-2);">
-            Hi! I'm the Spec Navigator super-agent. Ask me anything about your active brand specifications or narrative drift.
+            Hi! I'm the Graph Navigator super-agent. Ask me anything about your active brand specifications or narrative drift.
         </div>
     </div>
 
@@ -944,17 +886,16 @@
     let _dragSrcEl = null;
     let activeDept = 'All';
     const GROUNDING_LABELS = {
-        'spec': 'Message Spec',
-        'corp_narrative': 'Corp Narrative',
-        'audience_library': 'Audience Library',
-        'competitive_brief': 'Competitive Brief'
+        'engineering_spec': 'Engineering Spec',
+        'service_catalog':  'Service Catalog',
+        'policy_shield':    'Policy Shield',
+        'incident_record':  'Incident Record'
     };
     let DEPT_PRIMARY_GROUNDING = {
-        "Product Marketing": "spec",
-        "Company Marketing": "corp_narrative",
-        "Enablement": "audience_library",
-        "Product Management": "competitive_brief",
-        "General": "spec"
+        "Platform":    "engineering_spec",
+        "Engineering": "engineering_spec",
+        "Security":    "policy_shield",
+        "General":     "engineering_spec"
     };
     function switchDept(dept) {
         activeDept = dept;
@@ -1006,11 +947,10 @@
     // ── Routing ────────────────────────────────────────────────────────────────
 
     const DOC_TYPE_LABELS = {
-        'spec':     'Spec Domain',
-        'brand_guide':       'Brand Guide',
-        'competitive_brief': 'Competitive Brief',
-        'corp_narrative':    'Corp Narrative',
-        'audience_library':   'Audience Library',
+        'engineering_spec': 'Engineering Spec',
+        'service_catalog':  'Service Catalog',
+        'policy_shield':    'Policy Shield',
+        'incident_record':  'Incident Record',
     };
 
     function docTypeBadge(docType) {
@@ -1617,7 +1557,7 @@
     function openAddEntry(domainId) {
         const opts = SECTION_ORDER.map(s=>`<option value="${s}">${SECTION_META[s]?.label||s}</option>`).join('');
         openModal(`<div style="padding:24px;">
-            <div style="font-weight:600;font-size:15px;margin-bottom:16px;">Add Spec Entry</div>
+            <div style="font-weight:600;font-size:15px;margin-bottom:16px;">Add Assertion</div>
             <div style="margin-bottom:12px;">
                 <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Section Type</label>
                 <select id="nm-type" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;">${opts}</select>
@@ -3811,7 +3751,7 @@ const NODE_COLORS = {
         }
     }
 
-    // ── Spec Navigator Chat ──────────────────────────────────────────────────────
+    // ── Graph Navigator Chat ──────────────────────────────────────────────────────
 
     function toggleNavigator() {
         const panel = document.getElementById("navigator-panel");

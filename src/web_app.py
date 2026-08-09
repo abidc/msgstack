@@ -1652,10 +1652,10 @@ def run_seed():
     from seed_data.seed import seed as run_seed_script
     from src.grounding.search import GroundingEngine
 
-    run_seed_script()
+    newly_seeded = run_seed_script()
 
     specs = store.list_specs()
-    total_messages = sum(len(store.get_key_messages(h.id)) for h in specs)
+    total_messages = sum(len(store.get_assertions(h.id, include_unapproved=True)) for h in specs)
     total_audiences = sum(len(store.get_audiences(h.id)) for h in specs)
 
     indexed_count = 0
@@ -1673,10 +1673,13 @@ def run_seed():
             pass
 
     return {
-        "seeded": len(specs),
+        "seeded": newly_seeded,
+        "specs": len(specs),
         "indexed": indexed_count,
-        "total_messages": total_messages,
+        "total_assertions": total_messages,
         "total_audiences": total_audiences,
+        "entities": len(store.list_entities()),
+        "edges": len(store.list_edges()),
     }
 
 
