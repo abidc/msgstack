@@ -38,7 +38,7 @@ from src.models import (
     Spec, Assertion, Audience, AssertionType,
     InheritancePolicy, ArtifactEntryBinding,
     Entity, Edge, NodeType, RelType, PROPAGATING_RELS,
-    LEGACY_SECTION_TYPE_MAP,
+    LEGACY_SECTION_TYPE_MAP, LEGACY_SCHEMA_TYPE_MAP, SchemaType,
 )
 
 
@@ -577,7 +577,7 @@ class Store:
             ])
             _rename_columns([
                 ('canon_entries', 'message_house_id', 'canon_domain_id'),
-                ('audiences', 'message_house_id', 'canon_domain_id'),
+                ('personas', 'message_house_id', 'canon_domain_id'),
                 ('pillars', 'house_id', 'canon_domain_id'),
                 ('snapshots', 'house_id', 'canon_domain_id'),
                 ('artifact_history', 'house_id', 'canon_domain_id'),
@@ -597,6 +597,7 @@ class Store:
             ])
             _rename_columns([
                 ('assertions', 'canon_domain_id', 'spec_id'),
+                ('personas', 'canon_domain_id', 'spec_id'),
                 ('audiences', 'canon_domain_id', 'spec_id'),
                 ('pillars', 'canon_domain_id', 'spec_id'),
                 ('snapshots', 'canon_domain_id', 'spec_id'),
@@ -623,8 +624,12 @@ class Store:
                 ('assertions', 'section_type', 'assertion_type'),
                 ('vector_metadata', 'section_type', 'assertion_type'),
                 ('assertions', 'persona_ids', 'audience_ids'),
+                ('assertions', 'personas', 'audiences'),
+                ('vector_metadata', 'persona', 'audience'),
                 ('qa_pairs', 'persona_id', 'audience_id'),
                 ('audiences', 'persona_id', 'audience_id'),
+                ('audiences', 'canon_domain_id', 'spec_id'),
+                ('audiences', 'objections', 'qa_pairs'),
                 ('specs', 'document_type', 'schema_type'),
                 ('departments', 'primary_grounding_type', 'primary_schema_type'),
             ])
@@ -653,6 +658,29 @@ class Store:
                             log.warning(
                                 "Unmapped legacy section_type %r -> %r; review these rows",
                                 old_val, new_val)
+                    conn.commit()
+
+            # Same treatment for schema_type: existing rows carry PMM-era
+            # values (message_house, persona_library, …) that are no longer
+            # members of the enum, and Pydantic rejects them on read.
+            if "specs" in tables:
+                cols = {c["name"] for c in insp.get_columns("specs")}
+                col = "schema_type" if "schema_type" in cols else "document_type"
+                if col in cols:
+                    known = {r[0] for r in conn.execute(text(
+                        f"SELECT DISTINCT {col} FROM specs"))}
+                    valid = {t.value for t in SchemaType}
+                    for old_val in known:
+                        if old_val in valid or old_val is None:
+                            continue
+                        new_val = LEGACY_SCHEMA_TYPE_MAP.get(
+                            old_val, SchemaType.ENGINEERING_SPEC.value)
+                        conn.execute(
+                            text(f"UPDATE specs SET {col} = :new WHERE {col} = :old"),
+                            {"new": new_val, "old": old_val})
+                        if old_val not in LEGACY_SCHEMA_TYPE_MAP:
+                            log.warning(
+                                "Unmapped legacy schema_type %r -> %r", old_val, new_val)
                     conn.commit()
 
             # PMM child tables. Their rows were exported to
@@ -846,6 +874,20 @@ class Store:
                 """))
                 conn.commit()
 
+            if "brand_assets" in tables:
+                ba_cols = {c["name"] for c in insp.get_columns("brand_assets")}
+                for col, col_def in (
+                    ("mime_type", "VARCHAR(100) DEFAULT ''"),
+                    ("file_size", "INTEGER DEFAULT 0"),
+                    ("updated_at", "DATETIME"),
+                ):
+                    if col not in ba_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE brand_assets ADD COLUMN {col} {col_def}"))
+                            conn.commit()
+                        except Exception:
+                            pass
+
             if "artifact_entry_bindings" not in tables:
                 conn.execute(text("""
                     CREATE TABLE artifact_entry_bindings (
@@ -920,7 +962,10 @@ class Store:
                         asset_name TEXT NOT NULL,
                         asset_type TEXT DEFAULT 'logo',
                         file_path TEXT NOT NULL,
-                        created_at DATETIME NOT NULL
+                        mime_type VARCHAR(100) DEFAULT '',
+                        file_size INTEGER DEFAULT 0,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME
                     )
                 """))
                 conn.commit()
@@ -3356,20 +3401,26 @@ def _invalidate_graph() -> None:
 
 
 def _domain_from_row(row: SpecModel) -> Spec:
+    # Text columns are nullable in databases created before these fields had
+    # defaults, and the model declares them non-optional. Coerce rather than
+    # reject: a legacy row with a NULL summary is still a valid Spec.
+    def _s(v: str | None) -> str:
+        return v or ""
+
     return Spec(
         id=UUID(row.id),
-        name=row.name,
-        source=row.source,
+        name=_s(row.name),
+        source=_s(row.source) or "manual",
         source_id=row.source_id,
         schema_type=row.schema_type or "engineering_spec",
-        summary=row.summary,
-        audience=row.audience,
-        brand_personality=row.brand_personality,
-        positioning=row.positioning,
-        tagline=row.tagline,
-        differentiation=row.differentiation,
-        status=SpecStatus(row.status),
-        department=row.department,
+        summary=_s(row.summary),
+        audience=_s(row.audience),
+        brand_personality=_s(row.brand_personality),
+        positioning=_s(row.positioning),
+        tagline=_s(row.tagline),
+        differentiation=_s(row.differentiation),
+        status=SpecStatus(row.status or "active"),
+        department=_s(row.department) or "General",
         last_synced=row.last_synced,
         last_reviewed=row.last_reviewed,
         # Phase 2 additions:

@@ -66,6 +66,18 @@ class SchemaType(str, Enum):
     INCIDENT_RECORD = "incident_record"     # postmortems and their findings
 
 
+#: Historical grounding_type/document_type values -> SchemaType. As with
+#: LEGACY_SECTION_TYPE_MAP these KEYS are on-disk values from the PMM era, not
+#: current vocabulary — do not "fix" them to match the enum.
+LEGACY_SCHEMA_TYPE_MAP: dict[str, str] = {
+    "message_house":      SchemaType.ENGINEERING_SPEC.value,
+    "brand_guide":        SchemaType.ENGINEERING_SPEC.value,
+    "competitive_brief":  SchemaType.ENGINEERING_SPEC.value,
+    "corp_narrative":     SchemaType.ENGINEERING_SPEC.value,
+    "persona_library":    SchemaType.SERVICE_CATALOG.value,
+}
+
+
 DEPARTMENT_PRIMARY_SCHEMA = {
     "General": SchemaType.ENGINEERING_SPEC,
     "Engineering": SchemaType.ENGINEERING_SPEC,

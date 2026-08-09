@@ -397,3 +397,119 @@ def test_hub_node_is_not_traversed_through(store):
     found = engine.expand([str(assertions[0].id)], hops=2)
     assert found == [] or len(found) < engine_hub_count - 1, \
         "expansion must not fan out through a high-degree hub"
+
+
+# ── Schema drift ─────────────────────────────────────────────────────────
+
+def test_migrated_schema_matches_orm(tmp_path):
+    """Every ORM-mapped column must exist in a database migrated from the
+    oldest supported schema.
+
+    This exists because three separate bulk renames rewrote the *historical*
+    table and column names inside the migration chain, turning steps into
+    silent no-ops. Tests that build a fresh database never notice: create_all
+    produces the current schema directly. Only a migrated database diverges.
+    """
+    import sqlite3
+    from sqlalchemy import inspect
+    from src.store import Store, Base
+
+    db = tmp_path / "legacy.db"
+    c = sqlite3.connect(str(db))
+    # a gen-0 (message_house era) database, the oldest shape we claim to migrate
+    c.executescript('''
+    CREATE TABLE message_houses (id VARCHAR(36) PRIMARY KEY, workspace_id VARCHAR(36) DEFAULT 'default',
+      name VARCHAR(255), source VARCHAR(50) DEFAULT 'manual', source_id VARCHAR(255),
+      document_type VARCHAR(30) DEFAULT 'message_house', summary TEXT, audience TEXT,
+      brand_personality TEXT, positioning TEXT, tagline VARCHAR(500), differentiation TEXT,
+      status VARCHAR(20) DEFAULT 'active', last_synced DATETIME);
+    CREATE TABLE key_messages (id VARCHAR(36) PRIMARY KEY, message_house_id VARCHAR(36),
+      section_type VARCHAR(50), priority INTEGER, content TEXT, variants TEXT,
+      personas TEXT, source_chunk_id VARCHAR(64));
+    CREATE TABLE personas (id VARCHAR(36) PRIMARY KEY, message_house_id VARCHAR(36),
+      name VARCHAR(255), description TEXT, pain_points TEXT, buying_triggers TEXT,
+      objections TEXT, status VARCHAR(20) DEFAULT 'draft', approved_by VARCHAR(255),
+      approved_at DATETIME);
+    INSERT INTO message_houses (id,name,summary) VALUES ('h1','Legacy','from gen-0');
+    INSERT INTO key_messages (id,message_house_id,section_type,priority,content)
+      VALUES ('m1','h1','headline',1,'legacy claim');
+    INSERT INTO personas (id,message_house_id,name,description)
+      VALUES ('p1','h1','Legacy Audience','desc');
+    ''')
+    c.commit(); c.close()
+
+    Store(str(db)).init()
+
+    insp = inspect(Store(str(db)).engine)
+    actual = {t: {col["name"] for col in insp.get_columns(t)} for t in insp.get_table_names()}
+
+    missing = []
+    for table_name, table in Base.metadata.tables.items():
+        if table_name not in actual:
+            missing.append(f"{table_name} (table absent)")
+            continue
+        for col in table.columns:
+            if col.name not in actual[table_name]:
+                missing.append(f"{table_name}.{col.name}")
+
+    assert not missing, (
+        "migrated schema is missing ORM columns — a migration step is a no-op:\n  "
+        + "\n  ".join(sorted(missing))
+    )
+
+
+def test_migrated_enum_values_are_valid(tmp_path):
+    """Every enum-backed column in a migrated database must hold a value the
+    current enum accepts.
+
+    Column-existence checks do not catch this: the column migrates fine while
+    its *contents* stay on the retired vocabulary, and the failure only appears
+    when Pydantic validates a row on read — i.e. in production, not in tests.
+    """
+    import sqlite3
+    from src.store import Store
+    from src.models import AssertionType, SchemaType
+
+    db = tmp_path / "legacy_values.db"
+    c = sqlite3.connect(str(db))
+    c.executescript('''
+    CREATE TABLE message_houses (id VARCHAR(36) PRIMARY KEY, workspace_id VARCHAR(36) DEFAULT 'default',
+      name VARCHAR(255), source VARCHAR(50) DEFAULT 'manual', source_id VARCHAR(255),
+      document_type VARCHAR(30), summary TEXT, audience TEXT, brand_personality TEXT,
+      positioning TEXT, tagline VARCHAR(500), differentiation TEXT,
+      status VARCHAR(20) DEFAULT 'active', last_synced DATETIME);
+    CREATE TABLE key_messages (id VARCHAR(36) PRIMARY KEY, message_house_id VARCHAR(36),
+      section_type VARCHAR(50), priority INTEGER, content TEXT, variants TEXT,
+      personas TEXT, source_chunk_id VARCHAR(64));
+    ''')
+    # every retired vocabulary value we ever wrote to disk
+    spec_ids = [str(uuid4()) for _ in range(5)]
+    for i, dt in enumerate(["message_house", "brand_guide", "competitive_brief",
+                            "corp_narrative", "persona_library"]):
+        c.execute("INSERT INTO message_houses (id,name,document_type) VALUES (?,?,?)",
+                  (spec_ids[i], f"Spec {i}", dt))
+    for i, st in enumerate(["headline", "subhead", "benefit", "use_case", "proof_point",
+                            "objection", "social_proof", "positioning", "know_your_market",
+                            "brand_voice", "style_rule", "word_list", "competitor_strength",
+                            "competitor_weakness", "competitive_response", "narrative_pillar",
+                            "company_value", "founding_story", "persona_detail"]):
+        c.execute("INSERT INTO key_messages (id,message_house_id,section_type,priority,content)"
+                  " VALUES (?,?,?,?,?)", (str(uuid4()), spec_ids[0], st, 1, f"claim {i}"))
+    c.commit(); c.close()
+
+    store = Store(str(db))
+    store.init()
+
+    con = sqlite3.connect(str(db))
+    bad_schema = [r[0] for r in con.execute("SELECT DISTINCT schema_type FROM specs")
+                  if r[0] not in {t.value for t in SchemaType}]
+    bad_assert = [r[0] for r in con.execute("SELECT DISTINCT assertion_type FROM assertions")
+                  if r[0] not in {t.value for t in AssertionType}]
+    assert not bad_schema, f"invalid schema_type values survived migration: {bad_schema}"
+    assert not bad_assert, f"invalid assertion_type values survived migration: {bad_assert}"
+
+    # and the rows must actually load through Pydantic, which is where
+    # production failed
+    specs = store.list_specs()
+    assert len(specs) == 5
+    assert len(store.get_assertions(specs[0].id, include_unapproved=True)) == 19
