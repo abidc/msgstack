@@ -21,7 +21,7 @@ This document is a summary for contributors working in this repo.
 3. **Serif for statements and stat numerals; sans for UI and body; mono for
    stamps and records.** Statements are sentence case — never uppercase.
 4. **The ✦ four-point star** is the brand mark: wordmark (`MsgStack ✦`), index
-   rules, LOCKED badges, atlas stamps (`CANON № 441-B ✦`).
+   rules, LOCKED badges, atlas stamps (`SPEC № 441-B ✦`).
 5. **Anti-slop constraints:** no gradients on UI surfaces, no glassmorphism,
    no glow, no neon accents, no purple.
 
