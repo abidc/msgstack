@@ -577,3 +577,51 @@ def test_legacy_department_schema_type_is_migrated(tmp_path):
     c.close()
     assert got in {m.value for m in SchemaType}
     assert got == SchemaType.ENGINEERING_SPEC.value
+
+
+# ── Referential integrity of the graph tables ────────────────────────────
+
+def test_deleting_a_spec_removes_its_edges_and_mentions(store, two_specs):
+    """edges is polymorphic — src/dst are (type, id) pairs, so SQLite has no FK
+    to cascade. Without an explicit purge, deleting a spec left dangling rows
+    that the graph silently skipped: present in the database, absent from every
+    traversal."""
+    api, slo, a1, a2 = two_specs
+    eid = store.resolve_entity("checkout-endpoint")
+    store.add_entity_mention(eid, str(a1.id), str(api.id))
+    store.add_entity_mention(eid, str(a2.id), str(slo.id))
+    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    assert len(store.list_edges()) == 1
+    assert len(store.list_entity_mentions()) == 2
+
+    store.delete_spec(api.id)
+
+    assert store.list_edges() == [], "edge referencing a deleted assertion survived"
+    assert all(m["assertion_id"] != str(a1.id) for m in store.list_entity_mentions())
+
+
+def test_purge_sweeps_pre_existing_orphans(store, two_specs):
+    """Databases already carrying dangling rows must be cleanable."""
+    import sqlite3
+    api, slo, a1, a2 = two_specs
+    eid = store.resolve_entity("checkout-endpoint")
+    store.add_entity_mention(eid, str(a1.id), str(api.id))
+    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+
+    # delete the assertion behind the store's back to simulate the old behaviour
+    with store.session() as s:
+        from src.store import AssertionModel
+        s.query(AssertionModel).filter(AssertionModel.id == str(a1.id)).delete()
+        s.commit()
+
+    result = store.purge_orphaned_graph_refs()
+    assert result["edges_removed"] == 1
+    assert result["mentions_removed"] == 1
+    assert store.list_edges() == []
+
+
+def test_purge_is_a_noop_on_a_healthy_graph(store, two_specs):
+    _, _, a1, a2 = two_specs
+    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    assert store.purge_orphaned_graph_refs() == {"mentions_removed": 0, "edges_removed": 0}
+    assert len(store.list_edges()) == 1

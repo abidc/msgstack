@@ -1386,14 +1386,70 @@ class Store:
     def delete_spec(self, domain_id: UUID) -> bool:
         with self.session() as s:
             row = s.get(SpecModel, str(domain_id))
-            if row:
-                s.delete(row)
-                s.commit()
-                _invalidate_graph()
-                return True
-            return False
+            if not row:
+                return False
+            # Assertions cascade via FK, but edges and entity_mentions cannot:
+            # edges are polymorphic (src/dst are (type, id) pairs, so SQLite has
+            # no FK to hang a cascade on) and mentions carry a spec_id copy.
+            # Left alone they become dangling rows that the graph silently skips
+            # — the relationships appear to exist in the database and are absent
+            # from every traversal.
+            assertion_ids = [
+                r[0] for r in s.query(AssertionModel.id)
+                .filter(AssertionModel.spec_id == str(domain_id)).all()
+            ]
+            self._purge_graph_refs(s, assertion_ids, str(domain_id))
+            s.delete(row)
+            s.commit()
+            _invalidate_graph()
+            return True
 
-    delete_spec = delete_spec  # Deprecated alias
+    def _purge_graph_refs(self, session, assertion_ids: list[str], spec_id: str) -> int:
+        """Remove edges and entity mentions that reference these nodes."""
+        ids = set(assertion_ids)
+        removed = 0
+        if ids:
+            removed += session.query(EntityMentionModel).filter(
+                EntityMentionModel.assertion_id.in_(ids)
+            ).delete(synchronize_session=False)
+            for col_t, col_i in ((EdgeModel.src_type, EdgeModel.src_id),
+                                 (EdgeModel.dst_type, EdgeModel.dst_id)):
+                removed += session.query(EdgeModel).filter(
+                    col_t == "assertion", col_i.in_(ids)
+                ).delete(synchronize_session=False)
+        for col_t, col_i in ((EdgeModel.src_type, EdgeModel.src_id),
+                             (EdgeModel.dst_type, EdgeModel.dst_id)):
+            removed += session.query(EdgeModel).filter(
+                col_t == "spec", col_i == spec_id
+            ).delete(synchronize_session=False)
+        return removed
+
+    def purge_orphaned_graph_refs(self) -> dict:
+        """Sweep edges and mentions whose endpoints no longer exist."""
+        with self.session() as s:
+            live_a = {r[0] for r in s.query(AssertionModel.id).all()}
+            live_s = {r[0] for r in s.query(SpecModel.id).all()}
+            live_e = {r[0] for r in s.query(EntityModel.id).all()}
+
+            dead_m = [m.id for m in s.query(EntityMentionModel).all()
+                      if m.assertion_id not in live_a or m.entity_id not in live_e]
+            dead_edges = []
+            for e in s.query(EdgeModel).all():
+                pool_src = {"assertion": live_a, "spec": live_s, "entity": live_e}.get(e.src_type, set())
+                pool_dst = {"assertion": live_a, "spec": live_s, "entity": live_e}.get(e.dst_type, set())
+                if e.src_id not in pool_src or e.dst_id not in pool_dst:
+                    dead_edges.append(e.id)
+
+            if dead_m:
+                s.query(EntityMentionModel).filter(
+                    EntityMentionModel.id.in_(dead_m)).delete(synchronize_session=False)
+            if dead_edges:
+                s.query(EdgeModel).filter(
+                    EdgeModel.id.in_(dead_edges)).delete(synchronize_session=False)
+            s.commit()
+        if dead_m or dead_edges:
+            _invalidate_graph()
+        return {"mentions_removed": len(dead_m), "edges_removed": len(dead_edges)}
 
     # --- Review Logs ---
 
