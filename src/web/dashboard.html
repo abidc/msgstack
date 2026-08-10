@@ -676,14 +676,14 @@
                         <label class="form-label">Primary Color</label>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input type="color" id="brand-color-primary" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-primary').value = this.value" />
-                            <input type="text" id="brand-text-primary" class="form-input" value="#3E4E80" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-primary').value = this.value" />
+                            <input type="text" id="brand-text-primary" class="form-input" value="#4ADE80" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-primary').value = this.value" />
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Secondary Color</label>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input type="color" id="brand-color-secondary" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-secondary').value = this.value" />
-                            <input type="text" id="brand-text-secondary" class="form-input" value="#EFEADD" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-secondary').value = this.value" />
+                            <input type="text" id="brand-text-secondary" class="form-input" value="#121417" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-secondary').value = this.value" />
                         </div>
                     </div>
                 </div>
@@ -693,14 +693,14 @@
                         <label class="form-label">Accent Color</label>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input type="color" id="brand-color-accent" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-accent').value = this.value" />
-                            <input type="text" id="brand-text-accent" class="form-input" value="#C05A1E" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-accent').value = this.value" />
+                            <input type="text" id="brand-text-accent" class="form-input" value="#F59E0B" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-accent').value = this.value" />
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Background Color</label>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input type="color" id="brand-color-bg" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-bg').value = this.value" />
-                            <input type="text" id="brand-text-bg" class="form-input" value="#F6F3EA" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-bg').value = this.value" />
+                            <input type="text" id="brand-text-bg" class="form-input" value="#0B0C0E" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-bg').value = this.value" />
                         </div>
                     </div>
                 </div>
@@ -709,7 +709,7 @@
                     <label class="form-label">Text Color</label>
                     <div style="display:flex;gap:8px;align-items:center;">
                         <input type="color" id="brand-color-text" style="width:36px;height:34px;padding:2px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:var(--radius);" onchange="document.getElementById('brand-text-text').value = this.value" />
-                        <input type="text" id="brand-text-text" class="form-input" value="#23201A" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-text').value = this.value" />
+                        <input type="text" id="brand-text-text" class="form-input" value="#E6E8EA" style="flex:1;font-family:monospace;font-size:12px;" onchange="document.getElementById('brand-color-text').value = this.value" />
                     </div>
                 </div>
 
@@ -842,7 +842,7 @@
 <!-- Floating Graph Navigator Button -->
 <div id="navigator-launcher" style="position:fixed;bottom:24px;right:24px;z-index:50;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);border-radius:50%;width:54px;height:54px;background:var(--primary);border:2px solid var(--border);"
      onclick="toggleNavigator()">
-    <span style="color:#fff;font-size:22px;line-height:1;">✦</span>
+    <span style="color:#0B0C0E;font-size:22px;line-height:1;font-family:var(--font-mono);font-weight:700;">&gt;_</span>
 </div>
 
 <!-- Sliding Chat Panel (hidden by default) -->
@@ -3025,7 +3025,7 @@ const NODE_COLORS = {
         draft:      { label: 'DRAFT',       color: 'var(--text-3)',   bg: 'rgba(156,148,127,.10)', border: 'var(--border)' },
         in_review:  { label: 'IN REVIEW',   color: 'var(--warn)',     bg: 'var(--warn-dim)',       border: 'rgba(138,106,31,.35)' },
         approved:   { label: 'APPROVED',    color: 'var(--success)',  bg: 'var(--success-dim)',    border: 'rgba(86,103,63,.35)' },
-        locked:     { label: 'LOCKED ✦',    color: 'var(--ember)',    bg: 'var(--ember-dim)',      border: 'rgba(232,118,58,.45)' },
+        locked:     { label: 'LOCKED',    color: 'var(--ember)',    bg: 'var(--ember-dim)',      border: 'rgba(245,158,11,.45)' },
         outdated:   { label: 'OUTDATED',    color: 'var(--danger)',   bg: 'var(--danger-dim)',     border: 'rgba(158,59,46,.35)' },
     };
 
@@ -3037,7 +3037,7 @@ const NODE_COLORS = {
     function tierBadge(tier) {
         // ATLAS stamp grammar — ember marks LOCKED only; atlas blue for structured; draft-gray for grounded
         const tiers = {
-            'tier_1_locked':    {label:'T1 LOCKED ✦',    cls:'badge-locked'},
+            'tier_1_locked':    {label:'T1 LOCKED',    cls:'badge-locked'},
             'tier_2_structured':{label:'T2 STRUCTURED',  cls:'badge-active'},
             'tier_3_grounded':  {label:'T3 GROUNDED',    cls:'badge-draft'},
         };

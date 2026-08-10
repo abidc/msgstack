@@ -407,3 +407,89 @@ class TestSpecNameResolution:
         from src.pipeline.structure import resolve_spec_name
         text = "Some preamble prose.\n\n# Appendix A\n\nmore"
         assert resolve_spec_name("Acme Service", text, "f.md") == "Acme Service"
+
+
+class TestPromptCarriesTheDocument:
+    """Regression: the rewritten engineering prompt lost its {content}
+    placeholder. .replace() then did nothing, the model received an empty
+    SOURCE DOCUMENT, and it invented an entire plausible API spec — correct
+    shape, correct assertion types, completely fabricated facts. Nothing in the
+    output distinguished it from a real extraction."""
+
+    def test_every_prompt_template_carries_its_source_text(self):
+        """Templates use either {content} (str.replace) or {text} (str.format).
+        Either is fine; having neither means the document never reaches the
+        model."""
+        from src.pipeline import structure
+        names = [n for n in dir(structure) if n.endswith("_PROMPT")]
+        assert names, "no prompt templates found"
+        for n in names:
+            tpl = getattr(structure, n)
+            assert "{content}" in tpl or "{text}" in tpl, \
+                f"{n} has no source-text placeholder; the document cannot reach the model"
+
+    def test_prompt_map_values_all_carry_the_placeholder(self):
+        from src.pipeline.structure import SpecStructurer
+        for schema_type, template in SpecStructurer._PROMPT_MAP.items():
+            assert "{content}" in template, f"prompt for {schema_type} lost {{content}}"
+
+    def test_structuring_refuses_a_template_without_the_placeholder(self):
+        from src.pipeline.structure import SpecStructurer
+        import pytest
+        s = SpecStructurer.__new__(SpecStructurer)
+        s._usage = {"input_tokens": 0, "output_tokens": 0}
+        with pytest.raises(ValueError, match="placeholder"):
+            s._structure_single_chunk("some document text", "doc.md", "PROMPT WITHOUT IT")
+
+
+class TestLockedMarkerHandling:
+    """A [LOCKED] marker is metadata about a fact, not part of it. The
+    structurer is told both to split compound sentences and to reproduce the
+    marker verbatim, so it emitted "**[LOCKED]**" as a standalone assertion."""
+
+    def test_marker_detected_and_stripped(self):
+        from src.web_app import _LOCKED_MARKER_RE as r
+        t = "Rate limit is 1000 requests/minute. **[LOCKED]**"
+        assert r.search(t)
+        assert r.sub("", t).strip(" -—\t") == "Rate limit is 1000 requests/minute."
+
+    def test_marker_only_fragment_reduces_to_empty(self):
+        from src.web_app import _LOCKED_MARKER_RE as r
+        assert r.sub("", "**[LOCKED]**").strip(" -—\t") == ""
+
+    def test_bare_and_bold_forms_both_match(self):
+        from src.web_app import _LOCKED_MARKER_RE as r
+        for form in ("[LOCKED]", "**[LOCKED]**", "[locked]"):
+            assert r.search(f"TLS 1.3 only {form}")
+
+    def test_unmarked_content_is_untouched(self):
+        from src.web_app import _LOCKED_MARKER_RE as r
+        t = "Access tokens live 3600s."
+        assert not r.search(t)
+        assert r.sub("", t) == t
+
+
+class TestCommitPathSymbolsResolve:
+    """Regression: the LOCKED-marker handling referenced ContentTier, which
+    web_app never imported. The conditional short-circuits, so only documents
+    that actually contained [LOCKED] raised NameError — two of five — and the
+    sync caught it, logged, and still reported "5 files ingested"."""
+
+    def test_commit_path_names_are_all_importable(self):
+        import src.web_app as w
+        for name in ("Assertion", "AssertionStatus", "AssertionType",
+                     "ContentTier", "Channel", "Spec", "SchemaType",
+                     "Audience", "_LOCKED_MARKER_RE"):
+            assert hasattr(w, name), f"web_app is missing {name}, used on the ingest path"
+
+    def test_locked_branch_constructs_an_assertion(self):
+        """Exercise the branch that only fires for [LOCKED] content."""
+        from uuid import uuid4
+        from src.models import Assertion, AssertionStatus, AssertionType, ContentTier
+        a = Assertion(
+            spec_id=uuid4(), assertion_type=AssertionType.CONSTRAINT, priority=1,
+            content="Rate limit is 1000 requests/minute.",
+            status=AssertionStatus.LOCKED, content_tier=ContentTier.TIER_1_LOCKED,
+        )
+        assert str(a.status) == "locked"
+        assert str(a.content_tier) == "tier_1_locked"

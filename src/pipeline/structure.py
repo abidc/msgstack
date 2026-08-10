@@ -201,8 +201,11 @@ Rules:
   call fails, what to check first. Not sales objections.
 - If a fact does not fit any pillar, put it in ungrouped_chunks rather than
   forcing it or dropping it.
+- Extract ONLY what this document states. If it does not mention something,
+  omit it. Never fill a gap with a plausible-sounding default.
 
 SOURCE DOCUMENT:
+{content}
 """
 
 _BRAND_GUIDE_PROMPT = """You are extracting brand and style guidelines from a document.
@@ -441,6 +444,14 @@ class SpecStructurer:
         """Structure one text chunk with retry on transient OpenAI errors."""
         # Use replace instead of .format() so curly braces in the document don't
         # get interpreted as format placeholders (causes KeyError on e.g. JSON snippets).
+        # A prompt template that lost its {content} placeholder silently sends
+        # the model instructions with an empty SOURCE DOCUMENT, and it responds
+        # by inventing a plausible document. The output looks completely normal
+        # — right shape, right assertion types — so fail loudly instead.
+        if "{content}" not in prompt_template:
+            raise ValueError(
+                "Structuring prompt is missing its {content} placeholder; the "
+                "source document would never reach the model.")
         prompt = prompt_template.replace("{content}", text)
         raw = self._llm_call_with_retry(prompt, response_format={"type": "json_object"})
         try:

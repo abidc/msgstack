@@ -1,5 +1,6 @@
 """FastAPI web app — admin UX for MsgStack MCP management."""
 
+import re
 import logging
 import os
 import time
@@ -30,7 +31,7 @@ log = logging.getLogger(__name__)
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
 from src.models import (
     ArtifactStatus, Channel, SchemaType, SpecStatus, AssertionStatus,
-    Assertion, Spec, Audience, AssertionType,
+    Assertion, Spec, Audience, AssertionType, ContentTier,
 )
 from src.store import init_store, get_store
 from src.pipeline.extract import ExtractionError, extract_text, chunk_text, save_upload
@@ -1243,6 +1244,11 @@ async def confirm_structure(data: dict, auth: AuthContext = Depends(require_writ
     }
 
 
+#: A [LOCKED] / **[LOCKED]** marker in an ingested document. Verbatim-critical
+#: content is flagged this way; the marker itself must never become content.
+_LOCKED_MARKER_RE = re.compile(r"\*{0,2}\[LOCKED\]\*{0,2}", re.IGNORECASE)
+
+
 def _commit_structured_spec(
     structured: StructuredSpec,
     filename: str,
@@ -1319,12 +1325,27 @@ def _commit_structured_spec(
             assertion_type = AssertionType(chunk_data["assertion_type"])
         except ValueError:
             assertion_type = AssertionType.POSITIONING
+
+        # A [LOCKED] marker in the source is metadata about the fact, not part
+        # of it. Lift it into status/tier and strip it from the text — the
+        # structurer is told to split compound sentences and to reproduce the
+        # marker verbatim, so left alone it emits "**[LOCKED]**" as its own
+        # assertion.
+        content = (chunk_data.get("content") or "").strip()
+        locked = bool(_LOCKED_MARKER_RE.search(content))
+        content = _LOCKED_MARKER_RE.sub("", content).strip(" -—\t")
+
+        if not content:
+            return  # marker-only fragment, nothing to record
+
         msg = Assertion(
             spec_id=spec.id,
             pillar_id=pillar_id,
             assertion_type=assertion_type,
             priority=chunk_data.get("priority", 3),
-            content=chunk_data["content"],
+            content=content,
+            status=AssertionStatus.LOCKED if locked else AssertionStatus.DRAFT,
+            content_tier=ContentTier.TIER_1_LOCKED if locked else None,
             variants=chunk_data.get("variants", {}),
             audiences=chunk_data.get("audiences", []),
             channels=[Channel(c) for c in chunk_data.get("channels", ["all"])],
