@@ -540,3 +540,40 @@ def test_detected_document_type_is_always_a_live_schema_type():
     for text, filename in probes:
         got = detect_document_type(text, filename)
         assert got in valid, f"{filename!r} -> {got!r}, not a SchemaType"
+
+
+# ── Schema-type integrity across tables ──────────────────────────────────
+
+def test_department_schema_types_are_all_valid(store):
+    """Regression: departments kept legacy primary_schema_type values after the
+    v2 migration. _commit_structured_spec overrides a detected engineering_spec
+    with the department default, so a stale value there raised ValueError mid
+    ingest and the sync logged-and-continued — documents vanished silently."""
+    from src.models import SchemaType
+    live = {m.value for m in SchemaType}
+    for dept in store.list_departments():
+        assert dept["primary_schema_type"] in live, \
+            f"department {dept['name']!r} has retired schema type {dept['primary_schema_type']!r}"
+
+
+def test_legacy_department_schema_type_is_migrated(tmp_path):
+    """A database carrying the PMM-era department default must migrate forward."""
+    import sqlite3
+    from src.store import Store
+    from src.models import SchemaType
+
+    db = tmp_path / "legacy_dept.db"
+    Store(str(db)).init()
+    c = sqlite3.connect(db)
+    cols = {r[1] for r in c.execute("PRAGMA table_info(departments)")}
+    col = "primary_schema_type" if "primary_schema_type" in cols else "primary_grounding_type"
+    c.execute(f"UPDATE departments SET {col} = 'message_house' WHERE name = 'General'")
+    c.commit(); c.close()
+
+    Store(str(db)).init()  # re-run migration
+
+    c = sqlite3.connect(db)
+    got = c.execute(f"SELECT {col} FROM departments WHERE name='General'").fetchone()[0]
+    c.close()
+    assert got in {m.value for m in SchemaType}
+    assert got == SchemaType.ENGINEERING_SPEC.value

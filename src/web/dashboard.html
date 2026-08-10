@@ -1089,8 +1089,8 @@
                 <span style="font-size:13px;color:var(--text-3);">edges</span>
             </div>
             <div style="font-size:12px;color:var(--text-2);">
-                <span style="margin-right:12px;">Docs: <strong style="color:var(--text);">${bt.GroundingDocument||0}</strong></span>
-                <span style="margin-right:12px;">Chunks: <strong style="color:var(--text);">${bt.GroundingChunk||0}</strong></span>
+                <span style="margin-right:12px;">Specs: <strong style="color:var(--text);">${bt.Spec||0}</strong></span>
+                <span style="margin-right:12px;">Assertions: <strong style="color:var(--text);">${bt.Assertion||0}</strong></span>
                 <span style="margin-right:12px;">Personas: <strong style="color:var(--text);">${bt.Audience||0}</strong></span>
                 <span>Channels: <strong style="color:var(--text);">${bt.Channel||0}</strong></span>
             </div>`;
@@ -1107,7 +1107,7 @@
             toast('Graph rebuilt', 'success');
         } catch(_) {
             // Stub: return mock data
-            renderGraphWidget({ nodes: 0, edges: 0, by_type: { GroundingDocument: 0, GroundingChunk: 0, Audience: 0, Channel: 0 } });
+            renderGraphWidget({ nodes: 0, edges: 0, by_type: { Spec: 0, Assertion: 0, Entity: 0, Audience: 0 } });
             toast('Rebuild triggered (stub)', 'success');
         } finally {
             if (btn) {
@@ -2597,31 +2597,43 @@
     });
 
 const NODE_COLORS = {
-        // ATLAS constellation palette — muted atlas-family inks
-        GroundingDocument: '#3E4E80',
-        Pillar:   '#8A6A1F',
-        GroundingChunk:    '#56673F',
-        Audience:           '#5E6E8A',
-        Channel:           '#4E6E6A',
-        PainPoint:         '#9E3B2E',
-        BuyingTrigger:     '#6B7F4F',
-        QAPair:         '#B07A3E',
+        Spec:      '#3E4E80',
+        Section:   '#9C947F',
+        Assertion: '#56673F',
+        Entity:    '#B0553E',
+        Pillar:    '#8A6A1F',
+        Audience:  '#5E6E8A',
+        Channel:   '#4E6E6A',
+        QAPair:    '#B07A3E',
     };
     const NODE_SIZES = {
-        GroundingDocument: 42,
-        Pillar:   30,
-        GroundingChunk:    18,
-        Audience:           24,
-        Channel:           22,
-        PainPoint:         14,
-        BuyingTrigger:     14,
-        QAPair:         14,
+        Spec:      42,
+        Entity:    30,
+        Pillar:    30,
+        Section:   22,
+        Assertion: 18,
+        Audience:  24,
+        Channel:   22,
+        QAPair:    14,
     };
     const REL_COLORS = {
-        CONTAINS:   '#9C947F',
-        TARGETS:    '#3E4E80',
-        ADDRESSES:  '#4E6E6A',
-        APPLIES_TO: '#56673F',
+        CONTAINS:     '#9C947F',
+        HAS_SECTION:  '#9C947F',
+        TARGETS:      '#3E4E80',
+        ADDRESSES:    '#4E6E6A',
+        APPLIES_TO:   '#56673F',
+        HAS_PILLAR:   '#8A6A1F',
+        GROUPS:       '#8A6A1F',
+        HAS_QA_PAIR:  '#B07A3E',
+        // Phase 2 typed edges — the cross-spec ones, drawn warm so they stand out
+        MENTIONS:     '#B0553E',
+        DEPENDS_ON:   '#C05A1E',
+        INFORMS:      '#B07A3E',
+        SUPERSEDES:   '#6B7F4F',
+        CONTRADICTS:  '#9E3B2E',
+        OWNS:         '#5E6E8A',
+        IMPLEMENTS:   '#4E6E6A',
+        INHERITS_FROM:'#8A6A1F',
     };
 
     async function loadGraphExplorer() {
@@ -2679,7 +2691,7 @@ const NODE_COLORS = {
                 elements: [
                     ...data.nodes.map(n => ({ data: {
                         id: n.id,
-                        label: n.type === 'GroundingChunk'
+                        label: n.type === 'Assertion'
                             ? '[' + (n.assertion_type||'').replace(/_/g,' ') + '] ' + (n.content||'').slice(0,25)
                             : (n.label || n.id).slice(0, 28),
                         type: n.type,
@@ -2704,7 +2716,7 @@ const NODE_COLORS = {
                         'text-valign': 'bottom', 'text-margin-y': 3,
                         'text-wrap': 'ellipsis', 'text-max-width': 70,
                     }},
-                    { selector: 'node[type="GroundingDocument"]', style: {
+                    { selector: 'node[type="Spec"]', style: {
                         'shape': 'round-rectangle', 'color': '#eee', 'font-size': 9,
                     }},
                     { selector: 'node:selected', style: {
@@ -2760,7 +2772,7 @@ const NODE_COLORS = {
             if (!grouped[n.type]) grouped[n.type] = [];
             grouped[n.type].push(n);
         }
-        const order = ['GroundingDocument','Pillar','GroundingChunk','Audience','PainPoint','BuyingTrigger','QAPair','Channel'];
+        const order = ['Spec','Entity','Pillar','Section','Assertion','Audience','QAPair','Channel'];
         const types = order.filter(t => grouped[t]).concat(Object.keys(grouped).filter(t => !order.includes(t)));
         document.getElementById('graph-node-list').innerHTML = types.map(t => {
             const color = NODE_COLORS[t] || '#888';

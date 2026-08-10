@@ -683,6 +683,31 @@ class Store:
                                 "Unmapped legacy schema_type %r -> %r", old_val, new_val)
                     conn.commit()
 
+            # Departments carry a primary_schema_type too, and it was missed by
+            # the pass above. It is not merely cosmetic: _commit_structured_spec
+            # overrides a detected engineering_spec with the department default,
+            # so a legacy value here raised ValueError during ingestion and the
+            # sync swallowed it — documents silently failed to import.
+            if "departments" in tables:
+                dcols = {c["name"] for c in insp.get_columns("departments")}
+                dcol = ("primary_schema_type" if "primary_schema_type" in dcols
+                        else "primary_grounding_type" if "primary_grounding_type" in dcols
+                        else None)
+                if dcol:
+                    valid = {t.value for t in SchemaType}
+                    known = {r[0] for r in conn.execute(text(
+                        f"SELECT DISTINCT {dcol} FROM departments"))}
+                    for old_val in known:
+                        if old_val in valid or old_val is None:
+                            continue
+                        new_val = LEGACY_SCHEMA_TYPE_MAP.get(
+                            old_val, SchemaType.ENGINEERING_SPEC.value)
+                        conn.execute(
+                            text(f"UPDATE departments SET {dcol} = :new WHERE {dcol} = :old"),
+                            {"new": new_val, "old": old_val})
+                        log.info("Migrated department %s %r -> %r", dcol, old_val, new_val)
+                    conn.commit()
+
             # Leftover PMM columns on audiences (was personas). They are NOT
             # NULL and the ORM no longer writes them, so every insert fails
             # with an IntegrityError until they are gone. Their contents were
