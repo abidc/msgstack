@@ -29,16 +29,67 @@ def detect_document_type(text: str, filename: str = "") -> str:
     if any(k in name_lower for k in ("catalog", "catalogue", "inventory", "services", "ownership")):
         return "service_catalog"
 
-    # Content-based fallback
-    if any(k in text_lower for k in ("incident", "postmortem", "root cause", "impact window")):
+    # Content-based fallback. Deliberately conservative: a normal engineering
+    # spec mentions on-call rotations and runbooks in passing, so single weak
+    # keywords must not redirect it. Require a phrase that only appears when the
+    # document really is of that kind, and fall through to engineering_spec.
+    if any(k in text_lower for k in ("postmortem", "post-mortem", "root cause",
+                                     "impact window", "time to detect")):
         return "incident_record"
-    if any(k in text_lower for k in ("compliance", "data retention", "encryption at rest",
-                                      "soc 2", "gdpr", "access control")):
+    if any(k in text_lower for k in ("data retention", "encryption at rest",
+                                     "soc 2", "gdpr", "sub-processor",
+                                     "acceptable use")):
         return "policy_shield"
-    if any(k in text_lower for k in ("service owner", "on-call", "dependency graph", "runbook")):
+    if any(k in text_lower for k in ("service owner", "dependency graph",
+                                     "service inventory", "ownership matrix")):
         return "service_catalog"
 
     return "engineering_spec"  # default
+
+
+#: Names that describe the genre of a document rather than the system it is
+#: about. Models reach for these constantly, and a spec called "Internal API
+#: Documentation" is useless in a graph where the name is the identifier.
+_GENERIC_NAME_RE = re.compile(
+    r"^\s*(the\s+)?(internal\s+|technical\s+|system\s+|service\s+|api\s+|product\s+|brand\s+|company\s+)*"
+    r"(documentation|document|overview|spec|specification|guide|reference|readme|"
+    r"name|title|untitled|api|system|service|platform)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _first_heading(text: str) -> str:
+    """The document's first markdown H1, which for these documents is the
+    system identifier."""
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if line.startswith("# "):
+            return line[2:].strip()
+        if line and not line.startswith("#"):
+            break  # body started before any heading
+    return ""
+
+
+def resolve_spec_name(llm_name: str, source_text: str, source_name: str) -> str:
+    """Pick the spec name.
+
+    The document's own H1 wins whenever there is one: in a structured document
+    the top heading *is* the system identifier, and the name is what every
+    edge, mention and citation keys off. The model is instructed to copy it but
+    does so unreliably — it reaches for genre labels ("Internal API
+    Documentation") or names the spec after a section it found interesting
+    ("Payments API Audience Profiles"). Neither is recoverable downstream.
+
+    The LLM name is used only when the document has no heading to take — an
+    untitled PDF or a DOCX that extracted without structure.
+    """
+    heading = _first_heading(source_text)
+    if heading:
+        return heading
+    name = (llm_name or "").strip()
+    if not name or _GENERIC_NAME_RE.match(name):
+        return source_name
+    return name
 
 
 class StructuredSpec(BaseModel):
@@ -66,55 +117,47 @@ class StructuredSpec(BaseModel):
 REQUIRED_SECTIONS = ["summary", "audience", "positioning", "tagline", "differentiation"]
 REQUIRED_MESSAGE_TYPES = ["capability", "constraint", "interface_contract"]
 
-_STRUCTURE_PROMPT = """You are a messaging strategist. Given the source document below, extract and structure a complete Spec.
+_STRUCTURE_PROMPT = """You are a staff engineer cataloguing an internal technical document.
+
+Extract the durable, checkable facts a teammate or an AI agent would need to
+answer questions about this system correctly. Preserve exact numbers, versions,
+dates, header names, environment variables and endpoint paths verbatim — they
+are the whole value of the record. Never round, paraphrase or summarise a
+figure.
 
 Return a JSON object matching this schema:
 {
-  "name": "Product or brand name",
-  "summary": "2-3 sentence overview",
-  "audience": "Target audience definition",
-  "positioning": "Core positioning statement",
-  "tagline": "One punchy tagline (7 words or fewer)",
-  "differentiation": "Key differentiators",
-  "know_your_market": "Extract 'Know Your Market' fields if present (Vision, Audience, Before, After, etc.)",
+  "name": "The system's own name, copied from the document's first heading",
+  "summary": "2-3 sentence factual overview of what this system does",
+  "audience": "Who consumes this document (e.g. integrating engineers, on-call SREs)",
+  "positioning": "One or two sentences on this system's role and boundary of responsibility",
+  "tagline": "",
+  "differentiation": "",
   "pillars": [
     {
-      "name": "Pillar name (1-4 words, e.g. Speed, Security, Scale)",
-      "description": "One sentence summary of the pillar",
+      "name": "Grouping name taken from the document's own section headings",
+      "description": "One sentence on what this group covers",
       "chunks": [
         {
-          "assertion_type": "constraint | sla | deprecation | config_default | dependency | capability | limitation | security_posture | interface_contract | version_policy | runbook_step | decision | positioning",
+          "assertion_type": "constraint | sla | deprecation | config_default | dependency | capability | limitation | security_posture | interface_contract | version_policy | runbook_step | decision",
           "priority": 1-5,
-          "content": "Message content",
+          "content": "One atomic, self-contained fact, stated in full",
           "audiences": [],
           "channels": ["all"],
-              "resolves_qa_pairs": []
+          "resolves_qa_pairs": []
         }
       ]
     }
   ],
-  "ungrouped_chunks": [
-    {
-      "assertion_type": "constraint | sla | deprecation | config_default | dependency | capability | limitation | security_posture | interface_contract | version_policy | runbook_step | decision | positioning",
-      "priority": 1-5,
-      "content": "Message content that doesn't fit in a pillar",
-      "audiences": [],
-      "channels": ["all"],
-      "resolves_qa_pairs": []
-    }
-  ],
+  "ungrouped_chunks": [ { "...same shape as chunks..." } ],
   "audiences": [
     {
-      "name": "Audience name",
-      "description": "Role description",
+      "name": "Role name",
+      "description": "What this role is doing with the system",
       "qa_pairs": [
         {
-          "statement": "This is too expensive for our budget",
-          "response": "Customers typically recover the cost in 6 months through a 40% reduction in operational overhead"
-        },
-        {
-          "statement": "We already have a solution for this",
-          "response": "Our customers find we complement existing tools by handling the workflow automation layer they lack"
+          "statement": "A question this role actually asks, or a failure they hit",
+          "response": "The factual answer, grounded in this document"
         }
       ]
     }
@@ -122,20 +165,44 @@ Return a JSON object matching this schema:
   "missing_sections": []
 }
 
+Choosing assertion_type — this is the most important decision. Pick by what the
+sentence *is*, not what section it sat under:
+- constraint         a hard limit: rate limits, quotas, size caps, thresholds
+- sla                a promised level: latency targets, uptime, error budgets
+- deprecation        something being removed, with its date or version
+- config_default     a setting's default value and what changing it does
+- dependency         a requirement on another system, with version if stated
+- capability         something the system can do
+- limitation         something it cannot do, or a known gap
+- security_posture   authn/authz, encryption, key rotation, data handling
+- interface_contract API shape and behavioural guarantees: idempotency, ordering,
+                     status-code semantics, required headers
+- version_policy     compatibility and versioning rules
+- runbook_step       an operational procedure to follow
+- decision           a recorded choice and its rationale, including postmortem
+                     root causes
+
 Rules:
-- Identify 3-5 main messaging pillars that organize the content (e.g., "Speed", "Security", "Scale", "Support")
-- Group related key messages under their appropriate pillar
-- Messages that don't fit a pillar go in "ungrouped_chunks"
-- Map Umbrella Message Headline -> Tagline
-- Map Value Pillars -> Benefits (but also create a pillar if distinct)
-- Map Use Cases -> Use Case messages
-- Map Proof Points -> Proof Point messages
-- Map Objections -> QAPair messages
-- For each chunk, populate "addresses" with the verbatim text of any requirement
-  point (from the audiences list) that this message directly speaks to.
-- Populate "resolves_qa_pairs" with the verbatim statement text of any qa_pair this
-  message helps overcome.
-- Leave both arrays empty [] if the chunk is general and not specific to a pain/qa_pair.
+- One fact per chunk. Split compound sentences that contain two facts.
+- Keep the document's own headings as pillar names. Do not invent marketing
+  groupings, and never name the document after one of its sections.
+- "name" MUST be the identifier the document opens with — its first heading,
+  verbatim, including hyphens and lowercase. If the document starts with
+  "# payments-api" then name is exactly "payments-api".
+  Never substitute a generic description. "Internal API Documentation",
+  "Technical System Documentation" and "Service Overview" are all WRONG —
+  they describe the genre, not the system. A section heading such as
+  "Audiences" or "Runbook" is not the name either.
+- Leave "tagline" and "differentiation" as empty strings. This is technical
+  documentation and does not have them; do not manufacture them.
+- Text marked [LOCKED] is verbatim-critical. Reproduce it exactly, character
+  for character.
+- qa_pairs come from real operational questions — how to retry safely, why a
+  call fails, what to check first. Not sales objections.
+- If a fact does not fit any pillar, put it in ungrouped_chunks rather than
+  forcing it or dropping it.
+- Extract ONLY what this document states. If it does not mention something,
+  omit it. Never fill a gap with a plausible-sounding default.
 
 SOURCE DOCUMENT:
 {content}
@@ -377,13 +444,19 @@ class SpecStructurer:
         """Structure one text chunk with retry on transient OpenAI errors."""
         # Use replace instead of .format() so curly braces in the document don't
         # get interpreted as format placeholders (causes KeyError on e.g. JSON snippets).
+        # A prompt template that lost its {content} placeholder silently sends
+        # the model instructions with an empty SOURCE DOCUMENT, and it responds
+        # by inventing a plausible document. The output looks completely normal
+        # — right shape, right assertion types — so fail loudly instead.
+        if "{content}" not in prompt_template:
+            raise ValueError(
+                "Structuring prompt is missing its {content} placeholder; the "
+                "source document would never reach the model.")
         prompt = prompt_template.replace("{content}", text)
         raw = self._llm_call_with_retry(prompt, response_format={"type": "json_object"})
         try:
             data = json.loads(raw)
-            # Ensure name is set if missing in LLM response
-            if not data.get("name") or data["name"] in ("Product name", "Brand name", "Company name"):
-                data["name"] = source_name
+            data["name"] = resolve_spec_name(data.get("name", ""), text, source_name)
             return StructuredSpec(**data)
         except (json.JSONDecodeError, Exception) as e:
             # Fallback to markdown parser if JSON fails (though unlikely with response_format)

@@ -293,3 +293,203 @@ class TestToMarkdown:
         spec = structurer._parse_markdown(CANONICAL_MARKDOWN, "x")
         md = structurer.to_markdown(spec)
         assert "## Assertions" in md
+
+
+class TestSchemaTypeDetection:
+    """Regression: the content fallback used to match bare 'on-call' and
+    'runbook', which appear in ordinary engineering specs, so real specs were
+    misfiled as service_catalog on ingest."""
+
+    def test_engineering_spec_is_the_default(self):
+        from src.pipeline.structure import detect_document_type
+        assert detect_document_type("Rate limit is 1000 req/min.", "payments-api.md") \
+            == "engineering_spec"
+
+    def test_passing_mention_of_oncall_does_not_redirect(self):
+        from src.pipeline.structure import detect_document_type
+        text = ("## Audiences\n### On-call SRE\nPaged against the error budget.\n"
+                "## Runbook\n- Restart the pod.")
+        assert detect_document_type(text, "payments-api.md") == "engineering_spec"
+
+    def test_incident_detected_by_filename(self):
+        from src.pipeline.structure import detect_document_type
+        assert detect_document_type("Charges 504'd.", "incident-2026-07-14.md") \
+            == "incident_record"
+
+    def test_incident_detected_by_postmortem_language(self):
+        from src.pipeline.structure import detect_document_type
+        assert detect_document_type("Root cause: the timeout exceeded the ceiling.",
+                                    "notes.md") == "incident_record"
+
+    def test_policy_needs_a_real_policy_phrase(self):
+        from src.pipeline.structure import detect_document_type
+        assert detect_document_type("We use encryption at rest.", "x.md") == "policy_shield"
+        # "security posture" alone is a section in every spec — must not redirect
+        assert detect_document_type("## Security Posture\n- TLS 1.3 only.", "auth.md") \
+            == "engineering_spec"
+
+    def test_every_returned_type_is_a_live_schema_type(self):
+        from src.models import SchemaType
+        from src.pipeline.structure import detect_document_type
+        live = {m.value for m in SchemaType}
+        samples = [("a.md", "rate limit"), ("incident.md", "outage"),
+                   ("policy.md", "gdpr"), ("catalog.md", "service owner"),
+                   ("x.md", "root cause"), ("y.md", "data retention")]
+        for name, text in samples:
+            assert detect_document_type(text, name) in live
+
+
+class TestStructurePromptIsEngineering:
+    """The prompt was a mechanical rename of the PMM one — it still opened with
+    'You are a messaging strategist' and asked for a tagline, so ingestion
+    collapsed constraints and SLAs into 'capability'."""
+
+    def test_prompt_does_not_ask_for_marketing_fields(self):
+        from src.pipeline.structure import _STRUCTURE_PROMPT
+        low = _STRUCTURE_PROMPT.lower()
+        assert "messaging strategist" not in low
+        assert "punchy" not in low
+        assert "proof point" not in low
+        # "objection" may appear only as a negative instruction telling the
+        # model not to produce sales objections
+        for line in (l.strip() for l in low.splitlines() if "objection" in l):
+            assert line.startswith("call fails") or "not sales objections" in line, line
+
+    def test_prompt_enumerates_the_engineering_assertion_types(self):
+        from src.pipeline.structure import _STRUCTURE_PROMPT
+        for t in ("constraint", "sla", "deprecation", "config_default",
+                  "dependency", "interface_contract", "version_policy",
+                  "runbook_step", "decision", "security_posture"):
+            assert t in _STRUCTURE_PROMPT, f"{t} missing from structuring prompt"
+
+    def test_prompt_protects_verbatim_content(self):
+        from src.pipeline.structure import _STRUCTURE_PROMPT
+        assert "verbatim" in _STRUCTURE_PROMPT.lower()
+        assert "LOCKED" in _STRUCTURE_PROMPT
+
+
+class TestSpecNameResolution:
+    """Regression: ingestion named every spec after the document genre
+    ("Internal API Documentation" x3) or after a section it liked ("Payments
+    API Audience Profiles"). The name is the identifier edges and citations key
+    off, so a wrong one is not recoverable downstream."""
+
+    DOC = "# payments-api\n\nCard and wallet payment capture for checkout.\n\n## Constraints\n- 1000 req/min."
+
+    def test_heading_wins_over_generic_llm_name(self):
+        from src.pipeline.structure import resolve_spec_name
+        for bad in ("Internal API Documentation", "Technical System Documentation",
+                    "Service Overview", "Documentation", "API"):
+            assert resolve_spec_name(bad, self.DOC, "payments-api.md") == "payments-api"
+
+    def test_heading_wins_over_section_derived_name(self):
+        from src.pipeline.structure import resolve_spec_name
+        assert resolve_spec_name("Payments API Audience Profiles", self.DOC,
+                                 "payments-api.md") == "payments-api"
+
+    def test_heading_preserved_verbatim_including_case_and_hyphens(self):
+        from src.pipeline.structure import resolve_spec_name
+        assert resolve_spec_name("Payments API", self.DOC, "x.md") == "payments-api"
+
+    def test_llm_name_used_when_document_has_no_heading(self):
+        from src.pipeline.structure import resolve_spec_name
+        text = "Extracted PDF body with no markdown headings whatsoever."
+        assert resolve_spec_name("Acme Billing Service", text, "f.md") == "Acme Billing Service"
+
+    def test_falls_back_to_source_name_when_both_are_useless(self):
+        from src.pipeline.structure import resolve_spec_name
+        assert resolve_spec_name("Documentation", "no headings here", "f.md") == "f.md"
+        assert resolve_spec_name("", "no headings here", "f.md") == "f.md"
+
+    def test_heading_only_taken_from_the_top_of_the_document(self):
+        """A body paragraph before the first heading means the heading is not a
+        title — do not take it."""
+        from src.pipeline.structure import resolve_spec_name
+        text = "Some preamble prose.\n\n# Appendix A\n\nmore"
+        assert resolve_spec_name("Acme Service", text, "f.md") == "Acme Service"
+
+
+class TestPromptCarriesTheDocument:
+    """Regression: the rewritten engineering prompt lost its {content}
+    placeholder. .replace() then did nothing, the model received an empty
+    SOURCE DOCUMENT, and it invented an entire plausible API spec — correct
+    shape, correct assertion types, completely fabricated facts. Nothing in the
+    output distinguished it from a real extraction."""
+
+    def test_every_prompt_template_carries_its_source_text(self):
+        """Templates use either {content} (str.replace) or {text} (str.format).
+        Either is fine; having neither means the document never reaches the
+        model."""
+        from src.pipeline import structure
+        names = [n for n in dir(structure) if n.endswith("_PROMPT")]
+        assert names, "no prompt templates found"
+        for n in names:
+            tpl = getattr(structure, n)
+            assert "{content}" in tpl or "{text}" in tpl, \
+                f"{n} has no source-text placeholder; the document cannot reach the model"
+
+    def test_prompt_map_values_all_carry_the_placeholder(self):
+        from src.pipeline.structure import SpecStructurer
+        for schema_type, template in SpecStructurer._PROMPT_MAP.items():
+            assert "{content}" in template, f"prompt for {schema_type} lost {{content}}"
+
+    def test_structuring_refuses_a_template_without_the_placeholder(self):
+        from src.pipeline.structure import SpecStructurer
+        import pytest
+        s = SpecStructurer.__new__(SpecStructurer)
+        s._usage = {"input_tokens": 0, "output_tokens": 0}
+        with pytest.raises(ValueError, match="placeholder"):
+            s._structure_single_chunk("some document text", "doc.md", "PROMPT WITHOUT IT")
+
+
+class TestLockedMarkerHandling:
+    """A [LOCKED] marker is metadata about a fact, not part of it. The
+    structurer is told both to split compound sentences and to reproduce the
+    marker verbatim, so it emitted "**[LOCKED]**" as a standalone assertion."""
+
+    def test_marker_detected_and_stripped(self):
+        from src.web_app import _LOCKED_MARKER_RE as r
+        t = "Rate limit is 1000 requests/minute. **[LOCKED]**"
+        assert r.search(t)
+        assert r.sub("", t).strip(" -—\t") == "Rate limit is 1000 requests/minute."
+
+    def test_marker_only_fragment_reduces_to_empty(self):
+        from src.web_app import _LOCKED_MARKER_RE as r
+        assert r.sub("", "**[LOCKED]**").strip(" -—\t") == ""
+
+    def test_bare_and_bold_forms_both_match(self):
+        from src.web_app import _LOCKED_MARKER_RE as r
+        for form in ("[LOCKED]", "**[LOCKED]**", "[locked]"):
+            assert r.search(f"TLS 1.3 only {form}")
+
+    def test_unmarked_content_is_untouched(self):
+        from src.web_app import _LOCKED_MARKER_RE as r
+        t = "Access tokens live 3600s."
+        assert not r.search(t)
+        assert r.sub("", t) == t
+
+
+class TestCommitPathSymbolsResolve:
+    """Regression: the LOCKED-marker handling referenced ContentTier, which
+    web_app never imported. The conditional short-circuits, so only documents
+    that actually contained [LOCKED] raised NameError — two of five — and the
+    sync caught it, logged, and still reported "5 files ingested"."""
+
+    def test_commit_path_names_are_all_importable(self):
+        import src.web_app as w
+        for name in ("Assertion", "AssertionStatus", "AssertionType",
+                     "ContentTier", "Channel", "Spec", "SchemaType",
+                     "Audience", "_LOCKED_MARKER_RE"):
+            assert hasattr(w, name), f"web_app is missing {name}, used on the ingest path"
+
+    def test_locked_branch_constructs_an_assertion(self):
+        """Exercise the branch that only fires for [LOCKED] content."""
+        from uuid import uuid4
+        from src.models import Assertion, AssertionStatus, AssertionType, ContentTier
+        a = Assertion(
+            spec_id=uuid4(), assertion_type=AssertionType.CONSTRAINT, priority=1,
+            content="Rate limit is 1000 requests/minute.",
+            status=AssertionStatus.LOCKED, content_tier=ContentTier.TIER_1_LOCKED,
+        )
+        assert str(a.status) == "locked"
+        assert str(a.content_tier) == "tier_1_locked"

@@ -540,3 +540,88 @@ def test_detected_document_type_is_always_a_live_schema_type():
     for text, filename in probes:
         got = detect_document_type(text, filename)
         assert got in valid, f"{filename!r} -> {got!r}, not a SchemaType"
+
+
+# ── Schema-type integrity across tables ──────────────────────────────────
+
+def test_department_schema_types_are_all_valid(store):
+    """Regression: departments kept legacy primary_schema_type values after the
+    v2 migration. _commit_structured_spec overrides a detected engineering_spec
+    with the department default, so a stale value there raised ValueError mid
+    ingest and the sync logged-and-continued — documents vanished silently."""
+    from src.models import SchemaType
+    live = {m.value for m in SchemaType}
+    for dept in store.list_departments():
+        assert dept["primary_schema_type"] in live, \
+            f"department {dept['name']!r} has retired schema type {dept['primary_schema_type']!r}"
+
+
+def test_legacy_department_schema_type_is_migrated(tmp_path):
+    """A database carrying the PMM-era department default must migrate forward."""
+    import sqlite3
+    from src.store import Store
+    from src.models import SchemaType
+
+    db = tmp_path / "legacy_dept.db"
+    Store(str(db)).init()
+    c = sqlite3.connect(db)
+    cols = {r[1] for r in c.execute("PRAGMA table_info(departments)")}
+    col = "primary_schema_type" if "primary_schema_type" in cols else "primary_grounding_type"
+    c.execute(f"UPDATE departments SET {col} = 'message_house' WHERE name = 'General'")
+    c.commit(); c.close()
+
+    Store(str(db)).init()  # re-run migration
+
+    c = sqlite3.connect(db)
+    got = c.execute(f"SELECT {col} FROM departments WHERE name='General'").fetchone()[0]
+    c.close()
+    assert got in {m.value for m in SchemaType}
+    assert got == SchemaType.ENGINEERING_SPEC.value
+
+
+# ── Referential integrity of the graph tables ────────────────────────────
+
+def test_deleting_a_spec_removes_its_edges_and_mentions(store, two_specs):
+    """edges is polymorphic — src/dst are (type, id) pairs, so SQLite has no FK
+    to cascade. Without an explicit purge, deleting a spec left dangling rows
+    that the graph silently skipped: present in the database, absent from every
+    traversal."""
+    api, slo, a1, a2 = two_specs
+    eid = store.resolve_entity("checkout-endpoint")
+    store.add_entity_mention(eid, str(a1.id), str(api.id))
+    store.add_entity_mention(eid, str(a2.id), str(slo.id))
+    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    assert len(store.list_edges()) == 1
+    assert len(store.list_entity_mentions()) == 2
+
+    store.delete_spec(api.id)
+
+    assert store.list_edges() == [], "edge referencing a deleted assertion survived"
+    assert all(m["assertion_id"] != str(a1.id) for m in store.list_entity_mentions())
+
+
+def test_purge_sweeps_pre_existing_orphans(store, two_specs):
+    """Databases already carrying dangling rows must be cleanable."""
+    import sqlite3
+    api, slo, a1, a2 = two_specs
+    eid = store.resolve_entity("checkout-endpoint")
+    store.add_entity_mention(eid, str(a1.id), str(api.id))
+    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+
+    # delete the assertion behind the store's back to simulate the old behaviour
+    with store.session() as s:
+        from src.store import AssertionModel
+        s.query(AssertionModel).filter(AssertionModel.id == str(a1.id)).delete()
+        s.commit()
+
+    result = store.purge_orphaned_graph_refs()
+    assert result["edges_removed"] == 1
+    assert result["mentions_removed"] == 1
+    assert store.list_edges() == []
+
+
+def test_purge_is_a_noop_on_a_healthy_graph(store, two_specs):
+    _, _, a1, a2 = two_specs
+    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    assert store.purge_orphaned_graph_refs() == {"mentions_removed": 0, "edges_removed": 0}
+    assert len(store.list_edges()) == 1

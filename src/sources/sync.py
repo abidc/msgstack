@@ -310,7 +310,18 @@ class SyncEngine:
                 "last_sync_at": _now(),
                 "error_message": "",
             })
-            log.info("Initial sync for %s: %d files ingested", connection_id, len(files))
+            # len(files) is what we *attempted*. _ingest_file swallows commit
+            # failures so one bad document does not abort the run, which means
+            # this line previously reported success for files that produced
+            # nothing. Count what actually landed.
+            failed = [f["file_name"] for f in self.store.list_source_files(connection_id)
+                      if f.get("sync_status") == "error"]
+            if failed:
+                log.error("Initial sync for %s: %d/%d files ingested, %d FAILED: %s",
+                          connection_id, len(files) - len(failed), len(files),
+                          len(failed), ", ".join(failed))
+            else:
+                log.info("Initial sync for %s: %d files ingested", connection_id, len(files))
         except Exception as exc:
             log.error("Initial sync failed for %s: %s", connection_id, exc, exc_info=True)
             self.store.update_connection(connection_id, {"status": "error", "error_message": str(exc)})

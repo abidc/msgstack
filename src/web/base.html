@@ -4,71 +4,85 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MsgStack{% endblock %}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@700&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Instrument+Sans:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
-    <script>(function(){var t=localStorage.getItem('msgstack-theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})()</script>
+    <script>(function(){var t=localStorage.getItem('msgstack-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');})()</script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         /* ── MsgStack Design System v5 "ATLAS" — ink on paper ──
            Paper canvas, warm ink, one printed-ink blue accent.
            Ember orange marks LOCKED/verified ONLY. Dark theme = night chapter.
            No gradients on UI surfaces, no glassmorphism, no glow, no purple. */
+        /* ============================================================
+           TERMINAL design system (v6) — ported from msgstack.ai so the
+           admin UI and the marketing site read as one product. Dark-first
+           and developer-native; replaces ATLAS (parchment, Lora serif,
+           atlas-blue), which belonged to the retired "atlas of
+           organizational record" concept.
+
+           Token NAMES are inherited so every existing rule keeps working;
+           only the values changed. --primary is the accent slot and now
+           holds signal green.
+           ============================================================ */
         :root {
-            --bg: #F6F3EA;            /* paper */
-            --bg-1: #EFEADD;          /* paper-2 — raised surface / plates */
-            --bg-2: #E5DECB;          /* paper-3 — pressed */
-            --bg-3: #DAD2BE;
-            --border: #DAD2BE;        /* hairline */
-            --border-light: #CFC6B0;
-            --text: #23201A;          /* warm ink */
-            --text-2: #5F594A;
-            --text-3: #9C947F;
-            --primary: #3E4E80;       /* atlas — printed-ink blue */
-            --primary-dim: rgba(62,78,128,0.08);
-            --primary-hover: #2F3D68; /* atlas-deep */
-            --ember: #C05A1E;         /* LOCKED / verified only */
-            --ember-dim: rgba(232,118,58,0.12);
-            --accent-graph: #3E4E80;
-            --accent-purple: #3E4E80; /* purple is banned — alias to atlas */
-            --success: #56673F;
-            --success-dim: rgba(86,103,63,0.12);
-            --warn: #8A6A1F;
-            --warn-dim: rgba(138,106,31,0.12);
-            --warning: #8A6A1F;
-            --danger: #9E3B2E;
-            --danger-dim: rgba(158,59,46,0.10);
+            --bg: #0B0C0E;            /* ground */
+            --bg-1: #121417;          /* raised surface */
+            --bg-2: #1A1D21;          /* pressed */
+            --bg-3: #24282E;
+            --border: #24282E;
+            --border-light: #2E333A;
+            --text: #E6E8EA;
+            --text-2: #9BA1A8;
+            --text-3: #5F666E;
+            --primary: #4ADE80;       /* signal green */
+            --primary-dim: rgba(74,222,128,0.10);
+            --primary-hover: #22C55E;
+            --ember: #F59E0B;         /* LOCKED / verified only */
+            --ember-dim: rgba(245,158,11,0.14);
+            --accent-graph: #4ADE80;
+            --accent-purple: #22C55E;
+            --success: #4ADE80;
+            --success-dim: rgba(74,222,128,0.12);
+            --warn: #F59E0B;
+            --warn-dim: rgba(245,158,11,0.12);
+            --warning: #F59E0B;
+            --danger: #F87171;
+            --danger-dim: rgba(248,113,113,0.12);
             --radius: 8px;
             --radius-lg: 14px;
-            --font-logo: 'Lora', Georgia, serif;
-            --font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
-            --font-sans: 'Instrument Sans', -apple-system, sans-serif;
-            --font-mono: 'Martian Mono', Consolas, monospace;
+            --font-logo: 'JetBrains Mono', ui-monospace, monospace;
+            --font-display: 'JetBrains Mono', ui-monospace, monospace;
+            --font-sans: 'Inter', -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', Consolas, monospace;
             --ease-drift: cubic-bezier(0.25, 0.8, 0.25, 1);
         }
-        [data-theme="dark"] {
-            --bg: #191825;            /* night */
-            --bg-1: #232231;          /* night-2 */
-            --bg-2: #2C2B3D;          /* night-3 */
-            --bg-3: #383650;
-            --border: #383650;        /* hairline-n */
-            --border-light: #45425E;
-            --text: #EFEBE0;          /* moon — warm paper-white */
-            --text-2: #ADA89E;
-            --text-3: #7B7790;
-            --primary: #8A97C0;       /* atlas-soft — constellation lines */
-            --primary-dim: rgba(138,151,192,0.12);
-            --primary-hover: #A3AFD4;
-            --ember: #E8763A;
-            --ember-dim: rgba(232,118,58,0.14);
-            --success: #8FA379;
-            --success-dim: rgba(143,163,121,0.14);
-            --warn: #C2A75A;
-            --warn-dim: rgba(194,167,90,0.14);
-            --warning: #C2A75A;
-            --danger: #C97B6C;
-            --danger-dim: rgba(201,123,108,0.14);
+        /* TERMINAL is dark-first. The toggle now selects a light surface
+           rather than a separate palette — accents are unchanged so the
+           two modes stay recognisably the same product. */
+        [data-theme="light"] {
+            --bg: #FFFFFF;
+            --bg-1: #F7F8F8;
+            --bg-2: #EEF0F1;
+            --bg-3: #E3E6E8;
+            --border: #E3E6E8;
+            --border-light: #D3D7DA;
+            --text: #0B0C0E;
+            --text-2: #4B5259;
+            --text-3: #858C93;
+            --primary: #16A34A;
+            --primary-dim: rgba(22,163,74,0.10);
+            --primary-hover: #15803D;
+            --ember: #B45309;
+            --ember-dim: rgba(180,83,9,0.12);
+            --success: #16A34A;
+            --success-dim: rgba(22,163,74,0.12);
+            --warn: #B45309;
+            --warn-dim: rgba(180,83,9,0.12);
+            --warning: #B45309;
+            --danger: #DC2626;
+            --danger-dim: rgba(220,38,38,0.10);
         }
         body { font-family: var(--font-sans); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
         h1, h2, .page-title, .stat-value { font-family: var(--font-display); font-weight: 600; }
@@ -79,8 +93,10 @@
 
         /* ── Sidebar ── */
         .sidebar { width: 216px; background: var(--bg-1); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; flex-shrink: 0; }
-        .logo { font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 24px; padding: 0 8px; display: flex; align-items: center; gap: 7px; letter-spacing: -0.01em; }
-        .logo-icon { color: var(--primary); font-size: 15px; line-height: 1; font-family: var(--font-sans); }
+        .logo { font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 24px; padding: 0 8px; display: flex; align-items: baseline; gap: 3px; letter-spacing: -0.02em; }
+        /* Terminal caret, drawn rather than typed so its weight is exact and
+           does not shift with the font. Matches the site header. */
+        .logo-caret { display: inline-block; width: 2px; height: 0.9em; background: var(--primary); transform: translateY(0.04em); }
         .nav-section { font-family: var(--font-mono); font-size: 9.5px; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); padding: 0 8px; margin: 18px 0 6px; }
         .nav-item { padding: 7px 8px; border-radius: var(--radius); cursor: pointer; color: var(--text-2); transition: all 0.12s; margin-bottom: 1px; display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 500; }
         .nav-item:hover { background: var(--bg-2); color: var(--text); }
@@ -102,8 +118,9 @@
         .btn { padding: 7px 14px; border-radius: var(--radius); font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: all 0.16s; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-family: inherit; white-space: nowrap; }
         .btn-primary { background: var(--primary); color: #fff; }
         .btn-primary:hover { background: var(--primary-hover); }
-        [data-theme="dark"] .btn-primary { color: #191825; }
-        [data-theme="dark"] .btn-primary:hover { background: var(--primary-hover); }
+        .btn-primary { color: #0B0C0E; }
+        [data-theme="light"] .btn-primary { color: #FFFFFF; }
+        .btn-primary:hover { background: var(--primary-hover); }
         .btn-ghost { background: transparent; color: var(--text-2); border-color: var(--border-light); }
         .btn-ghost:hover { background: transparent; color: var(--primary); border-color: var(--primary); }
         .btn-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(248,113,113,0.25); }
@@ -167,7 +184,7 @@
         /* ── Toasts ── */
         .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
         .toast { padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; color: var(--text); background: var(--bg-1); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.12); transform: translateY(20px); opacity: 0; transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        [data-theme="dark"] .toast { color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .toast { color: #0B0C0E; box-shadow: 0 4px 12px rgba(0,0,0,0.45); }
         .toast.show { transform: translateY(0); opacity: 1; }
         .toast-success { border-left: 3px solid var(--success); }
         .toast-error { border-left: 3px solid var(--danger); }
@@ -175,7 +192,7 @@
         /* ── Utilities ── */
         .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.12); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        [data-theme="dark"] .spinner { border-color: rgba(255,255,255,0.15); border-top-color: white; }
+        .spinner { border-color: rgba(255,255,255,0.15); border-top-color: var(--primary); }
 
         /* ── ATLAS: the UI is a printed page — no texture, no glow ── */
         .app { position:relative; z-index:1; }
@@ -193,7 +210,7 @@
         .doc-type-competitive_brief { background: rgba(138,106,31,0.10); color: var(--warn); border-color: rgba(138,106,31,0.30); }
         .doc-type-corp_narrative    { background: rgba(86,103,63,0.10);  color: var(--success); border-color: rgba(86,103,63,0.30); }
         .doc-type-audience_library   { background: rgba(78,110,106,0.10); color: #4E6E6A; border-color: rgba(78,110,106,0.30); }
-        [data-theme="dark"] .doc-type-audience_library { color: #7FA39E; }
+        .doc-type-audience_library { color: var(--text-2); }
 
         /* ── QoL UX Enhancements ── */
 
@@ -248,7 +265,7 @@
             border-color: var(--border-light);
             box-shadow: 0 4px 14px rgba(35, 32, 26, 0.05);
         }
-        [data-theme="dark"] .card:hover {
+        .card:hover {
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
             border-color: var(--border-light);
         }
@@ -299,8 +316,8 @@
     <div class="app">
         <aside class="sidebar">
             <div class="logo" onclick="showSection('dashboard')" style="cursor:pointer;">
-                <span>MsgStack</span>
-                <div class="logo-icon">✦</div>
+                <span>msgstack</span>
+                <span class="logo-caret" aria-hidden="true"></span>
             </div>
             
             <div class="nav-section">Management</div>
@@ -330,8 +347,8 @@
             <div class="nav-item" onclick="showSection('settings')">Settings</div>
             
             <div class="sidebar-footer">
-                <span class="stamp" style="font-size:9px;">v0.9 ✦</span>
-                <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()" title="Toggle dark mode">
+                <span class="stamp" style="font-size:9px;">v0.9</span>
+                <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()" title="Toggle light mode">
                     <span id="theme-icon">☾</span>
                 </button>
             </div>
@@ -345,19 +362,20 @@
     {% block scripts %}{% endblock %}
     <script>
         function toggleTheme() {
-            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-            if (isDark) {
+            // TERMINAL is dark-first, so the stored preference selects light.
+            var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            if (isLight) {
                 document.documentElement.removeAttribute('data-theme');
                 localStorage.removeItem('msgstack-theme');
             } else {
-                document.documentElement.setAttribute('data-theme', 'dark');
-                localStorage.setItem('msgstack-theme', 'dark');
+                document.documentElement.setAttribute('data-theme', 'light');
+                localStorage.setItem('msgstack-theme', 'light');
             }
             _syncThemeIcon();
         }
         function _syncThemeIcon() {
             var icon = document.getElementById('theme-icon');
-            if (icon) icon.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀' : '☾';
+            if (icon) icon.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☾' : '☀';
         }
         document.addEventListener('DOMContentLoaded', _syncThemeIcon);
     </script>
