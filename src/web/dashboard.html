@@ -20,7 +20,7 @@
                 </button>
                 <button class="btn btn-primary" onclick="showSection('upload')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    New Framework
+                    New Messaging House
                 </button>
             </div>
         </div>
@@ -28,11 +28,11 @@
         <div class="stats">
             <div class="stat">
                 <div class="stat-value" id="stat-domains">—</div>
-                <div class="stat-label">Frameworks</div>
+                <div class="stat-label">Messaging Houses</div>
             </div>
             <div class="stat">
                 <div class="stat-value" id="stat-entries">—</div>
-                <div class="stat-label">Assertions</div>
+                <div class="stat-label">Claims</div>
             </div>
             <div class="stat">
                 <div class="stat-value" id="stat-artifacts">—</div>
@@ -61,7 +61,7 @@
         <div class="grid-2">
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">Recent Frameworks</span>
+                    <span class="card-title">Recent Messaging Houses</span>
                     <button class="btn btn-ghost btn-xs" onclick="showSection('frameworks')">View All</button>
                 </div>
                 <div id="recent-domains"><div style="color:var(--text-3);font-size:13px;">Loading…</div></div>
@@ -83,8 +83,8 @@
     <div class="page">
         <div class="page-header">
             <div>
-                <div class="page-title">Specs</div>
-                <div class="page-subtitle">Your services, contracts and policies — structured and queryable</div>
+                <div class="page-title">Messaging Houses</div>
+                <div class="page-subtitle">Your positioning, claims and campaigns — structured and queryable</div>
             </div>
         </div>
         <!-- Department Tabs -->
@@ -110,17 +110,17 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Upload Source</div>
-                <div class="page-subtitle">Extract a spec from a PDF, DOCX, or TXT document</div>
+                <div class="page-subtitle">Extract a messaging house from a PDF, DOCX, or TXT document</div>
             </div>
         </div>
         <div class="card">
             <div class="form-group" style="margin-bottom:14px;">
                 <label class="form-label" for="uploadDocType">Document Type</label>
                 <select class="form-select" id="uploadDocType" style="max-width:320px;">
-                    <option value="engineering_spec" selected>Engineering Spec</option>
-                    <option value="service_catalog">Service Catalog</option>
-                    <option value="policy_shield">Policy Shield</option>
-                    <option value="incident_record">Incident Record</option>
+                    <option value="engineering_spec" selected>Messaging House</option>
+                    <option value="service_catalog">Messaging Portfolio</option>
+                    <option value="policy_shield">Claims Review</option>
+                    <option value="incident_record">Campaign Retro</option>
                 </select>
                 <div style="font-size:11px;color:var(--text-3);margin-top:5px;">The document type determines how the AI structures the content.</div>
             </div>
@@ -133,7 +133,7 @@
                     <option value="Enablement">Enablement</option>
                     <option value="Product Management">Product Management</option>
                 </select>
-                <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Associates this spec with a department and applies primary grounding defaults.</div>
+                <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Associates this messaging house with a department and applies primary grounding defaults.</div>
             </div>
             <div class="upload-zone" id="upload-zone">
                 <svg class="upload-zone-icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -178,7 +178,7 @@
                     <div style="display:flex;gap:8px;">
                         <button class="btn btn-ghost btn-sm" onclick="resetUpload()">Discard</button>
                         <button class="btn btn-primary btn-sm" id="confirm-save-btn" onclick="confirmSave()">
-                            Save Framework →
+                            Save Messaging House →
                         </button>
                     </div>
                 </div>
@@ -195,7 +195,7 @@
                         <div class="card-title" id="extraction-name"></div>
                         <div style="font-size:12px;color:var(--text-2);margin-top:3px;" id="extraction-meta"></div>
                     </div>
-                    <button class="btn btn-success btn-sm" onclick="viewExtractedDomain()">View Framework →</button>
+                    <button class="btn btn-success btn-sm" onclick="viewExtractedDomain()">View Messaging House →</button>
                 </div>
                 <div class="completeness-bar"><div class="completeness-fill" id="completeness-fill" style="width:0%"></div></div>
                 <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;" id="completeness-label"></div>
@@ -210,13 +210,13 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Artifact Generator</div>
-                <div class="page-subtitle">Generate grounded marketing content from a framework</div>
+                <div class="page-subtitle">Generate grounded marketing content from a messaging house</div>
             </div>
         </div>
         <div class="artifact-layout">
             <div class="artifact-sidebar">
                 <div class="card" style="margin-bottom:0">
-                    <div class="card-title" style="margin-bottom:10px">Framework</div>
+                    <div class="card-title" style="margin-bottom:10px">Messaging House</div>
                     <select class="form-select" id="artifact-domain" onchange="onArtifactDomainChange()">
                         <option value="">Select…</option>
                     </select>
@@ -224,7 +224,7 @@
                 <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; max-height:calc(100vh - 200px);">
                     <div class="card-title" style="margin-bottom:10px; flex-shrink:0;">Artifact Type</div>
                     <div id="artifact-skills-list" style="overflow-y:auto; padding-right:6px; flex:1; margin-bottom:12px;">
-                        <div style="color:var(--text-3);font-size:13px;">Select a framework first</div>
+                        <div style="color:var(--text-3);font-size:13px;">Select a messaging house first</div>
                     </div>
                     
                     <!-- Integrated dynamic context fields (only visible when required by the selected skill) -->
@@ -279,15 +279,15 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Alignment Scoring</div>
-                <div class="page-subtitle">Evaluate arbitrary content against an approved spec</div>
+                <div class="page-subtitle">Evaluate arbitrary content against an approved messaging house</div>
             </div>
         </div>
         <div class="grid-2">
             <div class="card">
                 <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label" for="scoring-domain">Framework</label>
+                    <label class="form-label" for="scoring-domain">Messaging House</label>
                     <select class="form-select" id="scoring-domain">
-                        <option value="">Select a framework…</option>
+                        <option value="">Select a messaging house…</option>
                     </select>
                 </div>
                 <div class="form-group" style="margin-bottom:14px;">
@@ -314,7 +314,7 @@
                 </div>
                 
                 <div id="scoring-missing-container" style="display:none;">
-                    <div style="font-weight:600;color:var(--warning);margin-bottom:8px;">Missing Assertions</div>
+                    <div style="font-weight:600;color:var(--warning);margin-bottom:8px;">Missing Claims</div>
                     <ul id="scoring-missing" style="font-size:13px;color:var(--text-2);padding-left:20px;margin:0;"></ul>
                 </div>
             </div>
@@ -337,7 +337,7 @@
                 <div class="card-title">DRI Accountability</div>
                 <button class="btn btn-ghost btn-sm" onclick="loadGovernance()">Refresh</button>
             </div>
-            <div style="font-size:12px;color:var(--text-3);margin-bottom:10px;">Domains grouped by their Directly Responsible Individual. Unowned domains listed first.</div>
+            <div style="font-size:12px;color:var(--text-3);margin-bottom:10px;">Messaging houses grouped by their Directly Responsible Individual. Unowned messaging houses listed first.</div>
             <div id="dri-summary-container" style="font-size:13px;"></div>
         </div>
 
@@ -817,10 +817,10 @@
                     <div class="form-group" style="margin-bottom:10px;">
                         <label class="form-label" for="new-dept-grounding">Primary Grounding Type</label>
                         <select id="new-dept-grounding" class="form-select">
-                            <option value="engineering_spec" selected>Engineering Spec</option>
-                    <option value="service_catalog">Service Catalog</option>
-                    <option value="policy_shield">Policy Shield</option>
-                    <option value="incident_record">Incident Record</option>
+                            <option value="engineering_spec" selected>Messaging House</option>
+                    <option value="service_catalog">Messaging Portfolio</option>
+                    <option value="policy_shield">Claims Review</option>
+                    <option value="incident_record">Campaign Retro</option>
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom:12px;">
@@ -857,7 +857,7 @@
     <!-- Messages Container -->
     <div id="chat-messages" style="flex:1;padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;background:var(--bg);">
         <div style="padding:12px;border-radius:8px;font-size:13px;background:var(--bg-2);color:var(--text-2);">
-            Hi! I'm the Graph Navigator super-agent. Ask me anything about your active brand specifications or narrative drift.
+            Hi! I'm the Graph Navigator super-agent. Ask me anything about your active messaging houses or narrative drift.
         </div>
     </div>
 
@@ -886,11 +886,30 @@
     let _dragSrcEl = null;
     let activeDept = 'All';
     const GROUNDING_LABELS = {
-        'engineering_spec': 'Engineering Spec',
-        'service_catalog':  'Service Catalog',
-        'policy_shield':    'Policy Shield',
-        'incident_record':  'Incident Record'
+        'engineering_spec': 'Messaging House',
+        'service_catalog':  'Messaging Portfolio',
+        'policy_shield':    'Claims Review',
+        'incident_record':  'Campaign Retro'
     };
+    const ASSERTION_TYPE_LABELS = {
+        constraint:         'Guardrail',
+        sla:                'Commitment',
+        deprecation:        'Retired Claim',
+        config_default:     'Default Message',
+        dependency:         'Dependency',
+        capability:         'Proof Point',
+        limitation:         'Limitation',
+        security_posture:   'Trust Claim',
+        interface_contract: 'Usage Rule',
+        version_policy:     'Governance Rule',
+        runbook_step:       'Playbook Step',
+        decision:           'Decision',
+        positioning:        'Positioning Statement',
+        source_markdown:    'Source Document',
+    };
+    function assertionTypeLabel(v) {
+        return ASSERTION_TYPE_LABELS[v] || (v||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    }
     let DEPT_PRIMARY_GROUNDING = {
         "Platform":    "engineering_spec",
         "Engineering": "engineering_spec",
@@ -918,7 +937,7 @@
         const key = `${domainName}-${m}`;
         if (_milestoneShown.has(key)) return;
         _milestoneShown.add(key);
-        const labels = {50:'🎯 50% — Halfway there!', 75:'🔥 75% — Great progress!', 90:'⭐ 90% — Almost done!', 100:'🏆 100% — Framework complete!'};
+        const labels = {50:'🎯 50% — Halfway there!', 75:'🔥 75% — Great progress!', 90:'⭐ 90% — Almost done!', 100:'🏆 100% — Messaging house complete!'};
         toast(labels[m], 'success');
     }
 
@@ -947,10 +966,10 @@
     // ── Routing ────────────────────────────────────────────────────────────────
 
     const DOC_TYPE_LABELS = {
-        'engineering_spec': 'Engineering Spec',
-        'service_catalog':  'Service Catalog',
-        'policy_shield':    'Policy Shield',
-        'incident_record':  'Incident Record',
+        'engineering_spec': 'Messaging House',
+        'service_catalog':  'Messaging Portfolio',
+        'policy_shield':    'Claims Review',
+        'incident_record':  'Campaign Retro',
     };
 
     function docTypeBadge(docType) {
@@ -1089,8 +1108,8 @@
                 <span style="font-size:13px;color:var(--text-3);">edges</span>
             </div>
             <div style="font-size:12px;color:var(--text-2);">
-                <span style="margin-right:12px;">Specs: <strong style="color:var(--text);">${bt.Spec||0}</strong></span>
-                <span style="margin-right:12px;">Assertions: <strong style="color:var(--text);">${bt.Assertion||0}</strong></span>
+                <span style="margin-right:12px;">Messaging Houses: <strong style="color:var(--text);">${bt.Spec||0}</strong></span>
+                <span style="margin-right:12px;">Claims: <strong style="color:var(--text);">${bt.Assertion||0}</strong></span>
                 <span style="margin-right:12px;">Personas: <strong style="color:var(--text);">${bt.Audience||0}</strong></span>
                 <span>Channels: <strong style="color:var(--text);">${bt.Channel||0}</strong></span>
             </div>`;
@@ -1193,7 +1212,7 @@
                     </div>
                     <div style="font-size:12.5px;color:var(--text-2);line-height:1.5;margin-bottom:12px;min-height:36px;">${esc(h.summary)}</div>
                     <div class="domain-card-footer" style="display:flex;gap:12px;font-size:11px;color:var(--text-3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;align-items:center;">
-                        <span>${h.entry_count} Entries</span>
+                        <span>${h.entry_count} Claims</span>
                         <span>${h.audience_count} Personas</span>
                         <span style="margin-left:auto;color:${h.completeness_score>=75?'var(--success)':h.completeness_score>=50?'var(--warn)':'var(--text-3)'};">${h.completeness_score}%</span>
                         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--danger);" onclick="event.stopPropagation();deleteDomain('${h.id}')">Delete</button>
@@ -1214,7 +1233,7 @@
         proof_point:  { label:'Proof Point',  color:'#2F3D68', bg:'rgba(47,61,104,.10)' },
         qa_pair:    { label:'QAPair',    color:'#9E3B2E', bg:'rgba(158,59,46,.10)' },
         social_proof: { label:'Social Proof', color:'#8A6A1F', bg:'rgba(138,106,31,.10)' },
-        positioning:  { label:'Positioning',  color:'#9C947F', bg:'rgba(156,148,127,.10)' },
+        positioning:  { label:'Positioning Statement', color:'#9C947F', bg:'rgba(156,148,127,.10)' },
     };
     const SECTION_ORDER = ['headline','subhead','benefit','use_case','proof_point','qa_pair','social_proof','positioning'];
 
@@ -1341,7 +1360,7 @@
         <div id="domain-tab-history" style="display:none;">
             <div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                    <div style="font-weight:600;font-size:14px;color:var(--text);">Framework Review Trail</div>
+                    <div style="font-weight:600;font-size:14px;color:var(--text);">Messaging House Review Trail</div>
                     <button class="btn btn-primary btn-sm" onclick="markDomainReviewedFromDetail('${domain.id}')">Mark as Reviewed (Reset Staleness)</button>
                 </div>
                 <div id="review-log-content">Loading review log...</div>
@@ -1356,7 +1375,7 @@
             .concat(Object.keys(grouped).filter(s=>!SECTION_ORDER.includes(s)&&grouped[s]?.length));
         if (!sections.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No entries yet. Add one above or use Bulk Import.</div>';
         return sections.map(st => {
-            const meta = SECTION_META[st]||{label:st.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),color:'#9C947F',bg:'rgba(156,148,127,.10)'};
+            const meta = SECTION_META[st]||{label:assertionTypeLabel(st),color:'#9C947F',bg:'rgba(156,148,127,.10)'};
             const msgs = grouped[st]||[];
             return `<div class="card" style="margin-bottom:12px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
@@ -1455,7 +1474,7 @@
     async function markDomainReviewedFromDetail(domainId) {
         try {
             await apiFetch(`${API}/specs/${domainId}/mark-reviewed`, { method: 'POST' });
-            toast('Framework marked as reviewed', 'success');
+            toast('Messaging house marked as reviewed', 'success');
             viewDomain(domainId);
         } catch(e) {
             toast('Failed: ' + e.message, 'error');
@@ -1557,14 +1576,14 @@
     function openAddEntry(domainId) {
         const opts = SECTION_ORDER.map(s=>`<option value="${s}">${SECTION_META[s]?.label||s}</option>`).join('');
         openModal(`<div style="padding:24px;">
-            <div style="font-weight:600;font-size:15px;margin-bottom:16px;">Add Assertion</div>
+            <div style="font-weight:600;font-size:15px;margin-bottom:16px;">Add Claim</div>
             <div style="margin-bottom:12px;">
-                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Section Type</label>
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Claim Type</label>
                 <select id="nm-type" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;">${opts}</select>
             </div>
             <div style="margin-bottom:16px;">
                 <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Content</label>
-                <textarea id="nm-content" rows="3" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;" placeholder="Enter the assertion…"></textarea>
+                <textarea id="nm-content" rows="3" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;" placeholder="Enter the claim…"></textarea>
             </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;">
                 <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
@@ -1607,7 +1626,7 @@
             <div style="font-weight:600;font-size:15px;margin-bottom:6px;">Bulk Import Entries</div>
             <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px;">Paste from a spreadsheet: <code style="background:var(--bg-3);padding:1px 4px;border-radius:3px;">assertion_type TAB content</code> per line. Or paste just content lines and pick a default type.</div>
             <div style="margin-bottom:10px;">
-                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Default Section Type</label>
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:5px;">Default Claim Type</label>
                 <select id="bi-type" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;">${opts}</select>
             </div>
             <div style="margin-bottom:16px;">
@@ -2390,7 +2409,7 @@
         }
         const sections = SECTION_ORDER.filter(s=>grouped[s]?.length).concat(Object.keys(grouped).filter(s=>!SECTION_ORDER.includes(s)&&grouped[s]?.length));
         sectionsEl.innerHTML = sections.map(st => {
-            const meta = SECTION_META[st]||{label:st,color:'#9C947F',bg:'rgba(156,148,127,.10)'};
+            const meta = SECTION_META[st]||{label:assertionTypeLabel(st),color:'#9C947F',bg:'rgba(156,148,127,.10)'};
             const items = (grouped[st]||[]).map(m=>`<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px;color:var(--text-2);line-height:1.5;">${esc(m.content)}</div>`).join('');
             return `<div style="margin-bottom:12px;padding:12px;background:${meta.bg};border-radius:var(--radius);">
                 <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:8px;">${meta.label} (${(grouped[st]||[]).length})</div>
@@ -2415,9 +2434,9 @@
             document.getElementById('extraction-meta').textContent = `${data.entry_count} entries · ${data.audience_count} audiences · ${data.completeness_score}% complete`;
             document.getElementById('completeness-fill').style.width = (data.completeness_score||0) + '%';
             document.getElementById('completeness-label').textContent = `${data.completeness_score||0}% complete`;
-            toast('Framework saved','success');
+            toast('Messaging house saved','success');
         } catch(e) {
-            if (btn) { btn.disabled = false; btn.textContent = 'Save Framework →'; }
+            if (btn) { btn.disabled = false; btn.textContent = 'Save Messaging House →'; }
             toast('Save failed: '+e.message,'error');
         }
     }
@@ -2616,6 +2635,15 @@ const NODE_COLORS = {
         Channel:   22,
         QAPair:    14,
     };
+    const NODE_TYPE_LABELS = {
+        Spec:      'Messaging House',
+        Assertion: 'Claim',
+        Entity:    'Concept',
+        QAPair:    'Q&A',
+    };
+    function nodeTypeLabel(t) {
+        return NODE_TYPE_LABELS[t] || (t||'').replace('Grounding','');
+    }
     const REL_COLORS = {
         CONTAINS:     '#9C947F',
         HAS_SECTION:  '#9C947F',
@@ -2664,7 +2692,7 @@ const NODE_COLORS = {
         for (const n of data.nodes) byType[n.type] = (byType[n.type] || 0) + 1;
         const statItems = [
             ...Object.entries(byType).map(([t, c]) => ({
-                val: c, label: t.replace('Grounding', ''), color: NODE_COLORS[t] || '#888' })),
+                val: c, label: nodeTypeLabel(t), color: NODE_COLORS[t] || '#888' })),
             { val: data.edges.length, label: 'Edges total', color: '#888' },
         ];
         document.getElementById('graph-exp-stats').innerHTML = statItems.map(s => `
@@ -2692,7 +2720,7 @@ const NODE_COLORS = {
                     ...data.nodes.map(n => ({ data: {
                         id: n.id,
                         label: n.type === 'Assertion'
-                            ? '[' + (n.assertion_type||'').replace(/_/g,' ') + '] ' + (n.content||'').slice(0,25)
+                            ? '[' + assertionTypeLabel(n.assertion_type) + '] ' + (n.content||'').slice(0,25)
                             : (n.label || n.id).slice(0, 28),
                         type: n.type,
                         color: NODE_COLORS[n.type] || '#888',
@@ -2749,13 +2777,18 @@ const NODE_COLORS = {
         const color = NODE_COLORS[n.type] || '#888';
         const fields = Object.entries(n)
             .filter(([k]) => !['id','type','label'].includes(k))
-            .map(([k, v]) => `
+            .map(([k, v]) => {
+                const displayV = k === 'assertion_type' ? assertionTypeLabel(v)
+                                : k === 'schema_type' ? (GROUNDING_LABELS[v] || v)
+                                : v;
+                return `
                 <div style="margin-bottom:8px;">
                     <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:2px;">${k.replace(/_/g,' ')}</div>
-                    <div style="font-size:12px;color:var(--text);word-break:break-word;line-height:1.45;">${esc(String(v ?? '—'))}</div>
-                </div>`).join('');
+                    <div style="font-size:12px;color:var(--text);word-break:break-word;line-height:1.45;">${esc(String(displayV ?? '—'))}</div>
+                </div>`;
+            }).join('');
         document.getElementById('graph-node-detail').innerHTML = `
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${color};margin-bottom:8px;">${n.type.replace('Grounding','')}</div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${color};margin-bottom:8px;">${nodeTypeLabel(n.type)}</div>
             <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;word-break:break-word;">${esc(n.label)}</div>
             <div style="font-size:10px;font-family:monospace;color:var(--text-3);margin-bottom:12px;word-break:break-all;">${esc(n.id)}</div>
             ${fields}`;
@@ -2789,7 +2822,7 @@ const NODE_COLORS = {
             return `<div style="margin-bottom:2px;">
                 <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${color};padding:8px 10px 3px;display:flex;align-items:center;gap:6px;">
                     <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;"></span>
-                    ${t.replace('Grounding','')} <span style="font-weight:400;color:var(--text-3);">(${grouped[t].length})</span>
+                    ${nodeTypeLabel(t)} <span style="font-weight:400;color:var(--text-3);">(${grouped[t].length})</span>
                 </div>
                 ${rows}
             </div>`;
@@ -2934,7 +2967,7 @@ const NODE_COLORS = {
                     <th style="padding:4px 8px;font-weight:500;">File</th>
                     <th style="padding:4px 8px;font-weight:500;">Status</th>
                     <th style="padding:4px 8px;font-weight:500;">Synced</th>
-                    <th style="padding:4px 8px;font-weight:500;">Framework</th>
+                    <th style="padding:4px 8px;font-weight:500;">Messaging House</th>
                     <th style="padding:4px 8px;font-weight:500;"></th>
                 </tr></thead>
                 <tbody>${data.files.map(f => {
@@ -3011,7 +3044,7 @@ const NODE_COLORS = {
         }
         try {
             await apiFetch(`${API}/specs/${id}`, {method: 'DELETE'});
-            showToast('Framework deleted', 'success');
+            showToast('Messaging house deleted', 'success');
             if (!card) showSection('frameworks');
         } catch(e) {
             showToast('Delete failed: ' + e.message, 'error');
@@ -3197,7 +3230,7 @@ const NODE_COLORS = {
         </div>`;
 
         const msgCards = sections.map(st => {
-            const meta = SECTION_META[st] || { label: st.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), color:'#9C947F', bg:'rgba(156,148,127,.10)' };
+            const meta = SECTION_META[st] || { label: assertionTypeLabel(st), color:'#9C947F', bg:'rgba(156,148,127,.10)' };
             const msgs = grouped[st] || [];
             return `<div class="card msg-section" data-section="${st}" style="margin-bottom:12px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
@@ -3306,7 +3339,7 @@ const NODE_COLORS = {
         if (event) event.stopPropagation();
         try {
             await apiFetch(`${API}/specs/${domainId}/mark-reviewed`, { method: 'POST' });
-            toast('Framework marked as reviewed', 'success');
+            toast('Messaging house marked as reviewed', 'success');
             loadDomains();
         } catch(e) {
             toast('Failed: ' + e.message, 'error');
@@ -3356,7 +3389,7 @@ const NODE_COLORS = {
                     const groundingLabel = GROUNDING_LABELS[primaryGrounding] || primaryGrounding.replace(/_/g, ' ');
                     infoBanner.innerHTML = `<div style="background:var(--bg-1); border:1px solid var(--border); padding:10px 16px; border-radius:var(--radius); display:flex; align-items:center; gap:8px;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" width="16" height="16" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                        <span>Showing specs for <strong>${esc(activeDept)}</strong>. New domains created in this department default to the <strong>${esc(groundingLabel)}</strong> grounding type.</span>
+                        <span>Showing messaging houses for <strong>${esc(activeDept)}</strong>. New messaging houses created in this department default to the <strong>${esc(groundingLabel)}</strong> grounding type.</span>
                     </div>`;
                     infoBanner.style.display = 'block';
                 } else {
@@ -3367,7 +3400,7 @@ const NODE_COLORS = {
             const filteredDomains = domains.filter(h => activeDept === 'All' || (h.department || "General") === activeDept);
 
             if (!filteredDomains.length) {
-                list.innerHTML = `<div style="grid-column:1/-1;" class="card"><div style="color:var(--text-3);font-size:14px;text-align:center;padding:32px 0;">No frameworks in this department yet. <button class="btn btn-ghost btn-sm" onclick="showSection('upload')">Upload a document →</button></div></div>`;
+                list.innerHTML = `<div style="grid-column:1/-1;" class="card"><div style="color:var(--text-3);font-size:14px;text-align:center;padding:32px 0;">No messaging houses in this department yet. <button class="btn btn-ghost btn-sm" onclick="showSection('upload')">Upload a document →</button></div></div>`;
                 return;
             }
 
@@ -3391,7 +3424,7 @@ const NODE_COLORS = {
                     </div>
                     <div style="font-size:12.5px;color:var(--text-2);line-height:1.5;margin-bottom:12px;min-height:36px;">${esc(h.summary)}</div>
                     <div class="domain-card-footer" style="display:flex;gap:12px;font-size:11px;color:var(--text-3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;align-items:center;">
-                        <span>${h.entry_count} Entries</span>
+                        <span>${h.entry_count} Claims</span>
                         <span>${h.audience_count} Personas</span>
                         <span style="margin-left:auto;color:${h.completeness_score>=75?'var(--success)':h.completeness_score>=50?'var(--warn)':'var(--text-3)'};">${h.completeness_score}%</span>
                         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--warn);" onclick="markDomainReviewed('${h.id}',event)">Mark Reviewed</button>
