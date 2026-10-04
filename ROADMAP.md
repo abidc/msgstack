@@ -458,9 +458,9 @@ Embargoed or pre-announcement content must never surface outside its authorized 
 - [ ] **Audio/Video Indexing:** Segment classification at ingest (keynote, demo, testimonial); timestamped moment retrieval so queries surface the relevant clip, not the whole transcript.
 - [x] **Ingestion Conflict Detection:** Scan uploaded files and flag contradictions against existing canon elements before committing changes (`pipeline/conflict.py`, hard/soft severity).
 - [ ] **50+ Pre-built Deliverable Templates:** Derive templates from real client work (CEO keynotes, sales decks, battlecards, press releases, investor updates, product messaging frameworks, etc.).
-- [ ] **Competitor document import:** Upload competitor docs → extraction pipeline extracts claims into a `competitive_brief` domain
-- [ ] **Competitive gap analysis:** Compare your canon domain to a competitor's extracted claims — identify where you are differentiated vs where they challenge you
-- [ ] **Battlecard auto-sharpen:** Automatically load the competitor's extracted claims and ensure each response directly counters their stated positioning using approved canon entries
+- [x] **Competitor document import:** `POST /api/competitive/extract` — extraction pipeline extracts verbatim claims into a `competitive_brief` domain; each claim anchored to its exact character span in the source document (not just a document-level reference) and discarded rather than kept if the LLM can't locate it verbatim. `src/pipeline/competitive_intel.py`.
+- [x] **Competitive gap analysis:** `POST /api/competitive/gap-analysis` — compares canon entries against a competitor's extracted claims; creates real `CONTRADICTS` graph edges (not a side table) for claims we counter, provenance = the competitor's exact quote; claims with no matching entry surface as uncovered gaps.
+- [x] **Battlecard auto-sharpen:** `POST /api/competitive/battlecard` — walks the `CONTRADICTS` edges gap-analysis created to assemble `battlecard.json`-shaped content (our_strengths/their_weaknesses/counter_messaging/proof_points) from approved canon entries.
 
 ---
 

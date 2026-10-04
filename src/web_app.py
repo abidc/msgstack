@@ -4053,6 +4053,57 @@ def get_house_usage_stats(house_id: Optional[str] = None, domain_id: Optional[st
     return store.get_message_usage_stats(actual_id)
 
 
+# --- Competitive Intel ---
+
+class CompetitiveExtractRequest(BaseModel):
+    document_text: str
+    competitor_name: str
+    domain_id: UUID
+    dri: str = ""
+
+
+@app.post("/api/competitive/extract")
+def api_competitive_extract(req: CompetitiveExtractRequest, auth: AuthContext = Depends(get_auth_context)):
+    """Extract verbatim competitor claims from an uploaded document into an
+    existing competitive_brief domain. Non-verbatim claims are discarded, not
+    kept with a fuzzy citation — see competitive_intel.py docstring."""
+    from src.pipeline.competitive_intel import extract_competitor_claims
+    try:
+        entries = extract_competitor_claims(req.document_text, req.competitor_name, req.domain_id, store, dri=req.dri)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"extracted": len(entries), "entries": [e.model_dump(mode="json") for e in entries]}
+
+
+class GapAnalysisRequest(BaseModel):
+    our_domain_id: UUID
+    competitor_domain_id: UUID
+
+
+@app.post("/api/competitive/gap-analysis")
+def api_competitive_gap_analysis(req: GapAnalysisRequest, auth: AuthContext = Depends(get_auth_context)):
+    """Compare our canon domain against a competitor's extracted claims.
+    Creates CONTRADICTS edges in the graph (not a side table) for claims we
+    directly counter, each carrying the competitor's exact quote as provenance."""
+    from src.pipeline.competitive_intel import analyze_competitive_gap
+    return analyze_competitive_gap(req.our_domain_id, req.competitor_domain_id, store)
+
+
+class BattlecardRequest(BaseModel):
+    competitor_name: str
+    competitor_domain_id: UUID
+    our_domain_id: UUID
+
+
+@app.post("/api/competitive/battlecard")
+def api_competitive_battlecard(req: BattlecardRequest, auth: AuthContext = Depends(get_auth_context)):
+    """Assemble battlecard.json-shaped content from the CONTRADICTS edges
+    gap-analysis already created. Run gap-analysis first — this only reads
+    the graph, it doesn't compute the comparison itself."""
+    from src.pipeline.competitive_intel import sharpen_battlecard
+    return sharpen_battlecard(req.competitor_name, req.competitor_domain_id, req.our_domain_id, store)
+
+
 # --- Canon Navigator Chat ---
 
 class ChatRequest(BaseModel):
