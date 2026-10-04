@@ -4,13 +4,12 @@ from datetime import datetime
 from uuid import uuid4
 
 from src.models import Channel, HouseStatus, KeyMessage, MessageHouse, Persona, SectionType
-from src.store import Store
+from src.store import init_store
 
 
 def seed():
     """Seed the database with 10 complete message houses."""
-    store = Store("msgstack.db")
-    store.init()
+    store = init_store()
 
     now = datetime.utcnow()
     houses_data = [
