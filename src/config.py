@@ -30,6 +30,10 @@ class Settings:
         self.llm_referer: str = os.environ.get("LLM_REFERER", "https://www.msgstack.ai")
         self.llm_title: str = os.environ.get("LLM_TITLE", "MsgStack")
         self.turbovec_index_path: str = os.environ.get("TURBOVEC_INDEX_PATH", "data/msgstack_vectors.tvim")
+        # Optional self-hosted decision-model endpoint (Clef-flash, Strands Decider, or
+        # compatible) for fixed-option routing jobs — see src/decision_model.py. Unset by
+        # default; decide() falls back to the OpenRouter-routed llm_client() when empty.
+        self.decision_model_url: str = os.environ.get("DECISION_MODEL_URL", "").rstrip("/")
         self.rate_limit_extract: int = _int("RATE_LIMIT_EXTRACT", 10)
         self.rate_limit_generate: int = _int("RATE_LIMIT_GENERATE", 30)
         self.rate_limit_default: int = _int("RATE_LIMIT_DEFAULT", 120)

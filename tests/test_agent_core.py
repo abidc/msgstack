@@ -21,9 +21,10 @@ def _tool_result(text: str):
 
 
 class FakeSession:
-    def __init__(self, domains_json: str, generate_text: str = "generated content"):
+    def __init__(self, domains_json: str, generate_text: str = "generated content", classify_choice: str | None = None):
         self._domains_json = domains_json
         self._generate_text = generate_text
+        self._classify_choice = classify_choice
         self.calls: list[tuple[str, dict]] = []
 
     async def call_tool(self, name: str, args: dict):
@@ -32,6 +33,10 @@ class FakeSession:
             return _tool_result(self._domains_json)
         if name == "generate_artifact":
             return _tool_result(self._generate_text)
+        if name == "classify_request":
+            if self._classify_choice is None:
+                raise AssertionError("classify_request called but no classify_choice configured")
+            return _tool_result(json.dumps({"choice": self._classify_choice, "confidence": 0.9, "source": "llm_fallback"}))
         raise AssertionError(f"unexpected tool call: {name}")
 
 
@@ -77,12 +82,38 @@ def test_extract_tool_text_reads_first_text_block():
 
 @pytest.mark.asyncio
 async def test_handle_request_asks_for_domain_when_ambiguous(monkeypatch):
+    # No classify_choice configured: classify_request raises, caught, falls back to asking.
     _patched_session(monkeypatch, FakeSession(DOMAINS_JSON))
     core = AgentCore()
     resp = await core.handle_request("write a one-pager", "U1", "slack")
     assert resp.domain_id is None
     assert "Which canon domain" in resp.text
     assert resp.available_domains == ["Acme Cloud Security Platform", "Helix HR"]
+
+
+@pytest.mark.asyncio
+async def test_handle_request_resolves_ambiguous_domain_via_classify_request(monkeypatch):
+    fake = FakeSession(DOMAINS_JSON, generate_text="the body", classify_choice="Helix HR")
+    _patched_session(monkeypatch, fake)
+    core = AgentCore()
+    resp = await core.handle_request("write a one-pager about our HR thing", "U1", "slack")
+    assert resp.domain_id == "d2"
+    assert resp.domain_name == "Helix HR"
+    assert ("classify_request", {"text": "write a one-pager about our HR thing", "options": ["Acme Cloud Security Platform", "Helix HR"], "context": "Which canon domain is this request about?"}) in fake.calls
+
+
+@pytest.mark.asyncio
+async def test_handle_request_resolves_unmatched_skill_via_classify_request(monkeypatch):
+    from agent.core import KNOWN_SKILLS
+    fake = FakeSession(DOMAINS_JSON, generate_text="the body", classify_choice="battlecard")
+    _patched_session(monkeypatch, fake)
+    core = AgentCore()
+    resp = await core.handle_request("arm me for the call with Helix HR", "U1", "slack")
+    assert resp.skill_id == "battlecard"
+    assert resp.domain_name == "Helix HR"
+    classify_calls = [c for c in fake.calls if c[0] == "classify_request"]
+    assert classify_calls, "expected a classify_request call for the unmatched skill phrase"
+    assert classify_calls[0][1]["options"] == list(KNOWN_SKILLS.keys())
 
 
 @pytest.mark.asyncio

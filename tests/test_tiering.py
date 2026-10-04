@@ -233,6 +233,51 @@ class TestTier1VerbatimValidation:
         output = "Headline: Automate busywork and   free strategic time."
         assert find_tier1_violations([entry], output) == []
 
+    def test_borderline_overlap_without_decision_model_keeps_heuristic_answer(self):
+        """No DECISION_MODEL_URL configured -> no refinement attempted, no network call.
+
+        Patches the shared Settings instance's attribute directly (not the module-level
+        `settings` name) because both src.config and src.decision_model hold their own
+        `from src.config import settings` binding to the same object — replacing one
+        binding with a MagicMock would leave the other pointing at the real instance.
+        """
+        from unittest.mock import patch
+        from src.pipeline.generator import find_tier1_violations
+        entry = self._entry("Secure encrypted vault storage system.")
+        output = "Our platform includes secure storage for your files."  # overlap == 0.4, in-band
+        with patch("src.config.settings.decision_model_url", ""), patch("src.decision_model.requests.post") as mock_post:
+            assert find_tier1_violations([entry], output) == []
+            mock_post.assert_not_called()
+
+    def test_borderline_overlap_with_decision_model_can_override_heuristic(self):
+        """DECISION_MODEL_URL configured -> a borderline case can flip the heuristic's call."""
+        from unittest.mock import MagicMock, patch
+        from src.pipeline.generator import find_tier1_violations
+        entry = self._entry("Secure encrypted vault storage system.")
+        output = "Our platform includes secure storage for your files."  # overlap == 0.4, heuristic says "not a violation"
+
+        fake_response = MagicMock()
+        fake_response.json.return_value = {"choice": "violation", "confidence": 0.85}
+        fake_response.raise_for_status.return_value = None
+
+        with patch("src.config.settings.decision_model_url", "http://localhost:9999"), \
+             patch("src.decision_model.requests.post", return_value=fake_response):
+            violations = find_tier1_violations([entry], output)
+
+        assert len(violations) == 1
+        assert violations[0]["content"] == entry.content
+
+    def test_refine_borderline_false_skips_refinement_entirely(self):
+        """refine_borderline=False bypasses the decision model even if one is configured."""
+        from unittest.mock import patch
+        from src.pipeline.generator import find_tier1_violations
+        entry = self._entry("Secure encrypted vault storage system.")
+        output = "Our platform includes secure storage for your files."
+        with patch("src.config.settings.decision_model_url", "http://localhost:9999"), \
+             patch("src.decision_model.requests.post") as mock_post:
+            assert find_tier1_violations([entry], output, refine_borderline=False) == []
+            mock_post.assert_not_called()
+
 
 class TestTierMigration:
     """Additive migration creates content_tier column."""

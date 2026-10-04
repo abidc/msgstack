@@ -88,6 +88,14 @@ def _guess_skill(text: str) -> str:
     return DEFAULT_SKILL
 
 
+def _skill_phrase_matched(text: str) -> bool:
+    """Whether _guess_skill found a real phrase match, as opposed to falling through to
+    DEFAULT_SKILL — can't tell those apart from the returned value alone, since
+    DEFAULT_SKILL is itself a value _guess_skill can also return via a real match."""
+    lowered = text.lower()
+    return any(p in lowered for phrases in KNOWN_SKILLS.values() for p in phrases)
+
+
 def _guess_domain(text: str, domains: list[dict]) -> dict | None:
     """Pick the canon domain whose name appears in the request text.
     Longest-name-first so "Acme Cloud Security Platform" wins over a
@@ -128,8 +136,33 @@ class AgentCore:
             if d.get("name")
         ]
 
+    async def _classify_via_mcp(self, text: str, options: list[str], context: str = "") -> str | None:
+        """Ask the server's classify_request tool to pick one of `options`. None on failure —
+        callers keep their existing heuristic result rather than failing the whole request
+        over a routing refinement."""
+        if len(options) < 2:
+            return None
+        try:
+            async with mcp_session() as session:
+                result = await session.call_tool(
+                    "classify_request", {"text": text, "options": options, "context": context}
+                )
+                parsed = json.loads(_extract_tool_text(result))
+                choice = parsed.get("choice")
+                return choice if choice in options else None
+        except Exception:
+            logger.warning("classify_request MCP call failed; keeping heuristic result", exc_info=True)
+            return None
+
     async def handle_request(self, text: str, platform_user_id: str, platform: str) -> AgentResponse:
         skill_id = _guess_skill(text)
+        if not _skill_phrase_matched(text):
+            # No phrase matched — ask the server for a real classification rather than
+            # silently defaulting to one_pager for every ambiguous request.
+            refined = await self._classify_via_mcp(text, list(KNOWN_SKILLS.keys()))
+            if refined:
+                skill_id = refined
+
         try:
             domains = await self.list_domains()
         except Exception:
@@ -140,8 +173,14 @@ class AgentCore:
             )
 
         domain = _guess_domain(text, domains)
+        domain_names = [d["name"] for d in domains]
+        if domain is None and domain_names:
+            refined_name = await self._classify_via_mcp(
+                text, domain_names, context="Which canon domain is this request about?"
+            )
+            if refined_name:
+                domain = next((d for d in domains if d["name"] == refined_name), None)
         if domain is None:
-            domain_names = [d["name"] for d in domains]
             if not domain_names:
                 return AgentResponse(
                     text="No canon domains are set up yet in MsgStack.", error=True
