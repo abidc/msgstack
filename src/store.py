@@ -785,8 +785,15 @@ class Store:
                     known = {r[0] for r in conn.execute(text(
                         f"SELECT DISTINCT {col} FROM assertions"))}
                     valid = {t.value for t in _Gen3AssertionType}
+                    # A value already valid in the CURRENT restored SectionType enum
+                    # (e.g. a gen-4+ addition like engineering_spec's api_contract,
+                    # added after this migration was written) is not legacy data —
+                    # round-tripping it through the gen-3 shape would destroy it,
+                    # since _GEN3_LEGACY_SECTION_TYPE_MAP has no entry for anything
+                    # newer than gen-3 and would collapse it to CAPABILITY.
+                    current_valid = {t.value for t in SectionType}
                     for old_val in known:
-                        if old_val in valid or old_val is None:
+                        if old_val in valid or old_val in current_valid or old_val is None:
                             continue
                         new_val = _GEN3_LEGACY_SECTION_TYPE_MAP.get(
                             old_val, _Gen3AssertionType.CAPABILITY.value)
@@ -809,8 +816,11 @@ class Store:
                     known = {r[0] for r in conn.execute(text(
                         f"SELECT DISTINCT {col} FROM specs"))}
                     valid = {t.value for t in _Gen3SchemaType}
+                    # Same reasoning as the section_type fix above: don't round-trip
+                    # an already-current GroundingType value through the gen-3 shape.
+                    current_valid = {t.value for t in GroundingType}
                     for old_val in known:
-                        if old_val in valid or old_val is None:
+                        if old_val in valid or old_val in current_valid or old_val is None:
                             continue
                         new_val = _GEN12_LEGACY_SCHEMA_TYPE_MAP.get(
                             old_val, _Gen3SchemaType.ENGINEERING_SPEC.value)
