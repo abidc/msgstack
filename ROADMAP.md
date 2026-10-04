@@ -24,6 +24,18 @@ Message House is the wedge. Engineering Spec and Policy Shield are the proof tha
 
 This roadmap reflects the current state and planned direction. Items are grouped by milestone, not calendar quarter — sequencing depends on community feedback and priority shifts. Items marked `[OSS]` are well-suited for community contribution.
 
+### Right Now — Active Build (October 2026)
+
+Five items pulled forward from where they were already scattered across this roadmap, now the immediate focus following the TERMINAL-detour revert and a competitive landscape pass (Highspot/Seismic, Writer.com, Jasper, Klue/Crayon, Persado reviewed — see `docs/COMPETITIVE_ANALYSIS.md`). None of these are new ideas; they're existing unchecked items being built now:
+
+1. **`engineering_spec` + `policy_shield` grounding types** (v1.0, below) — ship as real second/third grounding types alongside Message House, not just schema stubs.
+2. **Competitive intel capture** (v1.1, below) — competitor document import, gap analysis, battlecard auto-sharpen.
+3. **Audience/channel generation profiles** — formalize the existing per-entry `variants` dict (already supports persona/channel-conditioned phrasing) into first-class Audience Profiles with enforced tone/style constraints, closing the gap against Jasper's Brand Voice + Audience Profiles.
+4. **Alignment/drift trend dashboard** — extends the existing (shipped) Canon Health Score from a point-in-time gauge into a tracked-over-time view per domain, in the spirit of Writer's/Adobe's governance dashboards but prevention-by-construction rather than after-the-fact drift scoring.
+5. **Conversational Slack/Teams agent** (supersedes the v1.2 slash-command item below) — an MCP-client bot, not a slash command: ask it in a channel, it calls MsgStack's grounding tools and returns a cited, tier-aware draft in-thread with Approve/Edit/Regenerate actions.
+
+Explicitly out of scope for this push (see competitive research): CRM deal-analytics integrations, formal compliance certifications, ad-tech A/B copy-testing infrastructure — doesn't fit a self-hosted, graph-grounded product.
+
 ---
 
 ## v0.6.1 — OSS Launch Polish
@@ -398,6 +410,7 @@ Replaces the static 90-day staleness flag with a per-domain operational contract
 - [x] **Sub-Canons ("Canons within Canons"):** Nested canons via `parent_domain_id` with configurable parent-child inheritance resolved at entry/persona read time.
 - [x] **Inheritance Relationship Types:** All 4 parent-child relationship types codified: *Full Inheritance*, *Selective Override*, *Autonomy with Vocabulary Constraints*, and *Complete Autonomy*.
 - [x] **Canon Health Scoring:** Dashboard health gauge exposing where narrative coherence and graph connections are breaking down.
+- [ ] **Alignment/Drift Trend Dashboard:** Track the existing Alignment Score over time per domain (not just point-in-time), surfacing degrading trends before they become a breach. Prevention-by-construction (grounded generation + tier enforcement) remains the primary defense; this is the observability layer on top, not a replacement for it.
 
 ### Canon Domain Ownership & Live Bindings
 - [x] **Department SME Owners:** Department scoping + SME rights management; API keys carry `dept:` scopes (`has_department_access`).
@@ -459,8 +472,16 @@ Embargoed or pre-announcement content must never surface outside its authorized 
 - [ ] **LinkedIn integration:** Publish social card artifacts to company page or personal profile; pull posts for alignment scoring
 - [ ] **Salesforce integration:** Push approved key messages and battlecards into Salesforce CRM as opportunity snippets
 - [ ] **Google Docs export:** Export any artifact as a formatted Google Doc into a designated Drive folder
-- [ ] **Slack app:** `/msgstack generate one-pager` slash command returns grounded content in Slack
 - [ ] **Webhook outbound:** Send any generated artifact to any external system via POST
+
+### Conversational Agent (Slack & Microsoft Teams)
+
+**Supersedes the old "`/msgstack generate one-pager` slash command" scope** — a slash command that returns a one-shot artifact undersells what the existing MCP tool surface can already do conversationally. The agent is an MCP client itself, talking to this server the same way any other MCP client does.
+
+- [ ] **Slack agent:** Bolt-for-Python app, itself an MCP client over streamable-HTTP to this server's existing FastMCP endpoint (no new intermediary API). Events API, not Socket Mode — this server already sits behind a public tunnel hostname. `@MsgStack write a LinkedIn post about X, grounded in [domain]` → calls `search_canon_entries`/`traverse_graph` → `generate_artifact` (existing OpenRouter + skills pipeline, already tier-aware) → draft posted in-thread with citations back to the specific Canon Entries/DRIs that grounded it.
+- [ ] **Teams agent:** Teams AI Library v2, native MCP client support over the same transport — shares the tool-calling loop code with the Slack agent.
+- [ ] **Approve/Edit/Regenerate actions:** Block Kit (Slack) / Adaptive Card (Teams) buttons; Approve writes a real Approval Event into the existing approval-routing workflow, same as the web UI.
+- [ ] **Identity mapping:** Slack-user-ID / Teams-user-ID → Persona mapping table for DRI/approver attribution on drafts generated via the agent.
 
 ---
 
