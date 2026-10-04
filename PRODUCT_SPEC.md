@@ -29,6 +29,12 @@ MsgStack solves this by making the organizational canon **structured, searchable
 
 The long-term goal is not a content creation tool. It's the **canon infrastructure** for enterprise AI — the system of record for what the company is authorized to say, and the engine that enforces it across every channel, team, and tool. While product marketing message houses are the initial high-value wedge, the platform scales to support cross-department canon domains owned by SMEs across Product, Legal, HR, and Security.
 
+**Primary access is conversational, not just a dashboard.** The web UI remains the system of record for curating and approving canon, but day-to-day use happens where teams already work — a Slack or Microsoft Teams agent that is itself an MCP client against this server, answering requests in-channel with grounded, cited, tier-aware drafts rather than requiring a context switch to a separate tool.
+
+### Competitive Position
+
+Reviewed against Highspot/Seismic (GTM Agent + MCP server, CRM-engagement-grounded, not claims-graph-grounded), Writer.com (closest structural analog — knowledge-graph retrieval + governance, but no per-claim verbatim tier), Jasper (Brand Voice + Audience Profiles, vector/KB-grounded, no graph), and Klue/Crayon (competitive-intel capture and distribution, not generation). No reviewed competitor combines: (a) a real typed cross-domain graph with traversal and change propagation, (b) per-entry verbatim-lock tiering with provenance back to a DRI, and (c) self-hosted/Apache-2.0/MCP-native distribution. The defensible position is **prevention-by-construction grounding** (claims are locked and reproduced verbatim at generation time) versus the industry-standard **detect-after-the-fact drift scoring** (a learned model checking output against a baseline after it's already generated). Full detail: `docs/COMPETITIVE_ANALYSIS.md`.
+
 ---
 
 ## 2.8 Core Vocabulary & Concepts
