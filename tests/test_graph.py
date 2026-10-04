@@ -501,7 +501,7 @@ def test_migrated_enum_values_are_valid(tmp_path):
     store.init()
 
     con = sqlite3.connect(str(db))
-    bad_schema = [r[0] for r in con.execute("SELECT DISTINCT grounding_type FROM canon_domains")
+    bad_schema = [r[0] for r in con.execute("SELECT DISTINCT document_type FROM canon_domains")
                   if r[0] not in {t.value for t in GroundingType}]
     bad_assert = [r[0] for r in con.execute("SELECT DISTINCT section_type FROM canon_entries")
                   if r[0] not in {t.value for t in SectionType}]

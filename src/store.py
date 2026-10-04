@@ -972,6 +972,21 @@ class Store:
             insp = inspect(self.engine)
             tables = insp.get_table_names()
 
+            # Some generations called this free-text field "persona" instead of
+            # "audience" (the same ambiguity the pivot's own Audience rename ran
+            # into — see models.py). Reconcile rather than lose the column.
+            if "canon_domains" in tables:
+                cd_cols = {c["name"] for c in insp.get_columns("canon_domains")}
+                if "persona" in cd_cols and "audience" not in cd_cols:
+                    conn.execute(text("ALTER TABLE canon_domains RENAME COLUMN persona TO audience"))
+                    conn.commit()
+                elif "audience" not in cd_cols:
+                    conn.execute(text("ALTER TABLE canon_domains ADD COLUMN audience TEXT DEFAULT ''"))
+                    conn.commit()
+
+            insp = inspect(self.engine)
+            tables = insp.get_table_names()
+
             # 3. Additive migrations
             if "canon_domains" in tables:
                 mh_cols = {c["name"] for c in insp.get_columns("canon_domains")}
@@ -1265,9 +1280,28 @@ class Store:
                 """))
                 conn.commit()
 
+            insp = inspect(self.engine)
+            tables = insp.get_table_names()
+
+            if "brand_assets" in tables:
+                ba_cols = {c["name"] for c in insp.get_columns("brand_assets")}
+                for col, col_def in (
+                    ("mime_type", "VARCHAR(100) DEFAULT ''"),
+                    ("file_size", "INTEGER DEFAULT 0"),
+                    ("updated_at", "DATETIME"),
+                ):
+                    if col not in ba_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE brand_assets ADD COLUMN {col} {col_def}"))
+                            conn.commit()
+                        except Exception:
+                            pass
+
             if "personas" in tables:
                 p_cols = {c["name"] for c in insp.get_columns("personas")}
                 for col, col_def in (
+                    ("pain_points", "TEXT DEFAULT '[]'"),
+                    ("buying_triggers", "TEXT DEFAULT '[]'"),
                     ("status", "VARCHAR(20) DEFAULT 'draft'"),
                     ("approved_by", "VARCHAR(255)"),
                     ("approved_at", "DATETIME"),
