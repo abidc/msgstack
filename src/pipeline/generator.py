@@ -328,7 +328,6 @@ class ArtifactGenerator:
                 )
         elif skill.get("renderer") == "reveal":
             try:
-                import re
                 json_match = re.search(r"```json\s*(.*?)\s*```", raw, re.DOTALL)
                 json_str = json_match.group(1) if json_match else raw
                 start_idx = json_str.find("{")
