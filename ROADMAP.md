@@ -411,7 +411,7 @@ Replaces the static 90-day staleness flag with a per-domain operational contract
 - [x] **Sub-Canons ("Canons within Canons"):** Nested canons via `parent_domain_id` with configurable parent-child inheritance resolved at entry/persona read time.
 - [x] **Inheritance Relationship Types:** All 4 parent-child relationship types codified: *Full Inheritance*, *Selective Override*, *Autonomy with Vocabulary Constraints*, and *Complete Autonomy*.
 - [x] **Canon Health Scoring:** Dashboard health gauge exposing where narrative coherence and graph connections are breaking down.
-- [ ] **Alignment/Drift Trend Dashboard:** Track the existing Alignment Score over time per domain (not just point-in-time), surfacing degrading trends before they become a breach. Prevention-by-construction (grounded generation + tier enforcement) remains the primary defense; this is the observability layer on top, not a replacement for it.
+- [x] **Alignment/Drift Trend Dashboard:** `health_score_snapshots` table — one row per domain per UTC day, recorded whenever `check_canon_completeness`/`check_framework_completeness` runs (completeness score; alignment score tracked in the same row when available). `GET /api/canon-domains/{id}/health-trend` returns the ordered series plus a `degrading` flag. Prevention-by-construction (grounded generation + tier enforcement) remains the primary defense; this is the observability layer on top, not a replacement for it.
 
 ### Canon Domain Ownership & Live Bindings
 - [x] **Department SME Owners:** Department scoping + SME rights management; API keys carry `dept:` scopes (`has_department_access`).

@@ -827,7 +827,7 @@ def check_canon_completeness(domain_id: Optional[str] = None, domain_name: Optio
                 section = label.split(":")[0].strip()
                 recommendations.append(f"Add more {section} entries (minimum required not met).")
 
-    return {
+    result = {
         "domain_name": house.name,
         "house_name": house.name,
         "score": score,
@@ -841,6 +841,8 @@ def check_canon_completeness(domain_id: Optional[str] = None, domain_name: Optio
         "persona_count": len(personas),
         "sections_covered": list(by_section.keys()),
     }
+    store.record_health_snapshot(house.id, completeness_score=score)
+    return result
 
 
 @mcp.tool()

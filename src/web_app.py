@@ -811,6 +811,24 @@ def check_house_staleness(house_id: Optional[str] = None, domain_id: Optional[st
     }
 
 
+@app.get("/api/canon-domains/{domain_id}/health-trend")
+@app.get("/api/houses/{house_id}/health-trend")
+def get_health_trend(house_id: Optional[str] = None, domain_id: Optional[str] = None, days: int = 90,
+                      auth: AuthContext = Depends(get_auth_context)):
+    """Canon Health Score tracked over time, not just the current point-in-time
+    gauge — surfaces a degrading domain before it becomes a breach."""
+    actual_id = domain_id or house_id
+    try:
+        house_uuid = UUID(actual_id)
+    except Exception:
+        raise HTTPException(400, "Invalid ID")
+    if not store.get_house(house_uuid):
+        raise HTTPException(404, "Canon domain not found")
+    trend = store.get_health_trend(house_uuid, days=days)
+    degrading = len(trend) >= 2 and (trend[-1]["completeness_score"] or 0) < (trend[0]["completeness_score"] or 0)
+    return {"domain_id": actual_id, "trend": trend, "degrading": degrading}
+
+
 class DomainAlignmentScoreRequest(BaseModel):
     text: str
     export_format: Optional[str] = None  # "json" or "markdown"

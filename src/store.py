@@ -22,6 +22,7 @@ from sqlalchemy import (
     Table,
     Column,
     PrimaryKeyConstraint,
+    UniqueConstraint,
     create_engine,
 )
 from sqlalchemy.orm import (
@@ -421,6 +422,22 @@ class PersonaModel(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     canon_domain: Mapped["CanonDomainModel"] = relationship(back_populates="personas")
+
+
+class HealthScoreSnapshotModel(Base):
+    """One row per canon_domain per UTC day — daily granularity by design,
+    not one row per check call, so a domain someone checks 50 times a day
+    doesn't flood the trend with noise."""
+    __tablename__ = "health_score_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    canon_domain_id: Mapped[str] = mapped_column(String(36), ForeignKey("canon_domains.id"), nullable=False)
+    day: Mapped[str] = mapped_column(String(10), nullable=False)  # "YYYY-MM-DD", UTC
+    completeness_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    alignment_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("canon_domain_id", "day", name="uq_health_snapshot_domain_day"),)
 
 
 class AudienceProfileModel(Base):
@@ -1686,6 +1703,55 @@ class Store:
             return _entry_from_row(row) if row else None
 
     get_key_message = get_canon_entry  # Deprecated alias
+
+    def record_health_snapshot(
+        self, domain_id: UUID, completeness_score: int | None = None, alignment_score: int | None = None,
+    ) -> None:
+        """Upsert today's (UTC) snapshot for this domain — one row per domain
+        per day. Extends the existing point-in-time Canon Health Score into a
+        trend: call this wherever completeness/alignment is already computed,
+        rather than adding a separate polling job."""
+        day = _now().strftime("%Y-%m-%d")
+        with self.session() as s:
+            existing = s.query(HealthScoreSnapshotModel).filter(
+                HealthScoreSnapshotModel.canon_domain_id == str(domain_id),
+                HealthScoreSnapshotModel.day == day,
+            ).first()
+            if existing:
+                if completeness_score is not None:
+                    existing.completeness_score = completeness_score
+                if alignment_score is not None:
+                    existing.alignment_score = alignment_score
+                existing.recorded_at = _now()
+            else:
+                s.add(HealthScoreSnapshotModel(
+                    id=str(uuid4()), canon_domain_id=str(domain_id), day=day,
+                    completeness_score=completeness_score, alignment_score=alignment_score,
+                    recorded_at=_now(),
+                ))
+            s.commit()
+
+    def get_health_trend(self, domain_id: UUID, days: int = 90) -> list[dict]:
+        """Ordered oldest -> newest snapshots for this domain, for charting.
+        A degrading trend (score dropping across recent snapshots) is exactly
+        what this surfaces — the caller decides the threshold for "flag it"."""
+        with self.session() as s:
+            rows = (
+                s.query(HealthScoreSnapshotModel)
+                .filter(HealthScoreSnapshotModel.canon_domain_id == str(domain_id))
+                .order_by(HealthScoreSnapshotModel.day.asc())
+                .limit(days)
+                .all()
+            )
+            return [
+                {
+                    "day": r.day,
+                    "completeness_score": r.completeness_score,
+                    "alignment_score": r.alignment_score,
+                    "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
+                }
+                for r in rows
+            ]
 
     def upsert_audience_profile(self, profile: AudienceProfile) -> None:
         with self.session() as s:
