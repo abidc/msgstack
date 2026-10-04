@@ -375,7 +375,7 @@ class GraphEngine:
                 {"direction": "in", "node": u, **dict(g.nodes[u])})
         return grouped
 
-    def get_chunks_for_spec(self, canon_domain_id: str) -> list[dict]:
+    def get_chunks_for_house(self, canon_domain_id: str) -> list[dict]:
         """All KeyMessages for a canon_domain, sorted by priority."""
         self._ensure_built()
         if not _NX_AVAILABLE:
@@ -391,7 +391,7 @@ class GraphEngine:
                         chunks.append(dict(self._graph.nodes[chunk_node]))
         return sorted(chunks, key=lambda c: c.get("priority", 3))
 
-    def get_sections_for_spec(self, canon_domain_id: str) -> list[dict]:
+    def get_sections_for_house(self, canon_domain_id: str) -> list[dict]:
         """Section nodes for a canon_domain with their KeyMessages nested, ordered by section type."""
         self._ensure_built()
         if not _NX_AVAILABLE:
@@ -412,7 +412,7 @@ class GraphEngine:
         return sorted(sections,
                       key=lambda s: _SECTION_ORDER.get(s.get("section_type", ""), 99))
 
-    def get_chunks_for_audience(self, canon_domain_id: str, audience_name: str) -> list[dict]:
+    def get_chunks_for_persona(self, canon_domain_id: str, audience_name: str) -> list[dict]:
         """KeyMessages that ADDRESS a specific persona within a canon_domain."""
         self._ensure_built()
         if not _NX_AVAILABLE:
@@ -445,16 +445,16 @@ class GraphEngine:
         if not _NX_AVAILABLE:
             return []
         if persona and channel:
-            by_p = {c["id"] for c in self.get_chunks_for_audience(canon_domain_id, persona)}
+            by_p = {c["id"] for c in self.get_chunks_for_persona(canon_domain_id, persona)}
             by_c = {c["id"] for c in self.get_chunks_for_channel(canon_domain_id, channel)}
             ids = by_p & by_c
-            results = [c for c in self.get_chunks_for_spec(canon_domain_id) if c.get("id") in ids]
+            results = [c for c in self.get_chunks_for_house(canon_domain_id) if c.get("id") in ids]
         elif persona:
-            results = self.get_chunks_for_audience(canon_domain_id, persona)
+            results = self.get_chunks_for_persona(canon_domain_id, persona)
         elif channel:
             results = self.get_chunks_for_channel(canon_domain_id, channel)
         else:
-            results = self.get_chunks_for_spec(canon_domain_id)
+            results = self.get_chunks_for_house(canon_domain_id)
         # Filter out nodes with no content (fix #8)
         return [c for c in results if c.get("content", "").strip()]
 

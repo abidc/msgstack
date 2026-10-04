@@ -80,12 +80,11 @@ def client(tmp_path):
         ]
     })
 
-    with patch("src.pipeline.structure.OpenAI") as mock_oai_cls, \
+    mock_client_instance = MagicMock()
+    with patch("src.config.llm_client", return_value=mock_client_instance), \
          patch("src.grounding.search.GroundingEngine.ensure_index"), \
          patch("src.grounding.search.GroundingEngine.index_house", return_value=5):
 
-        mock_client_instance = MagicMock()
-        mock_oai_cls.return_value = mock_client_instance
         # First call → structuring markdown, second call → personas JSON
         mock_client_instance.chat.completions.create.side_effect = [
             mock_openai_response,
@@ -200,12 +199,11 @@ def mock_engine(tmp_path):
     )
     store.upsert_key_message(msg)
 
-    with patch("src.grounding.search.OpenAI"):
-        from src.grounding.search import GroundingEngine
-        engine = GroundingEngine.__new__(GroundingEngine)
-        engine.store = store
-        engine.index = None  # Force fallback search
-        engine.namespace = "default"
+    from src.grounding.search import GroundingEngine
+    engine = GroundingEngine.__new__(GroundingEngine)
+    engine.store = store
+    engine.index = None  # Force fallback search
+    engine.namespace = "default"
 
     return engine, house
 

@@ -1494,7 +1494,7 @@ class Store:
             s.commit()
         _invalidate_graph()
 
-    upsert_canon_domain = upsert_canon_domain  # Deprecated alias
+    upsert_house = upsert_canon_domain  # Deprecated alias
 
     def get_canon_domain(self, domain_id: UUID) -> CanonDomain | None:
         with self.session() as s:
@@ -1503,7 +1503,7 @@ class Store:
                 return None
             return _domain_from_row(row)
 
-    get_canon_domain = get_canon_domain  # Deprecated alias
+    get_house = get_canon_domain  # Deprecated alias
 
     def get_house_workspace_id(self, domain_id: UUID) -> str | None:
         with self.session() as s:
@@ -1525,7 +1525,7 @@ class Store:
                 return None
             return _domain_from_row(row)
 
-    get_canon_domain_by_name = get_canon_domain_by_name  # Deprecated alias
+    get_house_by_name = get_canon_domain_by_name  # Deprecated alias
 
     def upsert_canon_entry(self, entry: CanonEntry) -> None:
         with self.session() as s:
@@ -1703,6 +1703,28 @@ class Store:
             )
             return _persona_from_row(row) if row else None
 
+    def bulk_create_pain_points(self, persona_id: str, items: list[str]) -> list[int]:
+        with self.session() as s:
+            new_ids = []
+            for content in items:
+                pp = PainPointModel(persona_id=persona_id, content=content)
+                s.add(pp)
+                s.flush()
+                new_ids.append(pp.id)
+            s.commit()
+            return new_ids
+
+    def bulk_create_buying_triggers(self, persona_id: str, items: list[str]) -> list[int]:
+        with self.session() as s:
+            new_ids = []
+            for content in items:
+                bt = BuyingTriggerModel(persona_id=persona_id, content=content)
+                s.add(bt)
+                s.flush()
+                new_ids.append(bt.id)
+            s.commit()
+            return new_ids
+
     def bulk_create_objections(self, persona_id: str, items: list[dict]) -> list[int]:
         with self.session() as s:
             new_ids = []
@@ -1718,12 +1740,30 @@ class Store:
 
     def delete_persona_sub_attrs(self, persona_id: str) -> None:
         with self.session() as s:
+            s.query(PainPointModel).filter(PainPointModel.persona_id == persona_id).delete()
+            s.query(BuyingTriggerModel).filter(BuyingTriggerModel.persona_id == persona_id).delete()
             s.query(ObjectionModel).filter(ObjectionModel.persona_id == persona_id).delete()
             s.commit()
+
+    def update_chunk_links(self, chunk_id: str, pain_point_ids: list[int], objection_ids: list[int]) -> None:
+        with self.session() as s:
+            row = s.get(CanonEntryModel, chunk_id)
+            if row:
+                row.pain_point_ids = pain_point_ids
+                row.objection_ids = objection_ids
+                s.commit()
+
+    def list_pain_points(self, persona_id: str) -> list:
+        with self.session() as s:
+            return s.query(PainPointModel).filter(PainPointModel.persona_id == persona_id).all()
 
     def list_objections(self, persona_id: str) -> list:
         with self.session() as s:
             return s.query(ObjectionModel).filter(ObjectionModel.persona_id == persona_id).all()
+
+    def list_buying_triggers(self, persona_id: str) -> list:
+        with self.session() as s:
+            return s.query(BuyingTriggerModel).filter(BuyingTriggerModel.persona_id == persona_id).all()
 
     def delete_canon_domain(self, domain_id: UUID) -> bool:
         with self.session() as s:
@@ -1803,11 +1843,11 @@ class Store:
         entry_id: Optional[UUID] = None,
         notes: str = "",
         # Compatibility arguments
-        canon_domain_id: Optional[UUID] = None,
+        house_id: Optional[UUID] = None,
         message_id: Optional[UUID] = None,
     ) -> None:
         """Append a review action to the audit trail."""
-        actual_domain_id = domain_id or canon_domain_id
+        actual_domain_id = domain_id or house_id
         actual_entry_id = entry_id or message_id
         with self.session() as s:
             s.add(ReviewLogModel(
@@ -1891,7 +1931,7 @@ class Store:
                 _invalidate_graph()
             return count
 
-    delete_canon_domains_by_source_id = delete_canon_domains_by_source_id  # Deprecated alias
+    delete_houses_by_source_id = delete_canon_domains_by_source_id  # Deprecated alias
 
     def delete_canon_entry(self, entry_id: UUID) -> bool:
         with self.session() as s:
@@ -2483,7 +2523,7 @@ class Store:
             },
         }
 
-    get_canon_domain_coverage = get_canon_domain_coverage  # Deprecated alias
+    get_message_house_coverage = get_canon_domain_coverage  # Deprecated alias
 
     # --- Workspaces ---
 
@@ -2956,7 +2996,7 @@ class Store:
             rows = q.all()
             return [_domain_from_row(r) for r in rows]
 
-    list_canon_domains = list_canon_domains  # Deprecated alias
+    list_houses = list_canon_domains  # Deprecated alias
 
     def list_canon_domains_with_counts(self, workspace_id: str | None = None) -> list[dict]:
         """Return domains with pre-aggregated entry/persona counts — avoids N+1."""
@@ -2967,7 +3007,7 @@ class Store:
                 .group_by(CanonEntryModel.canon_domain_id)
                 .subquery()
             )
-            audience_counts = (
+            persona_counts = (
                 s.query(PersonaModel.canon_domain_id, func.count().label("cnt"))
                 .group_by(PersonaModel.canon_domain_id)
                 .subquery()
@@ -2976,10 +3016,10 @@ class Store:
                 s.query(
                     CanonDomainModel,
                     func.coalesce(entry_counts.c.cnt, 0).label("entry_count"),
-                    func.coalesce(audience_counts.c.cnt, 0).label("audience_count"),
+                    func.coalesce(persona_counts.c.cnt, 0).label("persona_count"),
                 )
                 .outerjoin(entry_counts, CanonDomainModel.id == entry_counts.c.canon_domain_id)
-                .outerjoin(audience_counts, CanonDomainModel.id == audience_counts.c.canon_domain_id)
+                .outerjoin(persona_counts, CanonDomainModel.id == persona_counts.c.canon_domain_id)
             )
             if workspace_id and workspace_id != "all":
                 q = q.filter(CanonDomainModel.workspace_id == workspace_id)
@@ -2987,15 +3027,15 @@ class Store:
                 {
                     "domain": _domain_from_row(row),
                     "entry_count": int(ec),
-                    "audience_count": int(pc),
+                    "persona_count": int(pc),
                     # Backward-compat keys
-                    "canon_domain": _domain_from_row(row),
+                    "house": _domain_from_row(row),
                     "message_count": int(ec),
                 }
                 for row, ec, pc in q.all()
             ]
 
-    list_canon_domains_with_counts = list_canon_domains_with_counts  # Deprecated alias
+    list_houses_with_counts = list_canon_domains_with_counts  # Deprecated alias
 
     # --- Source Connections ---
 

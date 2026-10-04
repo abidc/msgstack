@@ -205,7 +205,7 @@ def build_social_posts(canon_domain_id: str, channels: list[str] = None, app_con
                                     Button(
                                         "Rewrite",
                                         variant="ghost",
-                                        on_click=CallTool("search_assertions", arguments={
+                                        on_click=CallTool("search_messaging", arguments={
                                             "query": f"linkedin {post['section']} for {canon_domain.name}",
                                             "assertion_types": [post["section"].lower()],
                                             "channels": ["linkedin"],
@@ -275,7 +275,7 @@ def build_email_template(canon_domain_id: str, stage: str = "awareness", app_con
                                 Button(
                                     "Rewrite Subject",
                                     variant="ghost",
-                                    on_click=CallTool("search_assertions", arguments={
+                                    on_click=CallTool("search_messaging", arguments={
                                         "query": f"email subject {stage} for {canon_domain.name}",
                                         "assertion_types": ["headline", "subhead"],
                                         "channels": ["email"],

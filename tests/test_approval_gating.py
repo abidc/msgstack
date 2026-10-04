@@ -134,11 +134,10 @@ class TestFallbackSearch:
         _create_entry(store, seeded_domain, "Locked headline", EntryStatus.LOCKED, priority=3)
         _create_entry(store, seeded_domain, "Outdated headline", EntryStatus.OUTDATED, priority=4)
 
-        with patch("src.grounding.search.OpenAI"):
-            engine = GroundingEngine.__new__(GroundingEngine)
-            engine.store = store
-            engine.index = None
-            engine.namespace = "default"
+        engine = GroundingEngine.__new__(GroundingEngine)
+        engine.store = store
+        engine.index = None
+        engine.namespace = "default"
         return engine
 
     def test_fallback_default_excludes_draft_and_outdated(self, engine_with_entries, seeded_domain):
@@ -166,18 +165,17 @@ class TestRerank:
     @pytest.fixture
     def engine(self, tmp_path, store):
         from src.grounding.search import GroundingEngine
-        with patch("src.grounding.search.OpenAI"):
-            engine = GroundingEngine.__new__(GroundingEngine)
-            engine.store = store
-            engine.namespace = "default"
+        engine = GroundingEngine.__new__(GroundingEngine)
+        engine.store = store
+        engine.namespace = "default"
         return engine
 
     def test_rerank_excludes_outdated(self, engine):
         matches = [
-            {"id": "a", "score": 0.9, "metadata": {"content": "approved msg", "key_message_id": str(uuid4())}},
-            {"id": "b", "score": 0.8, "metadata": {"content": "outdated msg", "key_message_id": str(uuid4())}},
+            {"id": "a", "score": 0.9, "metadata": {"content": "approved msg", "canon_entry_id": str(uuid4())}},
+            {"id": "b", "score": 0.8, "metadata": {"content": "outdated msg", "canon_entry_id": str(uuid4())}},
         ]
-        key_message_ids = [m["metadata"]["key_message_id"] for m in matches]
+        key_message_ids = [m["metadata"]["canon_entry_id"] for m in matches]
         with patch("src.store.KeyMessageModel") as MockKm, patch.object(engine.store, "session"):
             with engine.store.session() as s:
                 row_a = MagicMock()
