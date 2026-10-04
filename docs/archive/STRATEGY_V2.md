@@ -1,6 +1,7 @@
 # MsgStack v2 — Repositioning Plan
 
-**Status:** Approved, in execution on branch `v2-spec-assertion`
+**Status:** ARCHIVED — reverted 2026-10. The "self-hosted agent memory layer" positioning this doc drove was walked back; `PRODUCT_SPEC.md`, `README.md`, and www.msgstack.ai are restored to the pre-pivot Organizational Canon/PMM framing (see `archive/final-2026-08-25` tag for the v2 end-state this plan produced). The infrastructure work this plan delivered — OpenRouter multi-provider LLM routing, real cross-domain graph traversal/fusion/propagation — was kept and re-aimed at the restored Canon Domain vocabulary; only the positioning and the engineering-only vocabulary rename were reverted. Kept here as a record of what was tried and why.
+**Status (original):** Approved, in execution on branch `v2-spec-assertion`
 **Date:** 2026-08-07
 **Supersedes:** the "organizational canon" framing throughout `PRODUCT_SPEC.md`, `README.md`, and www.msgstack.ai
 
