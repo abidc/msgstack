@@ -22,7 +22,7 @@ from src.models import (
     GroundingResult,
     GroundingResponse,
     SearchFilters,
-    AssertionType,
+    SectionType,
 )
 from src.store import Store, VectorMetadataModel
 
@@ -103,18 +103,18 @@ class GroundingEngine:
             "benefit": ["benefit", "benefits", "value prop", "value proposition", "value pillar", "pillar"],
             "use_case": ["use case", "use cases", "capability", "capabilities", "how it works", "top use"],
             "proof_point": ["proof", "proof point", "social proof", "testimonial", "customer story", "case study", "evidence"],
-            "qa_pair": ["qa_pair", "qa_pairs", "rebuttal", "concern"],
+            "objection": ["objection", "objections", "rebuttal", "concern"],
             "positioning": ["positioning", "position", "frame"],
             "know_your_market": ["know your market", "know your customer", "kym", "kyc", "market research", "market context", "competitive context"],
         }
         for section, keywords in section_map.items():
             if any(kw in text for kw in keywords):
-                filters.setdefault("assertion_types", []).append(section)
+                filters.setdefault("section_types", []).append(section)
 
         audience_cues = ["smb", "enterprise", "cto", "cmo", "developer", "ops", "finops"]
         for cue in audience_cues:
             if cue in text:
-                filters.setdefault("audiences", []).append(cue)
+                filters.setdefault("personas", []).append(cue)
 
         channel_map = {
             "linkedin": ["linkedin"],
@@ -134,35 +134,35 @@ class GroundingEngine:
         query: str,
         filters: Optional[SearchFilters] = None,
         top_k: int = 8,
-        active_spec_id: Optional[UUID] = None,
+        active_house_id: Optional[UUID] = None,
         retrieval_mode: str = "hybrid",
     ) -> GroundingResponse:
         filters = filters or SearchFilters()
 
-        if retrieval_mode == "graph" and active_spec_id:
-            return self._graph_search(active_spec_id, filters)
+        if retrieval_mode == "graph" and active_house_id:
+            return self._graph_search(active_house_id, filters)
         if retrieval_mode == "keyword":
             return self._fallback_search(query, filters)
 
         inferred = self._query_to_filters(query)
         for key, val in inferred.items():
             attr = f"{key}_types" if key == "section" else key
-            if attr in ["assertion_types", "audiences", "channels"]:
+            if attr in ["section_types", "personas", "channels"]:
                 existing = getattr(filters, attr, None) or []
                 merged = list(set(existing + val))
                 setattr(filters, attr, merged if merged else None)
-            elif attr == "specs":
-                existing = filters.specs or []
-                filters.specs = list(set(existing + val)) if val else None
+            elif attr == "canon_domains":
+                existing = filters.canon_domains or []
+                filters.canon_domains = list(set(existing + val)) if val else None
 
-        if active_spec_id and not filters.specs:
-            filters.specs = [str(active_spec_id)]
+        if active_house_id and not filters.canon_domains:
+            filters.canon_domains = [str(active_house_id)]
 
         # SQLite pre-filtering
         matching_records = self.store.list_vector_metadata_matching_filters(
-            specs=filters.specs,
-            assertion_types=filters.assertion_types,
-            audiences=filters.audiences,
+            canon_domains=filters.canon_domains,
+            section_types=filters.section_types,
+            personas=filters.personas,
             channels=filters.channels,
             min_priority=filters.min_priority,
         )
@@ -171,9 +171,9 @@ class GroundingEngine:
             return GroundingResponse(
                 results=[],
                 grounding_context=GroundingContext(
-                    active_spec_id=active_spec_id,
-                    spec_name="",
-                    spec_summary="",
+                    active_house_id=active_house_id,
+                    canon_domain_name="",
+                    canon_domain_summary="",
                     confidence="low",
                 )
             )
@@ -204,15 +204,15 @@ class GroundingEngine:
                     "id": record.id,
                     "score": float(score),
                     "metadata": {
-                        "spec_id": record.spec_id,
-                        "spec_name": record.spec_name,
-                        "spec_summary": record.spec_summary,
+                        "canon_domain_id": record.canon_domain_id,
+                        "canon_domain_name": record.canon_domain_name,
+                        "canon_domain_summary": record.canon_domain_summary,
                         "content": record.content,
-                        "assertion_type": record.assertion_type,
+                        "section_type": record.section_type,
                         "priority": record.priority,
-                        "audience": record.audience,
+                        "persona": record.persona,
                         "channel": record.channel,
-                        "assertion_id": record.assertion_id,
+                        "canon_entry_id": record.canon_entry_id,
                         "last_synced": record.last_synced.isoformat() if record.last_synced else None,
                         "content_tier": record.content_tier,
                     }
@@ -224,53 +224,53 @@ class GroundingEngine:
         # Vector recall gives the seeds; the graph expands from them; the two
         # rankings are combined with reciprocal rank fusion. This is what makes
         # the mode genuinely hybrid — previously "hybrid" ran vector only and
-        # attached graph context as decoration, so a relevant assertion in
-        # another spec could never surface.
+        # attached graph context as decoration, so a relevant canon_entry in
+        # another canon_domain could never surface.
         if retrieval_mode == "hybrid" and matches:
             matches = self._fuse_with_graph(matches, filters, top_k)
 
         grounding_results = []
         specs_represented: dict[str, int] = {}
         confidence_scores = []
-        coverage: dict[str, str] = {"assertion_types": "none", "audiences": "none", "channels": "none"}
+        coverage: dict[str, str] = {"section_types": "none", "personas": "none", "channels": "none"}
 
         for match in matches[:top_k]:
             meta = match.get("metadata", {})
-            raw_st = meta.get("assertion_type", "positioning")
+            raw_st = meta.get("section_type", "positioning")
             try:
-                st = AssertionType(raw_st)
+                st = SectionType(raw_st)
             except ValueError:
-                st = AssertionType.POSITIONING
+                st = SectionType.POSITIONING
             
             chunk = GroundingChunk(
                 id=match["id"],
-                spec_id=UUID(meta.get("spec_id", "00000000-0000-0000-0000-000000000000")),
-                assertion_id=UUID(meta.get("assertion_id")) if meta.get("assertion_id") else None,
+                canon_domain_id=UUID(meta.get("canon_domain_id", "00000000-0000-0000-0000-000000000000")),
+                canon_entry_id=UUID(meta.get("canon_entry_id")) if meta.get("canon_entry_id") else None,
                 content=meta.get("content", ""),
-                assertion_type=st,
+                section_type=st,
                 priority=int(meta.get("priority", 3)),
-                audience=meta.get("audience"),
+                persona=meta.get("persona"),
                 channel=Channel(meta.get("channel", "all")),
-                spec_name=meta.get("spec_name", ""),
-                spec_summary=meta.get("spec_summary", ""),
+                canon_domain_name=meta.get("canon_domain_name", ""),
+                canon_domain_summary=meta.get("canon_domain_summary", ""),
                 last_synced=datetime.fromisoformat(meta["last_synced"]) if meta.get("last_synced") else None,
                 content_tier=meta.get("content_tier"),
             )
-            spec_id_str = str(chunk.spec_id)
+            spec_id_str = str(chunk.canon_domain_id)
             specs_represented[spec_id_str] = specs_represented.get(spec_id_str, 0) + 1
             confidence_scores.append(match.get("score", 0))
             grounding_results.append(
                 GroundingResult(
                     chunk_id=chunk.id,
                     content=chunk.content,
-                    assertion_type=str(chunk.assertion_type),
+                    section_type=str(chunk.section_type),
                     priority=chunk.priority,
-                    audience=chunk.audience,
+                    persona=chunk.persona,
                     channel=str(chunk.channel),
                     channel_variants={},
                     source={
-                        "spec_id": str(chunk.spec_id),
-                        "spec_name": chunk.spec_name,
+                        "canon_domain_id": str(chunk.canon_domain_id),
+                        "canon_domain_name": chunk.canon_domain_name,
                         "last_synced": chunk.last_synced.isoformat() if chunk.last_synced else None,
                     },
                     confidence=match.get("score", 0),
@@ -280,9 +280,9 @@ class GroundingEngine:
 
         if grounding_results:
             top_spec_id = max(specs_represented, key=specs_represented.get)
-            spec = self.store.get_spec(UUID(top_spec_id))
-            spec_name = spec.name if spec else grounding_results[0].source["spec_name"]
-            spec_summary = spec.summary if spec else ""
+            canon_domain = self.store.get_canon_domain(UUID(top_spec_id))
+            canon_domain_name = canon_domain.name if canon_domain else grounding_results[0].source["canon_domain_name"]
+            canon_domain_summary = canon_domain.summary if canon_domain else ""
 
             avg_conf = sum(confidence_scores) / len(confidence_scores)
             if avg_conf > 0.8:
@@ -292,17 +292,17 @@ class GroundingEngine:
             else:
                 confidence = "low"
 
-            assertion_types = set(r.assertion_type for r in grounding_results)
-            coverage["assertion_types"] = "full" if len(assertion_types) > 1 else "partial"
-            coverage["audiences"] = "full" if grounding_results[0].audience else "none"
+            section_types = set(r.section_type for r in grounding_results)
+            coverage["section_types"] = "full" if len(section_types) > 1 else "partial"
+            coverage["personas"] = "full" if grounding_results[0].persona else "none"
             coverage["channels"] = "partial"
         else:
             confidence = "low"
-            spec_name = ""
-            spec_summary = ""
-            top_spec_id = str(active_spec_id) if active_spec_id else None
+            canon_domain_name = ""
+            canon_domain_summary = ""
+            top_spec_id = str(active_house_id) if active_house_id else None
 
-        active_audiences = list({r.audience for r in grounding_results if r.audience})
+        active_personas = list({r.persona for r in grounding_results if r.persona})
 
         warnings: list[str] = []
         if filters.min_confidence is not None and grounding_results:
@@ -314,10 +314,10 @@ class GroundingEngine:
                 )
 
         ctx = GroundingContext(
-            active_spec_id=UUID(top_spec_id) if top_spec_id else active_spec_id,
-            spec_name=spec_name,
-            spec_summary=spec_summary,
-            active_audiences=active_audiences,
+            active_house_id=UUID(top_spec_id) if top_spec_id else active_house_id,
+            canon_domain_name=canon_domain_name,
+            canon_domain_summary=canon_domain_summary,
+            active_personas=active_personas,
             used_chunks=len(grounding_results),
             confidence=confidence,
             coverage=coverage,
@@ -336,7 +336,7 @@ class GroundingEngine:
         boost_map = self._get_boost_factors()
 
         # Fetch status map of KeyMessages in matches to prioritize approved/locked
-        msg_ids = [m["metadata"]["assertion_id"] for m in matches if m.get("metadata", {}).get("assertion_id")]
+        msg_ids = [m["metadata"]["canon_entry_id"] for m in matches if m.get("metadata", {}).get("canon_entry_id")]
         status_map = {}
         if msg_ids:
             try:
@@ -351,7 +351,7 @@ class GroundingEngine:
         include_drafts = getattr(filters, "include_drafts", False)
         filtered_matches = []
         for m in matches:
-            km_id = m.get("metadata", {}).get("assertion_id")
+            km_id = m.get("metadata", {}).get("canon_entry_id")
             if km_id:
                 status = status_map.get(km_id, "draft")
                 if status == "outdated":
@@ -374,7 +374,7 @@ class GroundingEngine:
             feedback_boost = boost_map.get(chunk_id, 1.0)
 
             # Governance status prioritization
-            km_id = match.get("metadata", {}).get("assertion_id")
+            km_id = match.get("metadata", {}).get("canon_entry_id")
             status = status_map.get(km_id) if km_id else "approved"
             if status == "locked":
                 status_boost = 1.25
@@ -418,10 +418,10 @@ class GroundingEngine:
         hops: int = 2,
         limit: int = 25,
     ) -> list[dict]:
-        """Traverse outward from seed assertions and return visible neighbours.
+        """Traverse outward from seed canon_entries and return visible neighbours.
 
-        Unlike the vector path this crosses spec boundaries: an assertion in
-        another spec that mentions the same entity, or that an explicit
+        Unlike the vector path this crosses canon_domain boundaries: an canon_entry in
+        another canon_domain that mentions the same entity, or that an explicit
         DEPENDS_ON edge points at, is reachable in two hops.
         """
         from src.grounding.graph import get_graph_engine
@@ -437,7 +437,7 @@ class GroundingEngine:
         for node in found:
             if not self._visible(node.get("status", "draft"), filters):
                 continue
-            if filters.assertion_types and node.get("assertion_type") not in filters.assertion_types:
+            if filters.section_types and node.get("section_type") not in filters.section_types:
                 continue
             out.append(node)
         return out[:limit]
@@ -457,9 +457,9 @@ class GroundingEngine:
         the entire point of running two retrievers.
         """
         seeds = [
-            m["metadata"].get("assertion_id")
+            m["metadata"].get("canon_entry_id")
             for m in vector_matches[: min(5, len(vector_matches))]
-            if m.get("metadata", {}).get("assertion_id")
+            if m.get("metadata", {}).get("canon_entry_id")
         ]
         if not seeds:
             return vector_matches
@@ -472,11 +472,11 @@ class GroundingEngine:
         merged: dict[str, dict] = {}
 
         for rank, m in enumerate(vector_matches):
-            key = m["metadata"].get("assertion_id") or m["id"]
+            key = m["metadata"].get("canon_entry_id") or m["id"]
             scores[key] = scores.get(key, 0.0) + 1.0 / (self._RRF_K + rank + 1)
             merged[key] = m
 
-        known = {m["metadata"].get("assertion_id") for m in vector_matches}
+        known = {m["metadata"].get("canon_entry_id") for m in vector_matches}
         for rank, node in enumerate(expanded):
             key = node.get("id")
             if not key:
@@ -487,24 +487,24 @@ class GroundingEngine:
                 continue
             if key in known:
                 continue
-            # Reached only by traversal — may live in a different spec entirely.
-            record = self.store.get_assertion(UUID(key)) if _is_uuid(key) else None
+            # Reached only by traversal — may live in a different canon_domain entirely.
+            record = self.store.get_canon_entry(UUID(key)) if _is_uuid(key) else None
             if record is None:
                 continue
-            spec = self.store.get_spec(record.spec_id)
+            canon_domain = self.store.get_canon_domain(record.canon_domain_id)
             merged[key] = {
                 "id": f"chunk-{key}",
                 "score": node.get("graph_weight", 0.0),
                 "metadata": {
-                    "spec_id": str(record.spec_id),
-                    "spec_name": spec.name if spec else "",
-                    "spec_summary": spec.summary if spec else "",
+                    "canon_domain_id": str(record.canon_domain_id),
+                    "canon_domain_name": canon_domain.name if canon_domain else "",
+                    "canon_domain_summary": canon_domain.summary if canon_domain else "",
                     "content": record.content,
-                    "assertion_type": str(record.assertion_type),
+                    "section_type": str(record.section_type),
                     "priority": record.priority,
-                    "audience": None,
+                    "persona": None,
                     "channel": "all",
-                    "assertion_id": key,
+                    "canon_entry_id": key,
                     "last_synced": None,
                     "content_tier": record.content_tier,
                     "graph_path": node.get("graph_path"),
@@ -525,13 +525,13 @@ class GroundingEngine:
             fused.append(m)
         return fused
 
-    def _graph_search(self, spec_id: UUID, filters: SearchFilters) -> GroundingResponse:
+    def _graph_search(self, canon_domain_id: UUID, filters: SearchFilters) -> GroundingResponse:
         """Deterministic graph retrieval — bypasses vector approximation, filters outdated, prioritizes approved/locked."""
         from src.grounding.graph import get_graph_engine
         engine = get_graph_engine()
-        audience = (filters.audiences or [None])[0] if filters.audiences else None
+        persona = (filters.personas or [None])[0] if filters.personas else None
         channel = (filters.channels or [None])[0] if filters.channels else None
-        chunks = engine.get_connections(str(spec_id), audience=audience, channel=channel)
+        chunks = engine.get_connections(str(canon_domain_id), persona=persona, channel=channel)
 
         results = []
         for chunk in chunks:
@@ -541,7 +541,7 @@ class GroundingEngine:
                 continue
             if not getattr(filters, "include_drafts", False) and status not in ("approved", "locked"):
                 continue
-            if filters.assertion_types and chunk.get("assertion_type") not in filters.assertion_types:
+            if filters.section_types and chunk.get("section_type") not in filters.section_types:
                 continue
             status_order = {"locked": 0, "approved": 1, "in_review": 2, "draft": 3}
             s_val = status_order.get(status, 4)
@@ -549,35 +549,35 @@ class GroundingEngine:
             results.append(GroundingResult(
                 chunk_id=chunk.get("id", ""),
                 content=chunk.get("content", ""),
-                assertion_type=chunk.get("assertion_type", "positioning"),
+                section_type=chunk.get("section_type", "positioning"),
                 priority=chunk.get("priority", 3),
-                audience=audience,
+                persona=persona,
                 channel=channel or "all",
                 channel_variants={},
-                source={"spec_id": str(spec_id), "spec_name": ""},
+                source={"canon_domain_id": str(canon_domain_id), "canon_domain_name": ""},
                 confidence=1.0 - (s_val * 0.05),
                 rerank_reason=f"graph:deterministic ({status})",
             ))
 
         results.sort(key=lambda r: r.confidence, reverse=True)
-        spec = self.store.get_spec(spec_id)
+        canon_domain = self.store.get_canon_domain(canon_domain_id)
         return GroundingResponse(
             results=results[:8],
             grounding_context=GroundingContext(
-                active_spec_id=spec_id,
-                spec_name=spec.name if spec else "",
-                spec_summary=spec.summary if spec else "",
+                active_house_id=canon_domain_id,
+                canon_domain_name=canon_domain.name if canon_domain else "",
+                canon_domain_summary=canon_domain.summary if canon_domain else "",
                 confidence="high" if results else "low",
             ),
         )
 
     def _fallback_search(self, query: str, filters: SearchFilters) -> GroundingResponse:
         """Fallback search using keyword match, filters outdated, and prioritizes approved/locked."""
-        all_specs = self.store.list_specs()
+        all_specs = self.store.list_canon_domains()
         results: list[GroundingResult] = []
 
-        for spec in all_specs:
-            messages = self.store.get_key_messages(spec.id, include_unapproved=getattr(filters, "include_drafts", False))
+        for canon_domain in all_specs:
+            messages = self.store.get_key_messages(canon_domain.id, include_unapproved=getattr(filters, "include_drafts", False))
             for msg in messages:
                 # Exclude outdated messages
                 status = getattr(msg, "status", "draft")
@@ -585,10 +585,10 @@ class GroundingEngine:
                     continue
                 if not getattr(filters, "include_drafts", False) and status not in ("approved", "locked"):
                     continue
-                if filters.assertion_types and str(msg.assertion_type) not in filters.assertion_types:
+                if filters.section_types and str(msg.section_type) not in filters.section_types:
                     continue
-                if filters.audiences:
-                    matched = any(p.lower() in filters.audiences for p in msg.audiences)
+                if filters.personas:
+                    matched = any(p.lower() in filters.personas for p in msg.personas)
                     if not matched:
                         continue
 
@@ -615,15 +615,15 @@ class GroundingEngine:
                     GroundingResult(
                         chunk_id=str(msg.id),
                         content=msg.content,
-                        assertion_type=str(msg.assertion_type),
+                        section_type=str(msg.section_type),
                         priority=msg.priority,
-                        audience=msg.audiences[0] if msg.audiences else None,
+                        persona=msg.personas[0] if msg.personas else None,
                         channel="all",
                         channel_variants=msg.variants,
                         source={
-                            "spec_id": str(spec.id),
-                            "spec_name": spec.name,
-                            "last_synced": spec.last_synced.isoformat() if spec.last_synced else None,
+                            "canon_domain_id": str(canon_domain.id),
+                            "canon_domain_name": canon_domain.name,
+                            "last_synced": canon_domain.last_synced.isoformat() if canon_domain.last_synced else None,
                             "content_tier": tier,
                         },
                         confidence=score,
@@ -635,22 +635,22 @@ class GroundingEngine:
         return GroundingResponse(
             results=results[:8],
             grounding_context=GroundingContext(
-                active_spec_id=all_specs[0].id if all_specs else None,
-                spec_name=all_specs[0].name if all_specs else "",
-                spec_summary=all_specs[0].summary if all_specs else "",
+                active_house_id=all_specs[0].id if all_specs else None,
+                canon_domain_name=all_specs[0].name if all_specs else "",
+                canon_domain_summary=all_specs[0].summary if all_specs else "",
                 confidence="medium" if results else "low",
             ),
         )
 
-    def index_spec(self, spec_id: UUID) -> int:
-        spec = self.store.get_spec(spec_id)
-        if not spec:
-            raise ValueError(f"Spec {spec_id} not found")
+    def index_house(self, canon_domain_id: UUID) -> int:
+        canon_domain = self.store.get_canon_domain(canon_domain_id)
+        if not canon_domain:
+            raise ValueError(f"CanonDomain {canon_domain_id} not found")
 
         # Clear existing vectors to prevent duplicates
-        self.delete_spec_vectors(spec_id)
+        self.delete_house_vectors(canon_domain_id)
 
-        messages = self.store.get_key_messages(spec_id, include_unapproved=True)
+        messages = self.store.get_key_messages(canon_domain_id, include_unapproved=True)
         vectors_to_add = []
         ids_to_add = []
 
@@ -667,31 +667,31 @@ class GroundingEngine:
 
                 self.store.upsert_vector_metadata(
                     id=str_id,
-                    spec_id=spec_id,
-                    spec_name=spec.name,
-                    spec_summary=spec.summary or "",
+                    canon_domain_id=canon_domain_id,
+                    canon_domain_name=canon_domain.name,
+                    canon_domain_summary=canon_domain.summary or "",
                     content=content,
-                    assertion_type=str(msg.assertion_type),
+                    section_type=str(msg.section_type),
                     priority=msg.priority,
-                    audience=msg.audiences[0] if msg.audiences else "general",
+                    persona=msg.personas[0] if msg.personas else "general",
                     channel=str(msg.channels[0]) if msg.channels else "all",
-                    assertion_id=msg.id,
-                    last_synced=spec.last_synced,
+                    canon_entry_id=msg.id,
+                    last_synced=canon_domain.last_synced,
                     content_tier=getattr(msg, "content_tier", None),
                 )
 
-            # 2. Embed and index message spec positioning fields
+            # 2. Embed and index message canon_domain positioning fields
             for field, st, priority in [
                 ("summary", "positioning", 1),
-                ("audience", "positioning", 1),
+                ("persona", "positioning", 1),
                 ("positioning", "positioning", 1),
                 ("differentiation", "positioning", 2),
                 ("tagline", "headline", 1),
             ]:
-                text = getattr(spec, field, "") or ""
+                text = getattr(canon_domain, field, "") or ""
                 if text and text != "[Not found in source]":
                     vec = self._embed(text)
-                    str_id = f"field-{spec_id}-{field}"
+                    str_id = f"field-{canon_domain_id}-{field}"
                     uint_id = string_to_uint64(str_id)
 
                     vectors_to_add.append(vec)
@@ -699,19 +699,19 @@ class GroundingEngine:
 
                     self.store.upsert_vector_metadata(
                         id=str_id,
-                        spec_id=spec_id,
-                        spec_name=spec.name,
-                        spec_summary=spec.summary or "",
+                        canon_domain_id=canon_domain_id,
+                        canon_domain_name=canon_domain.name,
+                        canon_domain_summary=canon_domain.summary or "",
                         content=text,
-                        assertion_type=st,
+                        section_type=st,
                         priority=priority,
-                        audience="general",
+                        persona="general",
                         channel="all",
-                        last_synced=spec.last_synced,
+                        last_synced=canon_domain.last_synced,
                     )
 
             # 3. Embed and index Know Your Market frame section
-            kym_path = Path("data/frames") / f"{spec_id}.md"
+            kym_path = Path("data/frames") / f"{canon_domain_id}.md"
             if kym_path.exists():
                 md = kym_path.read_text(encoding="utf-8")
                 if "## Know Your Market" in md:
@@ -721,7 +721,7 @@ class GroundingEngine:
                     if kym_text:
                         content_slice = kym_text[:1500]
                         vec = self._embed(content_slice)
-                        str_id = f"kym-{spec_id}"
+                        str_id = f"kym-{canon_domain_id}"
                         uint_id = string_to_uint64(str_id)
 
                         vectors_to_add.append(vec)
@@ -729,19 +729,19 @@ class GroundingEngine:
 
                         self.store.upsert_vector_metadata(
                             id=str_id,
-                            spec_id=spec_id,
-                            spec_name=spec.name,
-                            spec_summary=spec.summary or "",
+                            canon_domain_id=canon_domain_id,
+                            canon_domain_name=canon_domain.name,
+                            canon_domain_summary=canon_domain.summary or "",
                             content=content_slice,
-                            assertion_type="know_your_market",
+                            section_type="know_your_market",
                             priority=1,
-                            audience="general",
+                            persona="general",
                             channel="all",
-                            last_synced=spec.last_synced,
+                            last_synced=canon_domain.last_synced,
                         )
 
             # 4. Chunk and index raw source markdown (high-fidelity proxy) if available
-            raw_source_path = Path("data/sources") / f"{spec_id}.md"
+            raw_source_path = Path("data/sources") / f"{canon_domain_id}.md"
             if raw_source_path.exists():
                 raw_md = raw_source_path.read_text(encoding="utf-8")
                 if raw_md.strip():
@@ -751,7 +751,7 @@ class GroundingEngine:
                     for chunk in md_chunks:
                         content = chunk["text"]
                         vec = self._embed(content)
-                        str_id = f"raw-{spec_id}-{chunk['chunk_id']}"
+                        str_id = f"raw-{canon_domain_id}-{chunk['chunk_id']}"
                         uint_id = string_to_uint64(str_id)
 
                         vectors_to_add.append(vec)
@@ -759,15 +759,15 @@ class GroundingEngine:
 
                         self.store.upsert_vector_metadata(
                             id=str_id,
-                            spec_id=spec_id,
-                            spec_name=spec.name,
-                            spec_summary=spec.summary or "",
+                            canon_domain_id=canon_domain_id,
+                            canon_domain_name=canon_domain.name,
+                            canon_domain_summary=canon_domain.summary or "",
                             content=content,
-                            assertion_type="source_markdown",
+                            section_type="source_markdown",
                             priority=3,
-                            audience="general",
+                            persona="general",
                             channel="all",
-                            last_synced=spec.last_synced,
+                            last_synced=canon_domain.last_synced,
                         )
 
             # 5. Upsert to Turbovec IdMapIndex
@@ -787,12 +787,12 @@ class GroundingEngine:
 
         return len(vectors_to_add)
 
-    def delete_spec_vectors(self, spec_id: UUID) -> int:
-        """Delete all vectors and metadata for a spec by ID."""
+    def delete_house_vectors(self, canon_domain_id: UUID) -> int:
+        """Delete all vectors and metadata for a canon_domain by ID."""
         with self._lock:
             with self.store.session() as s:
                 records = s.query(VectorMetadataModel).filter(
-                    VectorMetadataModel.spec_id == str(spec_id)
+                    VectorMetadataModel.canon_domain_id == str(canon_domain_id)
                 ).all()
                 str_ids = [r.id for r in records]
 
@@ -809,7 +809,7 @@ class GroundingEngine:
                     log.debug("Vector %s not present or failed to remove: %s", sid, e)
 
             # Delete metadata from DB
-            self.store.delete_vector_metadata_for_spec(spec_id)
+            self.store.delete_vector_metadata_for_house(canon_domain_id)
 
             if deleted > 0:
                 self.save_index()

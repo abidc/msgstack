@@ -3,12 +3,12 @@
 from typing import Optional
 from uuid import UUID
 
-from src.models import Spec, Assertion, Audience, AssertionType
+from src.models import CanonDomain, CanonEntry, Persona, SectionType
 from src.store import Store, get_store
 
 
-def _extract_brand_colors(spec: Spec) -> dict[str, str]:
-    """Extract brand colors from spec data."""
+def _extract_brand_colors(canon_domain: CanonDomain) -> dict[str, str]:
+    """Extract brand colors from canon_domain data."""
     colors = {
         "primary": "#1a73e8",
         "secondary": "#34a853",
@@ -16,7 +16,7 @@ def _extract_brand_colors(spec: Spec) -> dict[str, str]:
         "text": "#202124",
         "background": "#ffffff",
     }
-    personality = (spec.positioning or "").lower()
+    personality = (canon_domain.positioning or "").lower()
     if "bold" in personality or "strong" in personality:
         colors["primary"] = "#d93025"
     elif "calm" in personality or "trust" in personality:
@@ -78,16 +78,16 @@ def get_or_create_penpot_project(workspace_id: str, workspace_name: str, team_id
     return existing
 
 
-def sync_brand_tokens_to_penpot(workspace_id: str, spec: Spec) -> dict:
+def sync_brand_tokens_to_penpot(workspace_id: str, canon_domain: CanonDomain) -> dict:
     """Sync MsgStack brand tokens to Penpot design tokens."""
     store = get_store()
     project_id = store.get_penpot_project(workspace_id)
 
     results = {
         "workspace_id": workspace_id,
-        "spec_name": spec.name,
-        "brand_colors": _extract_brand_colors(spec),
-        "font_family": _map_personality_to_font(spec.positioning),
+        "canon_domain_name": canon_domain.name,
+        "brand_colors": _extract_brand_colors(canon_domain),
+        "font_family": _map_personality_to_font(canon_domain.positioning),
         "project_id": project_id,
         "actions": [],
     }
@@ -98,7 +98,7 @@ def sync_brand_tokens_to_penpot(workspace_id: str, spec: Spec) -> dict:
             "tool": "penpot_create_project",
             "params": {
                 "teamId": "default",
-                "name": f"MsgStack - {spec.name}",
+                "name": f"MsgStack - {canon_domain.name}",
             },
         })
     else:
@@ -107,14 +107,14 @@ def sync_brand_tokens_to_penpot(workspace_id: str, spec: Spec) -> dict:
             "tool": "penpot_create_file",
             "params": {
                 "projectId": project_id,
-                "name": f"Brand: {spec.name}",
+                "name": f"Brand: {canon_domain.name}",
             },
         })
 
     return results
 
 
-def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -> dict:
+def export_artifact_to_penpot(artifact_id: str, workspace_id: str, canon_domain: CanonDomain) -> dict:
     """Export a MsgStack artifact to a Penpot file.
 
     Returns a dict with the file details and instructions for creating
@@ -126,7 +126,7 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -
     results = {
         "artifact_id": artifact_id,
         "workspace_id": workspace_id,
-        "spec_name": spec.name,
+        "canon_domain_name": canon_domain.name,
         "project_id": project_id,
         "edit_url": None,
         "file_id": None,
@@ -141,21 +141,21 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -
             "tool": "penpot_create_project",
             "params": {
                 "teamId": "default",
-                "name": f"MsgStack - {spec.name}",
+                "name": f"MsgStack - {canon_domain.name}",
             },
         }
         return results
 
     # Build design specification
-    brand_colors = _extract_brand_colors(spec)
-    font_family = _map_personality_to_font(spec.positioning)
+    brand_colors = _extract_brand_colors(canon_domain)
+    font_family = _map_personality_to_font(canon_domain.positioning)
 
     design_spec = {
         "file": {
             "tool": "penpot_create_file",
             "params": {
                 "projectId": project_id,
-                "name": f"Artifact: {spec.name}",
+                "name": f"Artifact: {canon_domain.name}",
             },
         },
         "steps": [],
@@ -169,7 +169,7 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -
     steps.append({
         "tool": "penpot_create_frame",
         "params": {
-            "name": f"Artifact - {spec.name}",
+            "name": f"Artifact - {canon_domain.name}",
             "width": 1200,
             "height": 1600,
             "fillColor": "#ffffff",
@@ -179,12 +179,12 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -
     y_offset = 40
 
     # Add headline
-    if spec.tagline:
+    if canon_domain.tagline:
         steps.append({
             "tool": "penpot_create_text",
             "params": {
                 "name": "Headline",
-                "text": spec.tagline,
+                "text": canon_domain.tagline,
                 "x": 40,
                 "y": y_offset,
                 "fontSize": 32,
@@ -196,12 +196,12 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -
         y_offset += 60
 
     # Add positioning
-    if spec.positioning:
+    if canon_domain.positioning:
         steps.append({
             "tool": "penpot_create_text",
             "params": {
                 "name": "Positioning",
-                "text": spec.positioning[:200],
+                "text": canon_domain.positioning[:200],
                 "x": 40,
                 "y": y_offset,
                 "fontSize": 16,
@@ -228,13 +228,13 @@ def export_artifact_to_penpot(artifact_id: str, workspace_id: str, spec: Spec) -
     y_offset += 50
 
     # Add key messages
-    messages = store.get_key_messages(spec.id)
+    messages = store.get_key_messages(canon_domain.id)
     for i, msg in enumerate(messages[:10]):
         steps.append({
             "tool": "penpot_create_text",
             "params": {
-                "name": f"Message {i+1}: {msg.assertion_type}",
-                "text": f"[{msg.assertion_type}] {msg.content[:150]}",
+                "name": f"Message {i+1}: {msg.section_type}",
+                "text": f"[{msg.section_type}] {msg.content[:150]}",
                 "x": 40,
                 "y": y_offset,
                 "fontSize": 14,

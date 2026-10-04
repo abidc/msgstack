@@ -33,7 +33,7 @@ def validate_and_fill_design_spec(
         else:
             parsed = raw_json
     except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in design spec: {e}")
+        raise ValueError(f"Invalid JSON in design canon_domain: {e}")
 
     # Normalize template_zones to Zone models
     normalized_template_zones = []
@@ -106,24 +106,24 @@ def _resolve_placeholder(text: str, spec_data: dict) -> str:
         return text
     res = text
     
-    # Safely get assertions
-    key_messages_raw = spec_data.get("structured_key_messages") or spec_data.get("assertions") or []
-    assertions = []
+    # Safely get canon_entries
+    key_messages_raw = spec_data.get("structured_key_messages") or spec_data.get("canon_entries") or []
+    canon_entries = []
     if isinstance(key_messages_raw, list):
         for m in key_messages_raw:
             if isinstance(m, dict):
-                assertions.append(m)
-            elif hasattr(m, "assertion_type") and hasattr(m, "content"):
-                assertions.append({"assertion_type": str(m.assertion_type), "content": m.content})
+                canon_entries.append(m)
+            elif hasattr(m, "section_type") and hasattr(m, "content"):
+                canon_entries.append({"section_type": str(m.section_type), "content": m.content})
     
     # Safely get proof point
-    proof_points = [m["content"] for m in assertions if isinstance(m, dict) and str(m.get("assertion_type")).split(".")[-1].lower() == "proof_point"]
+    proof_points = [m["content"] for m in canon_entries if isinstance(m, dict) and str(m.get("section_type")).split(".")[-1].lower() == "proof_point"]
     first_proof = proof_points[0] if proof_points else ""
     if not first_proof and isinstance(spec_data.get("primary_message"), str):
         first_proof = spec_data.get("primary_message")
 
     placeholders = {
-        "{spec_name}": spec_data.get("spec_name") or spec_data.get("name") or "",
+        "{canon_domain_name}": spec_data.get("canon_domain_name") or spec_data.get("name") or "",
         "{tagline}": spec_data.get("tagline") or "",
         "{positioning}": spec_data.get("positioning") or "",
         "{differentiation}": spec_data.get("differentiation") or "",
@@ -134,23 +134,23 @@ def _resolve_placeholder(text: str, spec_data: dict) -> str:
     # Handlers for list item placeholders
     benefits = spec_data.get("benefits") or []
     if not benefits:
-        benefits = [m["content"] for m in assertions if isinstance(m, dict) and str(m.get("assertion_type")).split(".")[-1].lower() in ("benefit", "benefit_list")]
+        benefits = [m["content"] for m in canon_entries if isinstance(m, dict) and str(m.get("section_type")).split(".")[-1].lower() in ("benefit", "benefit_list")]
     for i in range(1, 6):
         placeholders[f"{{benefit_{i}}}"] = benefits[i-1] if i-1 < len(benefits) else ""
 
-    qa_pairs = spec_data.get("qa_pairs") or []
-    if not qa_pairs:
-        # try to get from audiences
-        audiences_raw = spec_data.get("audiences") or []
+    objections = spec_data.get("objections") or []
+    if not objections:
+        # try to get from personas
+        audiences_raw = spec_data.get("personas") or []
         for p in audiences_raw:
-            objs = p.get("qa_pairs") if isinstance(p, dict) else getattr(p, "qa_pairs", [])
+            objs = p.get("objections") if isinstance(p, dict) else getattr(p, "objections", [])
             for ob in (objs or []):
                 if isinstance(ob, dict):
-                    qa_pairs.append(ob.get("statement", str(ob)))
+                    objections.append(ob.get("statement", str(ob)))
                 else:
-                    qa_pairs.append(str(ob))
+                    objections.append(str(ob))
     for i in range(1, 6):
-        placeholders[f"{{qa_pair_{i}}}"] = qa_pairs[i-1] if i-1 < len(qa_pairs) else ""
+        placeholders[f"{{qa_pair_{i}}}"] = objections[i-1] if i-1 < len(objections) else ""
 
     pillars = spec_data.get("pillars") or []
     for i in range(1, 6):
@@ -160,11 +160,11 @@ def _resolve_placeholder(text: str, spec_data: dict) -> str:
             desc = p.get("description") if isinstance(p, dict) else getattr(p, "description", str(p))
         placeholders[f"{{pillar_{i}}}"] = desc
 
-    audiences = spec_data.get("audiences") or []
+    personas = spec_data.get("personas") or []
     for i in range(1, 6):
         p_name = ""
-        if i-1 < len(audiences):
-            p = audiences[i-1]
+        if i-1 < len(personas):
+            p = personas[i-1]
             p_name = p.get("name") if isinstance(p, dict) else getattr(p, "name", str(p))
         placeholders[f"{{audience_{i}}}"] = p_name
 

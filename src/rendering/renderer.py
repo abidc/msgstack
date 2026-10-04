@@ -58,8 +58,8 @@ class HTMLRenderer(ArtifactRenderer):
             self.env = None
 
     def render_html(self, sections: dict, context: dict) -> RenderOutput:
-        spec_name = context.get("spec_name", "Untitled")
-        html = self._build_html(sections, spec_name)
+        canon_domain_name = context.get("canon_domain_name", "Untitled")
+        html = self._build_html(sections, canon_domain_name)
         return RenderOutput(output_type="html", content=html)
 
     def render_fabric(self, sections: dict, context: dict) -> RenderOutput:
@@ -80,10 +80,10 @@ class HTMLRenderer(ArtifactRenderer):
             content={"error": "HTMLRenderer does not support Penpot output"},
         )
 
-    def _build_html(self, sections: dict, spec_name: str) -> str:
+    def _build_html(self, sections: dict, canon_domain_name: str) -> str:
         e = escape
-        lines = [f"<html><head><title>{e(spec_name)}</title></head><body>"]
-        lines.append(f"<h1>{e(spec_name)}</h1>")
+        lines = [f"<html><head><title>{e(canon_domain_name)}</title></head><body>"]
+        lines.append(f"<h1>{e(canon_domain_name)}</h1>")
         for key, value in sections.items():
             if value:
                 label = key.replace("_", " ").title()
@@ -120,20 +120,20 @@ class FabricRenderer(ArtifactRenderer):
 
     def _build_fabric_json(self, sections: dict, context: dict) -> dict:
         if "design_spec" in sections and sections["design_spec"]:
-            spec = sections["design_spec"]
+            canon_domain = sections["design_spec"]
             import json
-            return json.loads(spec) if isinstance(spec, str) else spec
+            return json.loads(canon_domain) if isinstance(canon_domain, str) else canon_domain
 
         objects = []
         y_offset = 50
-        spec_name = context.get("spec_name", "Untitled")
+        canon_domain_name = context.get("canon_domain_name", "Untitled")
 
         # Title
         objects.append({
             "type": "text",
             "left": 50,
             "top": y_offset,
-            "text": spec_name,
+            "text": canon_domain_name,
             "fontSize": 32,
             "fontWeight": "bold",
             "fill": "#000000",
@@ -202,7 +202,7 @@ class RevealRenderer(ArtifactRenderer):
 
     def _build_reveal_html(self, sections: dict, context: dict) -> str:
         e = escape
-        spec_name = context.get("spec_name", "Untitled")
+        canon_domain_name = context.get("canon_domain_name", "Untitled")
         
         brand = context.get("brand_settings", {})
         primary_color = brand.get("primary_color", "#1a56db")
@@ -250,7 +250,7 @@ class RevealRenderer(ArtifactRenderer):
                         f"{notes_html}</section>"
                     )
         else:
-            slides.append(f"<section><h1>{e(spec_name)}</h1></section>")
+            slides.append(f"<section><h1>{e(canon_domain_name)}</h1></section>")
             for key, value in sections.items():
                 if key == "design_spec" or not value or not isinstance(value, str):
                     continue
@@ -261,7 +261,7 @@ class RevealRenderer(ArtifactRenderer):
 <html>
 <head>
     <meta charset="utf-8">
-    <title>{e(spec_name)}</title>
+    <title>{e(canon_domain_name)}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reset.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/simple.css">
@@ -336,7 +336,7 @@ class PenpotRenderer(ArtifactRenderer):
         return RenderOutput(output_type="penpot", content=penpot_data)
 
     def _build_penpot_data(self, sections: dict, context: dict) -> dict:
-        spec_name = context.get("spec_name", "Untitled")
+        canon_domain_name = context.get("canon_domain_name", "Untitled")
         objects = []
 
         # Build Penpot-compatible shape objects
@@ -348,7 +348,7 @@ class PenpotRenderer(ArtifactRenderer):
             "y": y_offset,
             "width": 700,
             "height": 50,
-            "content": spec_name,
+            "content": canon_domain_name,
             "fontSize": 32,
             "fontWeight": "bold",
             "fillColor": "#000000",
@@ -386,7 +386,7 @@ class PenpotRenderer(ArtifactRenderer):
             y_offset += 100
 
         return {
-            "file_name": f"{spec_name} - Generated Artifact",
+            "file_name": f"{canon_domain_name} - Generated Artifact",
             "objects": objects,
         }
 

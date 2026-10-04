@@ -2,20 +2,20 @@
 
 Graph schema
 ------------
-Spec
-  ├─[HAS_SECTION]──► Section (one per assertion_type present in the spec)
-  │                    └─[CONTAINS]──► Assertion
+CanonDomain
+  ├─[HAS_SECTION]──► Section (one per section_type present in the canon_domain)
+  │                    └─[CONTAINS]──► CanonEntry
   ├─[HAS_PILLAR]───► Pillar (optional user grouping, orthogonal to sections)
-  │                    └─[GROUPS]────► Assertion
-  └─[TARGETS]──────► Audience
-                       └─[HAS_QA_PAIR]───► QAPair
+  │                    └─[GROUPS]────► CanonEntry
+  └─[TARGETS]──────► Persona
+                       └─[HAS_QA_PAIR]───► Objection
 
-Assertion
-  ├─[ADDRESSES]──► Audience
+CanonEntry
+  ├─[ADDRESSES]──► Persona
   ├─[APPLIES_TO]─► Channel
-  └─[MENTIONS]───► Entity        ← crosses spec boundaries
+  └─[MENTIONS]───► Entity        ← crosses canon_domain boundaries
 
-Typed cross-spec edges (DEPENDS_ON, INFORMS, SUPERSEDES, CONTRADICTS, OWNS,
+Typed cross-canon_domain edges (DEPENDS_ON, INFORMS, SUPERSEDES, CONTRADICTS, OWNS,
 IMPLEMENTS) connect any two nodes and are loaded from the `edges` table.
 """
 
@@ -94,82 +94,82 @@ class GraphEngine:
         store = get_store()
 
         g = nx.DiGraph()
-        specs = store.list_specs()
+        canon_domains = store.list_canon_domains()
         ch_meta_map = {c["id"]: c for c in store.get_channels()}
 
-        for spec in specs:
-            spec_node = f"spec:{spec.id}"
-            g.add_node(spec_node, type="Spec",
-                       id=str(spec.id), name=spec.name,
-                       schema_type=str(spec.schema_type),
-                       tagline=getattr(spec, "tagline", ""),
-                       positioning=getattr(spec, "positioning", ""),
-                       summary=spec.summary,
+        for canon_domain in canon_domains:
+            spec_node = f"canon_domain:{canon_domain.id}"
+            g.add_node(spec_node, type="CanonDomain",
+                       id=str(canon_domain.id), name=canon_domain.name,
+                       grounding_type=str(canon_domain.grounding_type),
+                       tagline=getattr(canon_domain, "tagline", ""),
+                       positioning=getattr(canon_domain, "positioning", ""),
+                       summary=canon_domain.summary,
                        # Phase 2 additions:
-                       parent_domain_id=str(spec.parent_domain_id) if spec.parent_domain_id else None,
-                       inheritance_policy=str(spec.inheritance_policy))
+                       parent_domain_id=str(canon_domain.parent_domain_id) if canon_domain.parent_domain_id else None,
+                       inheritance_policy=str(canon_domain.inheritance_policy))
 
             # Add relationship edge to parent if linked
-            if spec.parent_domain_id:
-                parent_node = f"spec:{spec.parent_domain_id}"
+            if canon_domain.parent_domain_id:
+                parent_node = f"canon_domain:{canon_domain.parent_domain_id}"
                 g.add_edge(spec_node, parent_node, rel="INHERITS_FROM")
 
             # Pillars — optional user-defined groupings (orthogonal to sections)
-            pillars = store.list_pillars(spec.id)
+            pillars = store.list_pillars(canon_domain.id)
             pillar_map: dict[int, str] = {}
             for pillar in pillars:
                 pil_node = f"pillar:{pillar.id}"
                 g.add_node(pil_node, type="Pillar",
                            id=str(pillar.id), name=pillar.name,
                            description=pillar.description or "",
-                           spec_id=str(spec.id))
+                           canon_domain_id=str(canon_domain.id))
                 g.add_edge(spec_node, pil_node, rel="HAS_PILLAR")
                 pillar_map[pillar.id] = pil_node
 
-            # Audiences + their QA pairs (built before assertions so edges resolve)
-            for audience in store.get_audiences(spec.id):
-                pnode = f"audience:{spec.id}:{audience.name}"
-                g.add_node(pnode, type="Audience", name=audience.name,
-                           spec_id=str(spec.id),
-                           description=getattr(audience, "description", ""))
+            # Audiences + their QA pairs (built before canon_entries so edges resolve)
+            for persona in store.get_personas(canon_domain.id):
+                pnode = f"persona:{canon_domain.id}:{persona.name}"
+                g.add_node(pnode, type="Persona", name=persona.name,
+                           canon_domain_id=str(canon_domain.id),
+                           description=getattr(persona, "description", ""))
                 g.add_edge(spec_node, pnode, rel="TARGETS")
 
-                db_obs = store.list_qa_pairs(str(audience.id))
+                db_obs = store.list_objections(str(persona.id))
                 if db_obs:
                     for ob in db_obs:
                         n = f"qa_pair_db:{ob.id}"
-                        g.add_node(n, type="QAPair", id=str(ob.id),
+                        g.add_node(n, type="Objection", id=str(ob.id),
                                    statement=ob.statement, response=ob.response or "",
-                                   audience_name=audience.name, spec_id=str(spec.id))
+                                   audience_name=persona.name, canon_domain_id=str(canon_domain.id))
                         g.add_edge(pnode, n, rel="HAS_QA_PAIR")
                 else:
-                    for i, ob in enumerate(audience.qa_pairs or []):
-                        n = f"qa_pair:{spec.id}:{audience.name}:{i}"
+                    for i, ob in enumerate(persona.objections or []):
+                        n = f"objection:{canon_domain.id}:{persona.name}:{i}"
                         stmt = ob.get("statement", "") if isinstance(ob, dict) else str(ob)
                         resp = ob.get("response", "") if isinstance(ob, dict) else ""
-                        g.add_node(n, type="QAPair", id=n, statement=stmt, response=resp,
-                                   audience_name=audience.name, spec_id=str(spec.id))
+                        g.add_node(n, type="Objection", id=n, statement=stmt, response=resp,
+                                   audience_name=persona.name, canon_domain_id=str(canon_domain.id))
                         g.add_edge(pnode, n, rel="HAS_QA_PAIR")
 
             # Sections + KeyMessages
             by_section: dict[str, list] = {}
-            for msg in store.get_key_messages(spec.id):
-                by_section.setdefault(str(msg.assertion_type), []).append(msg)
+            for msg in store.get_key_messages(canon_domain.id):
+                by_section.setdefault(str(msg.section_type), []).append(msg)
 
-            for assertion_type, msgs in by_section.items():
-                sec_node = f"section:{spec.id}:{assertion_type}"
-                label = _SECTION_LABELS.get(assertion_type,
-                                             assertion_type.replace("_", " ").title())
+            for section_type, msgs in by_section.items():
+                sec_node = f"section:{canon_domain.id}:{section_type}"
+                label = _SECTION_LABELS.get(section_type,
+                                             section_type.replace("_", " ").title())
                 g.add_node(sec_node, type="Section",
-                           id=sec_node, assertion_type=assertion_type, label=label,
-                           spec_id=str(spec.id), count=len(msgs))
+                           id=sec_node, section_type=section_type, label=label,
+                           canon_domain_id=str(canon_domain.id), count=len(msgs))
                 g.add_edge(spec_node, sec_node, rel="HAS_SECTION")
 
                 for msg in msgs:
                     chunk_node = f"chunk:{msg.id}"
-                    g.add_node(chunk_node, type="Assertion",
+                    g.add_node(chunk_node, type="CanonEntry",
                                id=str(msg.id), content=msg.content,
-                               assertion_type=assertion_type, priority=msg.priority,
+                               section_type=section_type, priority=msg.priority,
                                status=getattr(msg, "status", "draft"),
                                variants=msg.variants or {})
                     g.add_edge(sec_node, chunk_node, rel="CONTAINS")
@@ -177,11 +177,11 @@ class GraphEngine:
                     if msg.pillar_id and msg.pillar_id in pillar_map:
                         g.add_edge(pillar_map[msg.pillar_id], chunk_node, rel="GROUPS")
 
-                    for audience_name in (msg.audiences or []):
-                        pnode = f"audience:{spec.id}:{audience_name}"
+                    for audience_name in (msg.personas or []):
+                        pnode = f"persona:{canon_domain.id}:{audience_name}"
                         if not g.has_node(pnode):
-                            g.add_node(pnode, type="Audience", name=audience_name,
-                                       spec_id=str(spec.id), description="")
+                            g.add_node(pnode, type="Persona", name=audience_name,
+                                       canon_domain_id=str(canon_domain.id), description="")
                             g.add_edge(spec_node, pnode, rel="TARGETS")
                         g.add_edge(chunk_node, pnode, rel="ADDRESSES")
 
@@ -200,10 +200,10 @@ class GraphEngine:
                         g.add_edge(chunk_node, cnode, rel="APPLIES_TO")
 
         # ── Entities + typed edges ───────────────────────────────────────
-        # Everything above is containment: each edge stays inside one spec.
+        # Everything above is containment: each edge stays inside one canon_domain.
         # These two loops are what make the structure an actual graph — entity
-        # nodes join assertions across specs, and typed edges express explicit
-        # cross-spec relationships.
+        # nodes join canon_entries across canon_domains, and typed edges express explicit
+        # cross-canon_domain relationships.
         for ent in store.list_entities():
             g.add_node(f"entity:{ent['id']}", type="Entity",
                        id=ent["id"], name=ent["name"],
@@ -212,11 +212,11 @@ class GraphEngine:
                        aliases=ent.get("aliases", []))
 
         for m in store.list_entity_mentions():
-            a_node, e_node = f"chunk:{m['assertion_id']}", f"entity:{m['entity_id']}"
+            a_node, e_node = f"chunk:{m['canon_entry_id']}", f"entity:{m['entity_id']}"
             if g.has_node(a_node) and g.has_node(e_node):
                 g.add_edge(a_node, e_node, rel="MENTIONS", confidence=m.get("confidence", 1.0))
 
-        _PREFIX = {"assertion": "chunk:", "spec": "spec:", "entity": "entity:"}
+        _PREFIX = {"canon_entry": "chunk:", "canon_domain": "canon_domain:", "entity": "entity:"}
         for e in store.list_edges():
             src = _PREFIX.get(e["src_type"], "") + e["src_id"]
             dst = _PREFIX.get(e["dst_type"], "") + e["dst_id"]
@@ -234,9 +234,9 @@ class GraphEngine:
         if not self._built:
             self.rebuild()
 
-    def _spec_chunk_nodes(self, spec_id: str) -> set[str]:
-        """All Assertion node IDs for a spec, traversing through Section nodes."""
-        spec_node = f"spec:{spec_id}"
+    def _spec_chunk_nodes(self, canon_domain_id: str) -> set[str]:
+        """All CanonEntry node IDs for a canon_domain, traversing through Section nodes."""
+        spec_node = f"canon_domain:{canon_domain_id}"
         chunk_nodes: set[str] = set()
         for _, sec_node, d in self._graph.out_edges(spec_node, data=True):
             if d.get("rel") == "HAS_SECTION":
@@ -249,7 +249,7 @@ class GraphEngine:
     #: Edges worth walking during retrieval expansion, and what a hop costs.
     #: Lower decay = the relationship carries less relevance across the hop.
     _TRAVERSAL_DECAY: dict[str, float] = {
-        "MENTIONS": 0.75,      # assertion -> entity: the cross-spec bridge
+        "MENTIONS": 0.75,      # canon_entry -> entity: the cross-canon_domain bridge
         "DEPENDS_ON": 0.85,
         "INFORMS": 0.80,
         "IMPLEMENTS": 0.75,
@@ -262,11 +262,11 @@ class GraphEngine:
     }
 
     #: Relationships never walked during retrieval. APPLIES_TO connects every
-    #: assertion to the channel it publishes on, and almost everything carries
-    #: channel "all" — so traversing it makes every assertion two hops from
+    #: canon_entry to the channel it publishes on, and almost everything carries
+    #: channel "all" — so traversing it makes every canon_entry two hops from
     #: every other one and the graph degenerates into a complete graph.
     #: CONTAINS is the Section containment edge and has the same problem within
-    #: a spec. Both remain in the graph for structural queries; they are simply
+    #: a canon_domain. Both remain in the graph for structural queries; they are simply
     #: not paths for relevance.
     _NON_TRAVERSABLE: frozenset = frozenset({"APPLIES_TO", "CONTAINS", "HAS_SECTION"})
 
@@ -286,15 +286,15 @@ class GraphEngine:
         min_weight: float = 0.15,
         limit: int = 50,
     ) -> list[dict]:
-        """Breadth-first k-hop expansion from seed assertions.
+        """Breadth-first k-hop expansion from seed canon_entries.
 
         Walks edges in both directions — a dependency is relevant read either
         way — decaying a path weight per hop by relationship type. Returns
-        assertion nodes only (entities are waypoints, not results), each with
+        canon_entry nodes only (entities are waypoints, not results), each with
         the weight and the path that reached it, best first.
 
         This is the traversal the previous `graph` retrieval mode claimed to do
-        and did not: it filtered chunks by spec id and never left the spec.
+        and did not: it filtered chunks by canon_domain id and never left the canon_domain.
         """
         self._ensure_built()
         if not _NX_AVAILABLE or self._graph is None:
@@ -361,7 +361,7 @@ class GraphEngine:
         self._ensure_built()
         if not _NX_AVAILABLE or self._graph is None:
             return {}
-        prefix = {"assertion": "chunk:", "spec": "spec:", "entity": "entity:"}.get(node_type, "")
+        prefix = {"canon_entry": "chunk:", "canon_domain": "canon_domain:", "entity": "entity:"}.get(node_type, "")
         node = f"{prefix}{node_id}"
         if not self._graph.has_node(node):
             return {}
@@ -375,12 +375,12 @@ class GraphEngine:
                 {"direction": "in", "node": u, **dict(g.nodes[u])})
         return grouped
 
-    def get_chunks_for_spec(self, spec_id: str) -> list[dict]:
-        """All KeyMessages for a spec, sorted by priority."""
+    def get_chunks_for_house(self, canon_domain_id: str) -> list[dict]:
+        """All KeyMessages for a canon_domain, sorted by priority."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        spec_node = f"spec:{spec_id}"
+        spec_node = f"canon_domain:{canon_domain_id}"
         if spec_node not in self._graph:
             return []
         chunks: list[dict] = []
@@ -391,12 +391,12 @@ class GraphEngine:
                         chunks.append(dict(self._graph.nodes[chunk_node]))
         return sorted(chunks, key=lambda c: c.get("priority", 3))
 
-    def get_sections_for_spec(self, spec_id: str) -> list[dict]:
-        """Section nodes for a spec with their KeyMessages nested, ordered by section type."""
+    def get_sections_for_house(self, canon_domain_id: str) -> list[dict]:
+        """Section nodes for a canon_domain with their KeyMessages nested, ordered by section type."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        spec_node = f"spec:{spec_id}"
+        spec_node = f"canon_domain:{canon_domain_id}"
         if spec_node not in self._graph:
             return []
         sections: list[dict] = []
@@ -410,51 +410,51 @@ class GraphEngine:
                 sec_attrs["messages"] = sorted(messages, key=lambda m: m.get("priority", 3))
                 sections.append(sec_attrs)
         return sorted(sections,
-                      key=lambda s: _SECTION_ORDER.get(s.get("assertion_type", ""), 99))
+                      key=lambda s: _SECTION_ORDER.get(s.get("section_type", ""), 99))
 
-    def get_chunks_for_audience(self, spec_id: str, audience_name: str) -> list[dict]:
-        """KeyMessages that ADDRESS a specific audience within a spec."""
+    def get_chunks_for_persona(self, canon_domain_id: str, audience_name: str) -> list[dict]:
+        """KeyMessages that ADDRESS a specific persona within a canon_domain."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        audience_node = f"audience:{spec_id}:{audience_name}"
+        audience_node = f"persona:{canon_domain_id}:{audience_name}"
         if audience_node not in self._graph:
             return []
         return [dict(self._graph.nodes[n]) for n, _, d
                 in self._graph.in_edges(audience_node, data=True)
                 if d.get("rel") == "ADDRESSES"]
 
-    def get_chunks_for_channel(self, spec_id: str, channel: str) -> list[dict]:
-        """KeyMessages that APPLY_TO a specific channel within a spec."""
+    def get_chunks_for_channel(self, canon_domain_id: str, channel: str) -> list[dict]:
+        """KeyMessages that APPLY_TO a specific channel within a canon_domain."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
         channel_node = f"channel:{channel}"
         if channel_node not in self._graph:
             return []
-        spec_chunks = self._spec_chunk_nodes(spec_id)
+        spec_chunks = self._spec_chunk_nodes(canon_domain_id)
         return [dict(self._graph.nodes[n]) for n, _, d
                 in self._graph.in_edges(channel_node, data=True)
                 if d.get("rel") == "APPLIES_TO" and n in spec_chunks]
 
-    def get_connections(self, spec_id: str,
-                        audience: str | None = None,
+    def get_connections(self, canon_domain_id: str,
+                        persona: str | None = None,
                         channel: str | None = None) -> list[dict]:
-        """Graph query entry point — filter by optional audience and/or channel."""
+        """Graph query entry point — filter by optional persona and/or channel."""
         self._ensure_built()
         if not _NX_AVAILABLE:
             return []
-        if audience and channel:
-            by_p = {c["id"] for c in self.get_chunks_for_audience(spec_id, audience)}
-            by_c = {c["id"] for c in self.get_chunks_for_channel(spec_id, channel)}
+        if persona and channel:
+            by_p = {c["id"] for c in self.get_chunks_for_persona(canon_domain_id, persona)}
+            by_c = {c["id"] for c in self.get_chunks_for_channel(canon_domain_id, channel)}
             ids = by_p & by_c
-            results = [c for c in self.get_chunks_for_spec(spec_id) if c.get("id") in ids]
-        elif audience:
-            results = self.get_chunks_for_audience(spec_id, audience)
+            results = [c for c in self.get_chunks_for_house(canon_domain_id) if c.get("id") in ids]
+        elif persona:
+            results = self.get_chunks_for_persona(canon_domain_id, persona)
         elif channel:
-            results = self.get_chunks_for_channel(spec_id, channel)
+            results = self.get_chunks_for_channel(canon_domain_id, channel)
         else:
-            results = self.get_chunks_for_spec(spec_id)
+            results = self.get_chunks_for_house(canon_domain_id)
         # Filter out nodes with no content (fix #8)
         return [c for c in results if c.get("content", "").strip()]
 
@@ -467,30 +467,30 @@ class GraphEngine:
         nodes: list[dict] = []
         for nid, attrs in g.nodes(data=True):
             ntype = attrs.get("type", "unknown")
-            if ntype == "QAPair":
+            if ntype == "Objection":
                 raw = attrs.get("statement", "") or ""
                 label = (raw[:32] + "…") if len(raw) > 32 else raw or nid
             elif ntype == "Section":
-                label = attrs.get("label", attrs.get("assertion_type", nid))
+                label = attrs.get("label", attrs.get("section_type", nid))
             else:
                 content = attrs.get("content", "")
                 label = (attrs.get("name")
                          or (content[:35] + "…" if len(content) > 35 else content)
                          or nid)
             entry: dict[str, Any] = {"id": nid, "type": ntype, "label": label}
-            if ntype == "Spec":
+            if ntype == "CanonDomain":
                 entry.update({"name": attrs.get("name", ""),
-                               "schema_type": attrs.get("schema_type", ""),
+                               "grounding_type": attrs.get("grounding_type", ""),
                                "tagline": attrs.get("tagline", ""),
                                "summary": (attrs.get("summary") or "")[:150]})
             elif ntype == "Section":
-                entry.update({"assertion_type": attrs.get("assertion_type", ""),
+                entry.update({"section_type": attrs.get("section_type", ""),
                                "label": attrs.get("label", ""),
                                "count": attrs.get("count", 0),
-                               "spec_id": attrs.get("spec_id", "")})
-                entry["color"] = _SECTION_COLORS.get(attrs.get("assertion_type", ""), "#6366f1")
-            elif ntype == "Assertion":
-                entry.update({"assertion_type": attrs.get("assertion_type", ""),
+                               "canon_domain_id": attrs.get("canon_domain_id", "")})
+                entry["color"] = _SECTION_COLORS.get(attrs.get("section_type", ""), "#6366f1")
+            elif ntype == "CanonEntry":
+                entry.update({"section_type": attrs.get("section_type", ""),
                                "priority": attrs.get("priority"),
                                "content": (attrs.get("content") or "")[:150],
                                "status": attrs.get("status", "draft")})
@@ -498,21 +498,21 @@ class GraphEngine:
             elif ntype == "Pillar":
                 entry.update({"name": attrs.get("name", ""),
                                "description": attrs.get("description", ""),
-                               "spec_id": attrs.get("spec_id", "")})
-            elif ntype == "Audience":
+                               "canon_domain_id": attrs.get("canon_domain_id", "")})
+            elif ntype == "Persona":
                 entry.update({"name": attrs.get("name", ""),
-                               "spec_id": attrs.get("spec_id", "")})
+                               "canon_domain_id": attrs.get("canon_domain_id", "")})
             elif ntype == "Channel":
                 entry["name"] = attrs.get("name", "")
             elif ntype == "Entity":
                 entry.update({"name": attrs.get("name", ""),
                                "entity_type": attrs.get("entity_type", ""),
                                "description": (attrs.get("description") or "")[:150]})
-            elif ntype == "QAPair":
+            elif ntype == "Objection":
                 entry.update({"statement": (attrs.get("statement") or "")[:150],
                                "response": (attrs.get("response") or "")[:150],
                                "audience_name": attrs.get("audience_name", ""),
-                               "spec_id": attrs.get("spec_id", "")})
+                               "canon_domain_id": attrs.get("canon_domain_id", "")})
             nodes.append(entry)
         edges = [{"source": s, "target": t, "rel": d.get("rel", "")}
                  for s, t, d in g.edges(data=True)]
