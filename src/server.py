@@ -237,6 +237,35 @@ def get_message_house(
 
 
 @mcp.tool()
+def classify_request(text: str, options: list[str], context: Optional[str] = None) -> dict:
+    """Pick one of a fixed set of options for a piece of free text — intent/skill/domain
+    routing, not content generation. Backed by a decision model when one is configured
+    (DECISION_MODEL_URL), falling back to the configured LLM otherwise either way this
+    always returns an answer.
+
+    This exists for MCP clients that are deliberately decoupled from this server's
+    Python package (e.g. the Slack/Teams agent, which has no LLM credentials of its
+    own) and need routing decisions without duplicating that logic locally. Use this
+    instead of ad-hoc keyword matching whenever you need to map free text onto one of
+    a small, fixed set of choices — e.g. "which skill_id does this request want" or
+    "which canon domain is this about."
+
+    Args:
+        text: The free text to classify (e.g. a user's chat message).
+        options: The fixed, exact set of valid choices. The returned choice is
+            guaranteed to be one of these (verbatim) or the call raises an error.
+        context: Optional extra context to ground the decision (e.g. a list of
+            candidate domain names/summaries when options are domain IDs).
+
+    Returns:
+        {"choice": str, "confidence": float, "source": "decision_model" | "llm_fallback" | "trivial"}
+    """
+    from src.decision_model import decide
+    result = decide(options=options, prompt=text, context=context or "")
+    return {"choice": result.choice, "confidence": result.confidence, "source": result.source}
+
+
+@mcp.tool()
 def list_canon_domains(query: Optional[str] = None, workspace_id: Optional[str] = None, department: Optional[str] = None) -> dict:
     """List all available canon domains with their IDs and summaries.
 

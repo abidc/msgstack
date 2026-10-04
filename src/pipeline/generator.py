@@ -62,12 +62,27 @@ def _normalize_ws(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip().lower()
 
 
-def find_tier1_violations(messages: list, output: str) -> list[dict]:
+# Word-overlap scores in this band are too close to call by the crude heuristic
+# alone (a true paraphrase and a verbatim quote with minor reordering can land
+# on either side of a single fixed threshold) — refine via decide() instead of
+# guessing. Outside this band the heuristic's call stands on its own.
+_BORDERLINE_OVERLAP_BAND = (0.4, 0.8)
+
+
+def find_tier1_violations(messages: list, output: str, refine_borderline: bool = True) -> list[dict]:
     """Detect Tier 1 entries that appear to have been used but not verbatim.
 
     An entry counts as "used" when most of its significant words appear in the
     output (fuzzy match); it passes when its whitespace-normalized text appears
     as an exact substring. Used-but-not-verbatim → violation.
+
+    Overlap scores inside _BORDERLINE_OVERLAP_BAND are ambiguous for the fixed
+    0.6 threshold alone; when `refine_borderline` is set (the default), those
+    cases get a second opinion from decide() — a fixed-option "is this a
+    violation: yes/no" call, cheap by design whether it runs on a self-hosted
+    decision model or falls back to the existing LLM routing. Set to False in
+    hot paths that can't tolerate the extra call (e.g. a tight generation loop)
+    and accept the heuristic's threshold-only answer instead.
     """
     violations = []
     norm_output = _normalize_ws(output)
@@ -84,7 +99,13 @@ def find_tier1_violations(messages: list, output: str) -> list[dict]:
         if not entry_words:
             continue
         overlap = sum(1 for w in entry_words if w in output_words) / len(entry_words)
-        if overlap >= 0.6:
+        is_violation = overlap >= 0.6
+        lo, hi = _BORDERLINE_OVERLAP_BAND
+        if refine_borderline and lo <= overlap <= hi:
+            refined = _refine_borderline_violation(m.content, output)
+            if refined is not None:
+                is_violation = refined
+        if is_violation:
             violations.append({
                 "entry_id": str(getattr(m, "id", "")),
                 "content": m.content,
@@ -92,6 +113,39 @@ def find_tier1_violations(messages: list, output: str) -> list[dict]:
                 "warning": "Tier 1 entry appears to have been paraphrased — it must be reproduced verbatim.",
             })
     return violations
+
+
+def _refine_borderline_violation(entry_content: str, output: str) -> Optional[bool]:
+    """Second opinion for a borderline word-overlap score, via a decision model.
+
+    Only attempted when a decision-model endpoint is actually configured — the
+    whole point is a sub-500ms, cheap-by-construction call. Falling back to a
+    full LLM call here instead would reintroduce the latency/cost the
+    decision-model pattern exists to avoid, for marginal accuracy gain over an
+    already-reasonable heuristic. None (keep the heuristic's answer) when no
+    endpoint is configured or the call fails.
+    """
+    from src.config import settings
+    if not settings.decision_model_url:
+        return None
+    try:
+        from src.decision_model import decide
+        result = decide(
+            options=["violation", "not_a_violation"],
+            prompt=(
+                "A piece of content was supposed to be reproduced verbatim (word-for-word) "
+                "but a heuristic found only partial word overlap, which is ambiguous. Given "
+                "the locked source text and the generated output it should appear in, is this "
+                "a genuine paraphrase (a violation) or a verbatim/near-verbatim reproduction "
+                "with incidental differences, like surrounding punctuation or quoting (not a "
+                "violation)?"
+            ),
+            context=f"LOCKED SOURCE TEXT: {entry_content}\n\nGENERATED OUTPUT: {output}",
+        )
+        return result.choice == "violation"
+    except Exception:
+        log.warning("Borderline Tier 1 refinement failed; keeping heuristic's threshold call", exc_info=True)
+        return None
 
 
 class ArtifactGenerator:
@@ -145,11 +199,23 @@ class ArtifactGenerator:
 
         context = self._build_context(canon_domain, messages, personas, custom_context or {})
 
+        # Audience Profile: formalizes what used to be an ad-hoc per-entry
+        # `variants` dict into enforced tone/style constraints. An explicit
+        # tone_professionalism/tone_warmth in custom_context still wins over
+        # the profile's defaults — the profile only fills gaps, never overrides
+        # a caller who passed sliders directly.
+        audience_profile = None
+        if custom_context and custom_context.get("audience_profile_id"):
+            audience_profile = self.store.get_audience_profile(UUID(custom_context["audience_profile_id"]))
+
         # Tonal sliders mapping:
         tone_register = ""
-        if custom_context:
-            professionalism = custom_context.get("tone_professionalism", 0.5)
-            warmth = custom_context.get("tone_warmth", 0.5)
+        if custom_context or audience_profile:
+            ctx = custom_context or {}
+            default_prof = audience_profile.tone_professionalism if audience_profile else 0.5
+            default_warm = audience_profile.tone_warmth if audience_profile else 0.5
+            professionalism = ctx.get("tone_professionalism", default_prof)
+            warmth = ctx.get("tone_warmth", default_warm)
             # Map float sliders to specific prompt instructions
             tone_register = (
                 f"\nTONE & REGISTER BOUNDS:\n"
@@ -157,6 +223,10 @@ class ArtifactGenerator:
                 f"- Warmth level: {warmth} (1.0 = highly friendly, 0.0 = highly objective and technical)\n"
                 f"Adjust output register to match these bounds while respecting brand personality."
             )
+            if audience_profile:
+                tone_register += f"\n- Reading level: {audience_profile.reading_level}."
+                if audience_profile.required_cta:
+                    tone_register += f"\n- Must end with a call to action equivalent to: \"{audience_profile.required_cta}\""
 
         # For visual artifacts, pre-fill template zones before LLM call
         visual_context = None
@@ -227,6 +297,15 @@ class ArtifactGenerator:
         try:
             from src.pipeline.vocabulary import apply_controlled_vocabulary
             raw = apply_controlled_vocabulary(raw, canon_domain.id, self.store)
+            if audience_profile and audience_profile.banned_phrases:
+                for phrase in audience_profile.banned_phrases:
+                    if phrase and phrase.lower() in raw.lower():
+                        raw = re.sub(re.escape(phrase), "", raw, flags=re.IGNORECASE)
+                        log.warning("Audience profile %s banned phrase %r found and stripped from output",
+                                    audience_profile.name, phrase)
+            if audience_profile and audience_profile.required_cta and audience_profile.required_cta.lower() not in raw.lower():
+                log.warning("Audience profile %s required a CTA ('%s') not found in generated output — not enforced, flagged for review",
+                             audience_profile.name, audience_profile.required_cta)
             # Re-parse sections after sweeping
             sections = self._parse_sections(raw, skill)
         except Exception as e:
