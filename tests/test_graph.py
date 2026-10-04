@@ -1,8 +1,8 @@
 """Graph substrate: entity resolution, typed edges, k-hop traversal, propagation.
 
 The point of these tests is to prove the graph does the thing the product
-claims — cross-spec retrieval and cascade invalidation — rather than the
-within-spec containment filtering the previous implementation did.
+claims — cross-canon_domain retrieval and cascade invalidation — rather than the
+within-canon_domain containment filtering the previous implementation did.
 """
 
 import os
@@ -11,7 +11,7 @@ from uuid import uuid4
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from src.models import Spec, Assertion, AssertionType, AssertionStatus, SpecStatus
+from src.models import CanonDomain, CanonEntry, SectionType, EntryStatus, DomainStatus
 
 
 @pytest.fixture
@@ -30,22 +30,22 @@ def store(tmp_path):
 
 @pytest.fixture
 def two_specs(store):
-    """Two unrelated specs, each with one assertion. Nothing links them yet."""
-    api = Spec(name="payments-api", summary="Payment service contract",
-               status=SpecStatus.ACTIVE)
-    slo = Spec(name="platform-slo", summary="Platform reliability targets",
-               status=SpecStatus.ACTIVE)
-    store.upsert_spec(api)
-    store.upsert_spec(slo)
+    """Two unrelated canon_domains, each with one canon_entry. Nothing links them yet."""
+    api = CanonDomain(name="payments-api", summary="Payment service contract",
+               status=DomainStatus.ACTIVE)
+    slo = CanonDomain(name="platform-slo", summary="Platform reliability targets",
+               status=DomainStatus.ACTIVE)
+    store.upsert_canon_domain(api)
+    store.upsert_canon_domain(slo)
 
-    a1 = Assertion(spec_id=api.id, assertion_type=AssertionType.POSITIONING, priority=1,
+    a1 = CanonEntry(canon_domain_id=api.id, section_type=SectionType.POSITIONING, priority=1,
                    content="Checkout endpoint is limited to 1000 req/min per API key.",
-                   status=AssertionStatus.APPROVED)
-    a2 = Assertion(spec_id=slo.id, assertion_type=AssertionType.POSITIONING, priority=1,
+                   status=EntryStatus.APPROVED)
+    a2 = CanonEntry(canon_domain_id=slo.id, section_type=SectionType.POSITIONING, priority=1,
                    content="Gateway sheds load above 1200 req/min aggregate.",
-                   status=AssertionStatus.APPROVED)
-    store.upsert_assertion(a1)
-    store.upsert_assertion(a2)
+                   status=EntryStatus.APPROVED)
+    store.upsert_canon_entry(a1)
+    store.upsert_canon_entry(a2)
     return api, slo, a1, a2
 
 
@@ -80,7 +80,7 @@ def test_merge_repoints_mentions(store, two_specs):
     _, _, a1, _ = two_specs
     keep = store.resolve_entity("payments-api")
     dupe = store.resolve_entity("Payment Service")
-    store.add_entity_mention(dupe, str(a1.id), str(a1.spec_id))
+    store.add_entity_mention(dupe, str(a1.id), str(a1.canon_domain_id))
     store.merge_entities(keep, dupe)
     mentions = store.list_entity_mentions()
     assert all(m["entity_id"] == keep for m in mentions)
@@ -92,13 +92,13 @@ def test_merge_repoints_mentions(store, two_specs):
 def test_add_edge_rejects_missing_endpoint(store, two_specs):
     _, _, a1, _ = two_specs
     with pytest.raises(ValueError, match="dst node not found"):
-        store.add_edge("assertion", str(a1.id), "assertion", str(uuid4()), "DEPENDS_ON")
+        store.add_edge("canon_entry", str(a1.id), "canon_entry", str(uuid4()), "DEPENDS_ON")
 
 
 def test_add_edge_is_idempotent(store, two_specs):
     _, _, a1, a2 = two_specs
-    e1 = store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
-    e2 = store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    e1 = store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
+    e2 = store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
     assert e1 == e2
     assert len(store.list_edges()) == 1
 
@@ -106,9 +106,9 @@ def test_add_edge_is_idempotent(store, two_specs):
 # ── Traversal: the actual claim ──────────────────────────────────────────
 
 def test_expansion_crosses_spec_boundary_via_shared_entity(store, two_specs):
-    """Two assertions in different specs, joined only by mentioning the same
+    """Two canon_entries in different canon_domains, joined only by mentioning the same
     entity, must be reachable from each other. This is the capability the old
-    filter-by-spec implementation could not express at all."""
+    filter-by-canon_domain implementation could not express at all."""
     api, slo, a1, a2 = two_specs
     eid = store.resolve_entity("checkout-endpoint")
     store.add_entity_mention(eid, str(a1.id), str(api.id))
@@ -120,7 +120,7 @@ def test_expansion_crosses_spec_boundary_via_shared_entity(store, two_specs):
 
     found = engine.expand([str(a1.id)], hops=2)
     ids = {f["id"] for f in found}
-    assert str(a2.id) in ids, "should reach the other spec's assertion in 2 hops"
+    assert str(a2.id) in ids, "should reach the other canon_domain's canon_entry in 2 hops"
 
     hit = next(f for f in found if f["id"] == str(a2.id))
     assert hit["hops"] == 2
@@ -129,7 +129,7 @@ def test_expansion_crosses_spec_boundary_via_shared_entity(store, two_specs):
 
 def test_expansion_follows_explicit_typed_edge(store, two_specs):
     api, slo, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
 
     from src.grounding.graph import get_graph_engine
     engine = get_graph_engine()
@@ -155,7 +155,7 @@ def test_expansion_respects_hop_limit(store, two_specs):
 
 def test_expansion_filters_by_rel_type(store, two_specs):
     api, slo, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "CONTRADICTS")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "CONTRADICTS")
 
     from src.grounding.graph import get_graph_engine
     engine = get_graph_engine()
@@ -168,7 +168,7 @@ def test_expansion_filters_by_rel_type(store, two_specs):
 
 def test_expansion_weight_decays_with_distance(store, two_specs):
     api, slo, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
     from src.grounding.graph import get_graph_engine
     engine = get_graph_engine()
     engine.rebuild()
@@ -178,7 +178,7 @@ def test_expansion_weight_decays_with_distance(store, two_specs):
 
 def test_expansion_excludes_seed_from_results(store, two_specs):
     _, _, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
     from src.grounding.graph import get_graph_engine
     engine = get_graph_engine()
     engine.rebuild()
@@ -188,58 +188,58 @@ def test_expansion_excludes_seed_from_results(store, two_specs):
 # ── Change propagation ───────────────────────────────────────────────────
 
 def test_propagation_marks_dependent_outdated(store, two_specs):
-    """a1 DEPENDS_ON a2 — editing a2 must invalidate a1, across specs."""
+    """a1 DEPENDS_ON a2 — editing a2 must invalidate a1, across canon_domains."""
     _, _, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
 
     a2.content = "Gateway now sheds load above 2000 req/min aggregate."
-    store.upsert_assertion(a2)
+    store.upsert_canon_entry(a2)
 
-    refreshed = store.get_assertion(a1.id)
+    refreshed = store.get_canon_entry(a1.id)
     assert str(refreshed.status) == "outdated"
 
 
 def test_propagation_is_transitive(store, two_specs):
     api, slo, a1, a2 = two_specs
-    a3 = Assertion(spec_id=api.id, assertion_type=AssertionType.POSITIONING, priority=1,
+    a3 = CanonEntry(canon_domain_id=api.id, section_type=SectionType.POSITIONING, priority=1,
                    content="Docs quote the checkout rate limit.",
-                   status=AssertionStatus.APPROVED)
-    store.upsert_assertion(a3)
-    store.add_edge("assertion", str(a3.id), "assertion", str(a1.id), "DEPENDS_ON")
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+                   status=EntryStatus.APPROVED)
+    store.upsert_canon_entry(a3)
+    store.add_edge("canon_entry", str(a3.id), "canon_entry", str(a1.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
 
     a2.content = "changed upstream"
-    store.upsert_assertion(a2)
+    store.upsert_canon_entry(a2)
 
-    assert str(store.get_assertion(a1.id).status) == "outdated"
-    assert str(store.get_assertion(a3.id).status) == "outdated", "must cascade two levels"
+    assert str(store.get_canon_entry(a1.id).status) == "outdated"
+    assert str(store.get_canon_entry(a3.id).status) == "outdated", "must cascade two levels"
 
 
 def test_propagation_terminates_on_cycle(store, two_specs):
     """Nothing stops an author creating a dependency cycle; it must not hang."""
     _, _, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
-    store.add_edge("assertion", str(a2.id), "assertion", str(a1.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a2.id), "canon_entry", str(a1.id), "DEPENDS_ON")
 
     a2.content = "mutually dependent change"
-    store.upsert_assertion(a2)  # must return rather than recurse forever
-    assert str(store.get_assertion(a1.id).status) == "outdated"
+    store.upsert_canon_entry(a2)  # must return rather than recurse forever
+    assert str(store.get_canon_entry(a1.id).status) == "outdated"
 
 
 def test_non_propagating_rel_does_not_invalidate(store, two_specs):
     """MENTIONS is navigational — it must not cascade staleness."""
     _, _, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "MENTIONS")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "MENTIONS")
     a2.content = "changed"
-    store.upsert_assertion(a2)
-    assert str(store.get_assertion(a1.id).status) != "outdated"
+    store.upsert_canon_entry(a2)
+    assert str(store.get_canon_entry(a1.id).status) != "outdated"
 
 
 def test_get_dependents_only_returns_propagating_rels(store, two_specs):
     _, _, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "MENTIONS")
-    deps = store.get_dependents("assertion", str(a2.id))
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "MENTIONS")
+    deps = store.get_dependents("canon_entry", str(a2.id))
     assert len(deps) == 1
     assert deps[0]["rel_type"] == "DEPENDS_ON"
 
@@ -262,22 +262,22 @@ def _bare_engine(store):
     return e
 
 
-def _vector_match(assertion_id, score, spec_id):
+def _vector_match(canon_entry_id, score, canon_domain_id):
     return {
-        "id": f"chunk-{assertion_id}",
+        "id": f"chunk-{canon_entry_id}",
         "score": score,
         "metadata": {
-            "assertion_id": str(assertion_id), "spec_id": str(spec_id),
-            "spec_name": "", "spec_summary": "", "content": "seed",
-            "assertion_type": "positioning", "priority": 1,
-            "audience": None, "channel": "all",
+            "canon_entry_id": str(canon_entry_id), "canon_domain_id": str(canon_domain_id),
+            "canon_domain_name": "", "canon_domain_summary": "", "content": "seed",
+            "section_type": "positioning", "priority": 1,
+            "persona": None, "channel": "all",
             "last_synced": None, "content_tier": None,
         },
     }
 
 
 def test_fusion_pulls_in_cross_spec_assertion(store, two_specs):
-    """Vector search only sees spec A. Fusion must surface spec B's assertion,
+    """Vector search only sees canon_domain A. Fusion must surface canon_domain B's canon_entry,
     reached by traversal, in the final ranking."""
     from src.models import SearchFilters
     api, slo, a1, a2 = two_specs
@@ -291,11 +291,11 @@ def test_fusion_pulls_in_cross_spec_assertion(store, two_specs):
     vector_only = [_vector_match(a1.id, 0.9, api.id)]
     fused = eng._fuse_with_graph(vector_only, SearchFilters(), top_k=8)
 
-    ids = {m["metadata"]["assertion_id"] for m in fused}
+    ids = {m["metadata"]["canon_entry_id"] for m in fused}
     assert str(a1.id) in ids
-    assert str(a2.id) in ids, "graph-reached assertion from another spec must be fused in"
-    reached = next(m for m in fused if m["metadata"]["assertion_id"] == str(a2.id))
-    assert reached["metadata"]["spec_id"] == str(slo.id)
+    assert str(a2.id) in ids, "graph-reached canon_entry from another canon_domain must be fused in"
+    reached = next(m for m in fused if m["metadata"]["canon_entry_id"] == str(a2.id))
+    assert reached["metadata"]["canon_domain_id"] == str(slo.id)
     assert "graph:" in reached["rerank_reason"]
 
 
@@ -311,12 +311,12 @@ def test_fusion_ranks_dual_hits_above_single(store, two_specs):
     api, slo, a1, a2 = two_specs
     filler = []
     for i in range(5):
-        f = Assertion(spec_id=api.id, assertion_type=AssertionType.POSITIONING,
-                      priority=1, content=f"filler {i}", status=AssertionStatus.APPROVED)
-        store.upsert_assertion(f)
+        f = CanonEntry(canon_domain_id=api.id, section_type=SectionType.POSITIONING,
+                      priority=1, content=f"filler {i}", status=EntryStatus.APPROVED)
+        store.upsert_canon_entry(f)
         filler.append(f)
     # a1 (rank 1) is a seed; a2 sits last on vectors but is one hop from a1
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
     from src.grounding.graph import get_graph_engine
     get_graph_engine().rebuild()
 
@@ -325,7 +325,7 @@ def test_fusion_ranks_dual_hits_above_single(store, two_specs):
                + [_vector_match(f.id, 0.8 - i * 0.05, api.id) for i, f in enumerate(filler)]
                + [_vector_match(a2.id, 0.5, slo.id)])
     fused = eng._fuse_with_graph(matches, SearchFilters(), top_k=8)
-    order = [m["metadata"]["assertion_id"] for m in fused]
+    order = [m["metadata"]["canon_entry_id"] for m in fused]
     assert order.index(str(a2.id)) < order.index(str(filler[-1].id)), \
         "a2 is retrieved by both routes and must outrank the vector-only tail"
 
@@ -341,31 +341,31 @@ def test_fusion_is_noop_without_graph_edges(store, two_specs):
 
 
 def test_fusion_respects_lifecycle_gate(store, two_specs):
-    """A draft assertion reached by traversal must not enter results."""
+    """A draft canon_entry reached by traversal must not enter results."""
     from src.models import SearchFilters
     api, slo, a1, a2 = two_specs
-    a2.status = AssertionStatus.DRAFT
-    store.upsert_assertion(a2)
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    a2.status = EntryStatus.DRAFT
+    store.upsert_canon_entry(a2)
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
     from src.grounding.graph import get_graph_engine
     get_graph_engine().rebuild()
 
     eng = _bare_engine(store)
     fused = eng._fuse_with_graph([_vector_match(a1.id, 0.9, api.id)],
                                  SearchFilters(), top_k=8)
-    assert str(a2.id) not in {m["metadata"]["assertion_id"] for m in fused}
+    assert str(a2.id) not in {m["metadata"]["canon_entry_id"] for m in fused}
 
 
 def test_shared_channel_does_not_connect_unrelated_assertions(store, two_specs):
-    """Regression: every assertion carries channel "all", so traversing
-    APPLIES_TO put every assertion two hops from every other one and the graph
+    """Regression: every canon_entry carries channel "all", so traversing
+    APPLIES_TO put every canon_entry two hops from every other one and the graph
     degenerated into a complete graph. Channel membership is not a relationship.
     """
     api, slo, a1, a2 = two_specs
     a1.channels = ["all"]
     a2.channels = ["all"]
-    store.upsert_assertion(a1)
-    store.upsert_assertion(a2)
+    store.upsert_canon_entry(a1)
+    store.upsert_canon_entry(a2)
 
     from src.grounding.graph import get_graph_engine
     engine = get_graph_engine()
@@ -373,28 +373,28 @@ def test_shared_channel_does_not_connect_unrelated_assertions(store, two_specs):
 
     found = engine.expand([str(a1.id)], hops=3)
     assert str(a2.id) not in {f["id"] for f in found}, \
-        "sharing a channel must not make two unrelated assertions reachable"
+        "sharing a channel must not make two unrelated canon_entries reachable"
 
 
 def test_hub_node_is_not_traversed_through(store):
     """A node above the hub-degree threshold may be reached but not expanded
     through, whatever relationship type connects it."""
     from src.grounding.graph import get_graph_engine
-    spec = Spec(name="hub-spec", summary="", status=SpecStatus.ACTIVE)
-    store.upsert_spec(spec)
+    canon_domain = CanonDomain(name="hub-canon_domain", summary="", status=DomainStatus.ACTIVE)
+    store.upsert_canon_domain(canon_domain)
     hub = store.resolve_entity("ubiquitous-thing")
-    assertions = []
+    canon_entries = []
     for i in range(engine_hub_count := 30):
-        a = Assertion(spec_id=spec.id, assertion_type=AssertionType.POSITIONING,
-                      priority=1, content=f"a{i}", status=AssertionStatus.APPROVED)
-        store.upsert_assertion(a)
-        store.add_entity_mention(hub, str(a.id), str(spec.id))
-        assertions.append(a)
+        a = CanonEntry(canon_domain_id=canon_domain.id, section_type=SectionType.POSITIONING,
+                      priority=1, content=f"a{i}", status=EntryStatus.APPROVED)
+        store.upsert_canon_entry(a)
+        store.add_entity_mention(hub, str(a.id), str(canon_domain.id))
+        canon_entries.append(a)
 
     engine = get_graph_engine()
     engine.rebuild()
     # the entity now has 30 mentions — well over the hub threshold
-    found = engine.expand([str(assertions[0].id)], hops=2)
+    found = engine.expand([str(canon_entries[0].id)], hops=2)
     assert found == [] or len(found) < engine_hub_count - 1, \
         "expansion must not fan out through a high-degree hub"
 
@@ -420,7 +420,7 @@ def test_migrated_schema_matches_orm(tmp_path):
     c.executescript('''
     CREATE TABLE message_houses (id VARCHAR(36) PRIMARY KEY, workspace_id VARCHAR(36) DEFAULT 'default',
       name VARCHAR(255), source VARCHAR(50) DEFAULT 'manual', source_id VARCHAR(255),
-      document_type VARCHAR(30) DEFAULT 'message_house', summary TEXT, audience TEXT,
+      document_type VARCHAR(30) DEFAULT 'message_house', summary TEXT, persona TEXT,
       brand_personality TEXT, positioning TEXT, tagline VARCHAR(500), differentiation TEXT,
       status VARCHAR(20) DEFAULT 'active', last_synced DATETIME);
     CREATE TABLE key_messages (id VARCHAR(36) PRIMARY KEY, message_house_id VARCHAR(36),
@@ -434,7 +434,7 @@ def test_migrated_schema_matches_orm(tmp_path):
     INSERT INTO key_messages (id,message_house_id,section_type,priority,content)
       VALUES ('m1','h1','headline',1,'legacy claim');
     INSERT INTO personas (id,message_house_id,name,description)
-      VALUES ('p1','h1','Legacy Audience','desc');
+      VALUES ('p1','h1','Legacy Persona','desc');
     ''')
     c.commit(); c.close()
 
@@ -468,14 +468,14 @@ def test_migrated_enum_values_are_valid(tmp_path):
     """
     import sqlite3
     from src.store import Store
-    from src.models import AssertionType, SchemaType
+    from src.models import SectionType, GroundingType
 
     db = tmp_path / "legacy_values.db"
     c = sqlite3.connect(str(db))
     c.executescript('''
     CREATE TABLE message_houses (id VARCHAR(36) PRIMARY KEY, workspace_id VARCHAR(36) DEFAULT 'default',
       name VARCHAR(255), source VARCHAR(50) DEFAULT 'manual', source_id VARCHAR(255),
-      document_type VARCHAR(30), summary TEXT, audience TEXT, brand_personality TEXT,
+      document_type VARCHAR(30), summary TEXT, persona TEXT, brand_personality TEXT,
       positioning TEXT, tagline VARCHAR(500), differentiation TEXT,
       status VARCHAR(20) DEFAULT 'active', last_synced DATETIME);
     CREATE TABLE key_messages (id VARCHAR(36) PRIMARY KEY, message_house_id VARCHAR(36),
@@ -483,90 +483,90 @@ def test_migrated_enum_values_are_valid(tmp_path):
       personas TEXT, source_chunk_id VARCHAR(64));
     ''')
     # every retired vocabulary value we ever wrote to disk
-    spec_ids = [str(uuid4()) for _ in range(5)]
+    canon_domain_ids = [str(uuid4()) for _ in range(5)]
     for i, dt in enumerate(["message_house", "brand_guide", "competitive_brief",
                             "corp_narrative", "persona_library"]):
         c.execute("INSERT INTO message_houses (id,name,document_type) VALUES (?,?,?)",
-                  (spec_ids[i], f"Spec {i}", dt))
+                  (canon_domain_ids[i], f"CanonDomain {i}", dt))
     for i, st in enumerate(["headline", "subhead", "benefit", "use_case", "proof_point",
                             "objection", "social_proof", "positioning", "know_your_market",
                             "brand_voice", "style_rule", "word_list", "competitor_strength",
                             "competitor_weakness", "competitive_response", "narrative_pillar",
                             "company_value", "founding_story", "persona_detail"]):
         c.execute("INSERT INTO key_messages (id,message_house_id,section_type,priority,content)"
-                  " VALUES (?,?,?,?,?)", (str(uuid4()), spec_ids[0], st, 1, f"claim {i}"))
+                  " VALUES (?,?,?,?,?)", (str(uuid4()), canon_domain_ids[0], st, 1, f"claim {i}"))
     c.commit(); c.close()
 
     store = Store(str(db))
     store.init()
 
     con = sqlite3.connect(str(db))
-    bad_schema = [r[0] for r in con.execute("SELECT DISTINCT schema_type FROM specs")
-                  if r[0] not in {t.value for t in SchemaType}]
-    bad_assert = [r[0] for r in con.execute("SELECT DISTINCT assertion_type FROM assertions")
-                  if r[0] not in {t.value for t in AssertionType}]
-    assert not bad_schema, f"invalid schema_type values survived migration: {bad_schema}"
-    assert not bad_assert, f"invalid assertion_type values survived migration: {bad_assert}"
+    bad_schema = [r[0] for r in con.execute("SELECT DISTINCT grounding_type FROM canon_domains")
+                  if r[0] not in {t.value for t in GroundingType}]
+    bad_assert = [r[0] for r in con.execute("SELECT DISTINCT section_type FROM canon_entries")
+                  if r[0] not in {t.value for t in SectionType}]
+    assert not bad_schema, f"invalid grounding_type values survived migration: {bad_schema}"
+    assert not bad_assert, f"invalid section_type values survived migration: {bad_assert}"
 
     # and the rows must actually load through Pydantic, which is where
     # production failed
-    specs = store.list_specs()
-    assert len(specs) == 5
-    assert len(store.get_assertions(specs[0].id, include_unapproved=True)) == 19
+    canon_domains = store.list_canon_domains()
+    assert len(canon_domains) == 5
+    assert len(store.get_canon_entries(canon_domains[0].id, include_unapproved=True)) == 19
 
 
 def test_detected_document_type_is_always_a_live_schema_type():
-    """The ingestion sniffer must only ever return a current SchemaType.
+    """The ingestion sniffer must only ever return a current GroundingType.
 
-    Regression: the persona->audience rename rewrote its 'persona_library'
+    Regression: the persona->persona rename rewrote its 'persona_library'
     return value to 'audience_library', which is not a member of the enum. The
     Drive sync then failed to commit every file it classified that way, and the
-    failed re-ingest removed a spec that had previously synced fine.
+    failed re-ingest removed a canon_domain that had previously synced fine.
     """
     from src.pipeline.structure import detect_document_type
-    from src.models import SchemaType
+    from src.models import GroundingType
 
-    valid = {t.value for t in SchemaType}
+    valid = {t.value for t in GroundingType}
     probes = [
         ("outage timeline and root cause", "incident-2026-07.docx"),
         ("encryption at rest, SOC 2 controls", "security-policy.docx"),
         ("service owner and on-call rotation", "service-catalog.docx"),
         ("key message and positioning statement", "HR Messaging House.docx"),
-        ("buyer persona and pain point", "audience-library.docx"),
+        ("buyer persona and pain point", "persona-library.docx"),
         ("competitor battle card", "competitive-brief.docx"),
         ("brand voice and word list", "brand-style-guide.docx"),
         ("", ""),
     ]
     for text, filename in probes:
         got = detect_document_type(text, filename)
-        assert got in valid, f"{filename!r} -> {got!r}, not a SchemaType"
+        assert got in valid, f"{filename!r} -> {got!r}, not a GroundingType"
 
 
 # ── Schema-type integrity across tables ──────────────────────────────────
 
 def test_department_schema_types_are_all_valid(store):
-    """Regression: departments kept legacy primary_schema_type values after the
+    """Regression: departments kept legacy primary_grounding_type values after the
     v2 migration. _commit_structured_spec overrides a detected engineering_spec
     with the department default, so a stale value there raised ValueError mid
     ingest and the sync logged-and-continued — documents vanished silently."""
-    from src.models import SchemaType
-    live = {m.value for m in SchemaType}
+    from src.models import GroundingType
+    live = {m.value for m in GroundingType}
     for dept in store.list_departments():
-        assert dept["primary_schema_type"] in live, \
-            f"department {dept['name']!r} has retired schema type {dept['primary_schema_type']!r}"
+        assert dept["primary_grounding_type"] in live, \
+            f"department {dept['name']!r} has retired schema type {dept['primary_grounding_type']!r}"
 
 
 def test_legacy_department_schema_type_is_migrated(tmp_path):
     """A database carrying the PMM-era department default must migrate forward."""
     import sqlite3
     from src.store import Store
-    from src.models import SchemaType
+    from src.models import GroundingType
 
     db = tmp_path / "legacy_dept.db"
     Store(str(db)).init()
     c = sqlite3.connect(db)
     cols = {r[1] for r in c.execute("PRAGMA table_info(departments)")}
-    col = "primary_schema_type" if "primary_schema_type" in cols else "primary_grounding_type"
+    col = "primary_grounding_type" if "primary_grounding_type" in cols else "primary_grounding_type"
     c.execute(f"UPDATE departments SET {col} = 'message_house' WHERE name = 'General'")
     c.commit(); c.close()
 
@@ -575,29 +575,29 @@ def test_legacy_department_schema_type_is_migrated(tmp_path):
     c = sqlite3.connect(db)
     got = c.execute(f"SELECT {col} FROM departments WHERE name='General'").fetchone()[0]
     c.close()
-    assert got in {m.value for m in SchemaType}
-    assert got == SchemaType.ENGINEERING_SPEC.value
+    assert got in {m.value for m in GroundingType}
+    assert got == GroundingType.ENGINEERING_SPEC.value
 
 
 # ── Referential integrity of the graph tables ────────────────────────────
 
 def test_deleting_a_spec_removes_its_edges_and_mentions(store, two_specs):
     """edges is polymorphic — src/dst are (type, id) pairs, so SQLite has no FK
-    to cascade. Without an explicit purge, deleting a spec left dangling rows
+    to cascade. Without an explicit purge, deleting a canon_domain left dangling rows
     that the graph silently skipped: present in the database, absent from every
     traversal."""
     api, slo, a1, a2 = two_specs
     eid = store.resolve_entity("checkout-endpoint")
     store.add_entity_mention(eid, str(a1.id), str(api.id))
     store.add_entity_mention(eid, str(a2.id), str(slo.id))
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
     assert len(store.list_edges()) == 1
     assert len(store.list_entity_mentions()) == 2
 
-    store.delete_spec(api.id)
+    store.delete_canon_domain(api.id)
 
-    assert store.list_edges() == [], "edge referencing a deleted assertion survived"
-    assert all(m["assertion_id"] != str(a1.id) for m in store.list_entity_mentions())
+    assert store.list_edges() == [], "edge referencing a deleted canon_entry survived"
+    assert all(m["canon_entry_id"] != str(a1.id) for m in store.list_entity_mentions())
 
 
 def test_purge_sweeps_pre_existing_orphans(store, two_specs):
@@ -606,12 +606,12 @@ def test_purge_sweeps_pre_existing_orphans(store, two_specs):
     api, slo, a1, a2 = two_specs
     eid = store.resolve_entity("checkout-endpoint")
     store.add_entity_mention(eid, str(a1.id), str(api.id))
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
 
-    # delete the assertion behind the store's back to simulate the old behaviour
+    # delete the canon_entry behind the store's back to simulate the old behaviour
     with store.session() as s:
-        from src.store import AssertionModel
-        s.query(AssertionModel).filter(AssertionModel.id == str(a1.id)).delete()
+        from src.store import CanonEntryModel
+        s.query(CanonEntryModel).filter(CanonEntryModel.id == str(a1.id)).delete()
         s.commit()
 
     result = store.purge_orphaned_graph_refs()
@@ -622,6 +622,6 @@ def test_purge_sweeps_pre_existing_orphans(store, two_specs):
 
 def test_purge_is_a_noop_on_a_healthy_graph(store, two_specs):
     _, _, a1, a2 = two_specs
-    store.add_edge("assertion", str(a1.id), "assertion", str(a2.id), "DEPENDS_ON")
+    store.add_edge("canon_entry", str(a1.id), "canon_entry", str(a2.id), "DEPENDS_ON")
     assert store.purge_orphaned_graph_refs() == {"mentions_removed": 0, "edges_removed": 0}
     assert len(store.list_edges()) == 1

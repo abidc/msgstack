@@ -30,12 +30,12 @@ log = logging.getLogger(__name__)
 
 from src.auth import get_auth_context, require_read, require_write, generate_api_key, AuthContext
 from src.models import (
-    ArtifactStatus, Channel, SchemaType, SpecStatus, AssertionStatus,
-    Assertion, Spec, Audience, AssertionType, ContentTier,
+    ArtifactStatus, Channel, GroundingType, DomainStatus, EntryStatus,
+    CanonEntry, CanonDomain, Persona, SectionType, ContentTier,
 )
 from src.store import init_store, get_store
 from src.pipeline.extract import ExtractionError, extract_text, chunk_text, save_upload
-from src.pipeline.structure import SpecStructurer, StructuredSpec
+from src.pipeline.structure import HouseStructurer, StructuredHouse
 from src.pipeline.skills import SkillManager
 from src.rate_limit import extract_limiter, generate_limiter
 
@@ -64,7 +64,7 @@ skills = SkillManager(skills_dir=str(DATA_DIR / "skills"))
 # Initialize sync engine eagerly so it's available regardless of lifespan routing
 from src.sources.sync import init_sync_engine as _init_sync
 _sync_engine = _init_sync(store)
-structurer = SpecStructurer()
+structurer = HouseStructurer()
 
 import openai as _oai_mod
 _oai_api_key = os.environ.get("OPENAI_API_KEY")
@@ -82,7 +82,7 @@ def _get_oai_client():
 
 @app.on_event("startup")
 async def startup_event():
-    """Ensure vector index exists on startup, seed if no specs, start sync."""
+    """Ensure vector index exists on startup, seed if no canon_domains, start sync."""
     from src.grounding.search import GroundingEngine
     try:
         engine = GroundingEngine(
@@ -172,46 +172,46 @@ async def log_requests(request: Request, call_next):
 
 # --- Helpers ---
 
-def _spec_response(spec: Spec) -> dict:
-    messages = store.get_key_messages(spec.id)
-    audiences = store.get_audiences(spec.id)
-    completeness = _completeness_score_fast(spec, len(messages), len(audiences))
+def _spec_response(canon_domain: CanonDomain) -> dict:
+    messages = store.get_key_messages(canon_domain.id)
+    personas = store.get_personas(canon_domain.id)
+    completeness = _completeness_score_fast(canon_domain, len(messages), len(personas))
     entries_list = [
         {
             "id": str(m.id),
-            "assertion_type": m.assertion_type.value if hasattr(m.assertion_type, "value") else m.assertion_type,
+            "section_type": m.section_type.value if hasattr(m.section_type, "value") else m.section_type,
             "priority": m.priority,
             "content": m.content,
             "variants": m.variants,
-            "audiences": m.audiences,
+            "personas": m.personas,
             "channels": [c.value if hasattr(c, "value") else c for c in m.channels],
         }
         for m in messages
     ]
     return {
-        "id": str(spec.id),
+        "id": str(canon_domain.id),
         "completeness_score": completeness,
-        "name": spec.name,
-        "source": spec.source,
-        "source_id": spec.source_id,
-        "status": spec.status,
-        "summary": spec.summary,
-        "audience": spec.audience,
-        "brand_personality": spec.brand_personality,
-        "positioning": spec.positioning,
-        "tagline": spec.tagline,
-        "differentiation": spec.differentiation,
-        "last_synced": spec.last_synced.isoformat() if spec.last_synced else None,
-        "schema_type": str(spec.schema_type),
-        "assertions": entries_list,
-        "audiences": [
+        "name": canon_domain.name,
+        "source": canon_domain.source,
+        "source_id": canon_domain.source_id,
+        "status": canon_domain.status,
+        "summary": canon_domain.summary,
+        "audience": canon_domain.audience,
+        "brand_personality": canon_domain.brand_personality,
+        "positioning": canon_domain.positioning,
+        "tagline": canon_domain.tagline,
+        "differentiation": canon_domain.differentiation,
+        "last_synced": canon_domain.last_synced.isoformat() if canon_domain.last_synced else None,
+        "grounding_type": str(canon_domain.grounding_type),
+        "canon_entries": entries_list,
+        "personas": [
             {
                 "id": str(p.id),
                 "name": p.name,
                 "description": p.description,
-                "qa_pairs": p.qa_pairs,
+                "objections": p.objections,
             }
-            for p in audiences
+            for p in personas
         ],
     }
 
@@ -219,13 +219,13 @@ def _spec_response(spec: Spec) -> dict:
 # --- Specs ---
 
 @app.get("/api/canon-domains")
-@app.get("/api/specs")
-def list_specs(query: Optional[str] = None, auth: AuthContext = Depends(get_auth_context)):
+@app.get("/api/canon_domains")
+def list_canon_domains(query: Optional[str] = None, auth: AuthContext = Depends(get_auth_context)):
     workspace_filter = auth.workspace_id if settings.auth_enabled else None
-    rows = store.list_specs_with_counts(workspace_id=workspace_filter)
+    rows = store.list_canon_domains_with_counts(workspace_id=workspace_filter)
     result = []
     for row in rows:
-        h = row["spec"]
+        h = row["canon_domain"]
         if not auth.has_department_access(h.department):
             continue
         summary = h.summary or ""
@@ -239,7 +239,7 @@ def list_specs(query: Optional[str] = None, auth: AuthContext = Depends(get_auth
             "source": h.source,
             "status": h.status,
             "department": h.department,
-            "schema_type": str(h.schema_type),
+            "grounding_type": str(h.grounding_type),
             "summary": summary[:150] + ("..." if len(summary) > 150 else ""),
             "audience_count": pc,
             "message_count": mc,
@@ -250,15 +250,15 @@ def list_specs(query: Optional[str] = None, auth: AuthContext = Depends(get_auth
     return result
 
 
-def _completeness_score_fast(spec, message_count, audience_count) -> int:
+def _completeness_score_fast(canon_domain, message_count, audience_count) -> int:
     score = 0
-    if spec.name: score += 10
-    if spec.summary: score += 10
-    if spec.audience: score += 10
-    if spec.brand_personality: score += 10
-    if spec.positioning: score += 15
-    if spec.tagline: score += 10
-    if spec.differentiation: score += 10
+    if canon_domain.name: score += 10
+    if canon_domain.summary: score += 10
+    if canon_domain.audience: score += 10
+    if canon_domain.brand_personality: score += 10
+    if canon_domain.positioning: score += 15
+    if canon_domain.tagline: score += 10
+    if canon_domain.differentiation: score += 10
     if message_count >= 3: score += 10
     if message_count >= 6: score += 10
     if audience_count >= 1: score += 5
@@ -266,18 +266,18 @@ def _completeness_score_fast(spec, message_count, audience_count) -> int:
 
 
 @app.get("/api/canon-domains/{domain_id}")
-@app.get("/api/specs/{spec_id}")
-def get_spec(spec_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_read)):
-    actual_id = domain_id or spec_id
+@app.get("/api/canon_domains/{canon_domain_id}")
+def get_canon_domain(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_read)):
+    actual_id = domain_id or canon_domain_id
     try:
-        spec = store.get_spec(UUID(actual_id))
+        canon_domain = store.get_canon_domain(UUID(actual_id))
     except Exception:
         raise HTTPException(404, "Invalid ID")
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    if not auth.has_department_access(spec.department):
-        raise HTTPException(403, f"You do not have permission to access the '{spec.department}' department.")
-    return _spec_response(spec)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    if not auth.has_department_access(canon_domain.department):
+        raise HTTPException(403, f"You do not have permission to access the '{canon_domain.department}' department.")
+    return _spec_response(canon_domain)
 
 
 # --- Pillars ---
@@ -286,49 +286,49 @@ from src.models import PillarCreate, PillarUpdate
 
 
 @app.get("/api/canon-domains/{domain_id}/pillars")
-@app.get("/api/specs/{spec_id}/pillars")
-def list_pillars(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    actual_id = domain_id or spec_id
+@app.get("/api/canon_domains/{canon_domain_id}/pillars")
+def list_pillars(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(404, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
     pillars = store.list_pillars(spec_uuid)
     return [p.model_dump() for p in pillars]
 
 
 @app.post("/api/canon-domains/{domain_id}/pillars", status_code=201)
-@app.post("/api/specs/{spec_id}/pillars", status_code=201)
-def create_pillar(data: PillarCreate, spec_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    actual_id = domain_id or spec_id
+@app.post("/api/canon_domains/{canon_domain_id}/pillars", status_code=201)
+def create_pillar(data: PillarCreate, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(404, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec not found")
-    if not auth.has_department_access(spec.department):
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain not found")
+    if not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     pillar_id = store.create_pillar(spec_uuid, data.name, data.description, data.display_order)
     return {"id": pillar_id, "name": data.name, "description": data.description, "display_order": data.display_order}
 
 
 @app.patch("/api/canon-domains/{domain_id}/pillars/{pillar_id}")
-@app.patch("/api/specs/{spec_id}/pillars/{pillar_id}")
-def update_pillar(pillar_id: int, data: PillarUpdate, spec_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    actual_id = domain_id or spec_id
+@app.patch("/api/canon_domains/{canon_domain_id}/pillars/{pillar_id}")
+def update_pillar(pillar_id: int, data: PillarUpdate, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(404, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec not found")
-    if not auth.has_department_access(spec.department):
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain not found")
+    if not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     # Build update dict
     update_dict = {}
@@ -352,17 +352,17 @@ def update_pillar(pillar_id: int, data: PillarUpdate, spec_id: Optional[str] = N
 
 
 @app.delete("/api/canon-domains/{domain_id}/pillars/{pillar_id}", status_code=204)
-@app.delete("/api/specs/{spec_id}/pillars/{pillar_id}", status_code=204)
-def delete_pillar(pillar_id: int, spec_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    actual_id = domain_id or spec_id
+@app.delete("/api/canon_domains/{canon_domain_id}/pillars/{pillar_id}", status_code=204)
+def delete_pillar(pillar_id: int, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(404, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec not found")
-    if not auth.has_department_access(spec.department):
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain not found")
+    if not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     success = store.delete_pillar(pillar_id)
     if not success:
@@ -383,8 +383,8 @@ def assign_chunk_pillar(chunk_id: str, data: ChunkPillarAssign, auth: AuthContex
     msg = _find_message(chunk_id)
     if not msg:
         raise HTTPException(404, "Chunk not found")
-    spec = store.get_spec(msg.spec_id)
-    if not spec or not auth.has_department_access(spec.department):
+    canon_domain = store.get_canon_domain(msg.canon_domain_id)
+    if not canon_domain or not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     success = store.assign_chunk_to_pillar(chunk_uuid, data.pillar_id)
     if not success:
@@ -392,7 +392,7 @@ def assign_chunk_pillar(chunk_id: str, data: ChunkPillarAssign, auth: AuthContex
     return {"assigned": data.pillar_id}
 
 
-class SpecCreate(BaseModel):
+class HouseCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     name: str
     summary: str = ""
@@ -404,21 +404,21 @@ class SpecCreate(BaseModel):
     source: str = "manual"
     status: str = "active"
     department: str = "General"
-    schema_type: SchemaType = SchemaType.ENGINEERING_SPEC
+    grounding_type: GroundingType = GroundingType.MESSAGE_HOUSE
 
 
 @app.post("/api/canon-domains")
-@app.post("/api/specs")
-def create_spec(data: SpecCreate, auth: AuthContext = Depends(require_write)):
+@app.post("/api/canon_domains")
+def create_house(data: HouseCreate, auth: AuthContext = Depends(require_write)):
     if not auth.has_department_access(data.department):
         raise HTTPException(403, f"You do not have permission to write to the '{data.department}' department.")
     
     dept = store.get_department(data.department)
-    g_type = data.schema_type
-    if g_type == SchemaType.ENGINEERING_SPEC and dept:
-        g_type = SchemaType(dept["primary_schema_type"])
+    g_type = data.grounding_type
+    if g_type == GroundingType.MESSAGE_HOUSE and dept:
+        g_type = GroundingType(dept["primary_grounding_type"])
 
-    spec = Spec(
+    canon_domain = CanonDomain(
         name=data.name,
         source=data.source,
         summary=data.summary,
@@ -427,16 +427,16 @@ def create_spec(data: SpecCreate, auth: AuthContext = Depends(require_write)):
         positioning=data.positioning,
         tagline=data.tagline,
         differentiation=data.differentiation,
-        status=SpecStatus(data.status),
-        schema_type=g_type,
+        status=DomainStatus(data.status),
+        grounding_type=g_type,
         department=data.department,
         last_synced=_now(),
     )
-    store.upsert_spec(spec)
-    return {"id": str(spec.id), "name": spec.name}
+    store.upsert_canon_domain(canon_domain)
+    return {"id": str(canon_domain.id), "name": canon_domain.name}
 
 
-class SpecUpdate(BaseModel):
+class HouseUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     name: Optional[str] = None
     summary: Optional[str] = None
@@ -447,7 +447,7 @@ class SpecUpdate(BaseModel):
     differentiation: Optional[str] = None
     status: Optional[str] = None
     department: Optional[str] = None
-    schema_type: Optional[SchemaType] = Field(default=None, validation_alias=AliasChoices('schema_type'), serialization_alias='schema_type')
+    grounding_type: Optional[GroundingType] = Field(default=None, validation_alias=AliasChoices('grounding_type'), serialization_alias='grounding_type')
 
 
     @model_validator(mode="before")
@@ -455,47 +455,47 @@ class SpecUpdate(BaseModel):
     def check_conflicting_types(cls, data):
         if isinstance(data, dict):
             dt = data.get("document_type")
-            gt = data.get("schema_type")
+            gt = data.get("grounding_type")
             if dt is not None and gt is not None:
                 if dt != gt:
-                    raise ValueError("Conflicting values provided for 'schema_type' and 'document_type'")
+                    raise ValueError("Conflicting values provided for 'grounding_type' and 'document_type'")
         return data
 
 
 @app.patch("/api/canon-domains/{domain_id}")
-@app.patch("/api/specs/{spec_id}")
-def update_spec(data: SpecUpdate, spec_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    actual_id = domain_id or spec_id
-    spec = store.get_spec(UUID(actual_id))
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    if not auth.has_department_access(spec.department):
-        raise HTTPException(403, f"You do not have permission to write to the '{spec.department}' department.")
+@app.patch("/api/canon_domains/{canon_domain_id}")
+def update_house(data: HouseUpdate, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    actual_id = domain_id or canon_domain_id
+    canon_domain = store.get_canon_domain(UUID(actual_id))
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    if not auth.has_department_access(canon_domain.department):
+        raise HTTPException(403, f"You do not have permission to write to the '{canon_domain.department}' department.")
     if data.department is not None and not auth.has_department_access(data.department):
         raise HTTPException(403, f"You do not have permission to write to the target '{data.department}' department.")
 
     for k, v in data.model_dump(exclude_none=True).items():
-        if k in ("document_type", "schema_type"):
-            setattr(spec, "schema_type", SchemaType(v))
+        if k in ("document_type", "grounding_type"):
+            setattr(canon_domain, "grounding_type", GroundingType(v))
         else:
-            setattr(spec, k, v)
-    store.upsert_spec(spec)
+            setattr(canon_domain, k, v)
+    store.upsert_canon_domain(canon_domain)
     return {"ok": True, "updated_id": actual_id}
 
 
 @app.delete("/api/canon-domains/{domain_id}")
-@app.delete("/api/specs/{spec_id}")
-def delete_spec(spec_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    actual_id = domain_id or spec_id
+@app.delete("/api/canon_domains/{canon_domain_id}")
+def delete_canon_domain(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    actual_id = domain_id or canon_domain_id
     try:
         uid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    spec = store.get_spec(uid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    if not auth.has_department_access(spec.department):
-        raise HTTPException(403, f"You do not have permission to write to the '{spec.department}' department.")
+    canon_domain = store.get_canon_domain(uid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    if not auth.has_department_access(canon_domain.department):
+        raise HTTPException(403, f"You do not have permission to write to the '{canon_domain.department}' department.")
     # Delete vectors BEFORE DB deletion so key message IDs are still available
     try:
         from src.grounding.search import GroundingEngine
@@ -504,10 +504,10 @@ def delete_spec(spec_id: Optional[str] = None, domain_id: Optional[str] = None, 
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
             namespace="default",
         )
-        ge.delete_spec_vectors(uid)
+        ge.delete_house_vectors(uid)
     except Exception as exc:
         log.warning("Vector index cleanup on domain delete failed: %s", exc)
-    store.delete_spec(uid)
+    store.delete_canon_domain(uid)
     # Rebuild graph so deleted domain is removed immediately
     try:
         from src.grounding.graph import get_graph_engine
@@ -521,12 +521,12 @@ def delete_spec(spec_id: Optional[str] = None, domain_id: Optional[str] = None, 
 
 class EntryCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    spec_id: str = Field(validation_alias=AliasChoices('spec_id', 'canon_domain_id'), serialization_alias='spec_id')
-    assertion_type: str
+    canon_domain_id: str = Field(validation_alias=AliasChoices('canon_domain_id', 'canon_domain_id'), serialization_alias='canon_domain_id')
+    section_type: str
     priority: int = 3
     content: str
     variants: dict = {}
-    audiences: list = []
+    personas: list = []
     channels: list = ["all"]
     content_tier: str | None = None
 
@@ -537,26 +537,26 @@ class EntryCreate(BaseModel):
 @app.post("/api/messages")
 def create_message(data: EntryCreate, auth: AuthContext = Depends(require_write)):
     try:
-        domain_id = UUID(data.spec_id)
+        domain_id = UUID(data.canon_domain_id)
     except Exception:
-        raise HTTPException(400, "Invalid spec ID")
-    spec = store.get_spec(domain_id)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    if not auth.has_department_access(spec.department):
+        raise HTTPException(400, "Invalid canon_domain ID")
+    canon_domain = store.get_canon_domain(domain_id)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    if not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
         tier = None
         if data.content_tier:
             from src.models import ContentTier
             tier = ContentTier(data.content_tier)
-        msg = Assertion(
-            spec_id=domain_id,
-            assertion_type=AssertionType(data.assertion_type),
+        msg = CanonEntry(
+            canon_domain_id=domain_id,
+            section_type=SectionType(data.section_type),
             priority=data.priority,
             content=data.content,
             variants=data.variants,
-            audiences=data.audiences,
+            personas=data.personas,
             channels=[Channel(c) for c in data.channels],
             content_tier=tier,
         )
@@ -567,11 +567,11 @@ def create_message(data: EntryCreate, auth: AuthContext = Depends(require_write)
 
 
 class EntryUpdate(BaseModel):
-    assertion_type: Optional[str] = None
+    section_type: Optional[str] = None
     priority: Optional[int] = None
     content: Optional[str] = None
     variants: Optional[dict] = None
-    audiences: Optional[list] = None
+    personas: Optional[list] = None
     channels: Optional[list] = None
 
 MessageUpdate = EntryUpdate
@@ -583,15 +583,15 @@ def update_message(data: EntryUpdate, msg_id: Optional[str] = None, entry_id: Op
     actual_id = entry_id or msg_id
     msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Spec entry not found")
-    spec = store.get_spec(msg.spec_id)
-    if not spec or not auth.has_department_access(spec.department):
+        raise HTTPException(404, "CanonDomain entry not found")
+    canon_domain = store.get_canon_domain(msg.canon_domain_id)
+    if not canon_domain or not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
-    if msg.status == AssertionStatus.LOCKED:
-        raise HTTPException(409, "Spec entry is locked and cannot be edited. Unlock it first via the status endpoint.")
+    if msg.status == EntryStatus.LOCKED:
+        raise HTTPException(409, "CanonDomain entry is locked and cannot be edited. Unlock it first via the status endpoint.")
     for k, v in data.model_dump(exclude_none=True).items():
-        if k == "assertion_type":
-            msg.assertion_type = AssertionType(v)
+        if k == "section_type":
+            msg.section_type = SectionType(v)
         elif k == "channels":
             msg.channels = [Channel(c) for c in v]
         else:
@@ -606,18 +606,18 @@ def delete_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None,
     actual_id = entry_id or msg_id
     msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Spec entry not found")
-    spec = store.get_spec(msg.spec_id)
-    if not spec or not auth.has_department_access(spec.department):
+        raise HTTPException(404, "CanonDomain entry not found")
+    canon_domain = store.get_canon_domain(msg.canon_domain_id)
+    if not canon_domain or not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
-    if msg.status == AssertionStatus.LOCKED:
-        raise HTTPException(409, "Spec entry is locked and cannot be deleted. Unlock it first via the status endpoint.")
+    if msg.status == EntryStatus.LOCKED:
+        raise HTTPException(409, "CanonDomain entry is locked and cannot be deleted. Unlock it first via the status endpoint.")
     if not store.delete_key_message(UUID(actual_id)):
-        raise HTTPException(404, "Spec entry not found")
+        raise HTTPException(404, "CanonDomain entry not found")
     return {"ok": True, "deleted_id": actual_id}
 
 
-# --- Spec Entry Status ---
+# --- CanonDomain Entry Status ---
 
 class EntryStatusUpdate(BaseModel):
     status: str
@@ -628,29 +628,29 @@ class EntryStatusUpdate(BaseModel):
 @app.patch("/api/entries/{entry_id}/status")
 @app.patch("/api/messages/{msg_id}/status")
 def update_message_status(data: EntryStatusUpdate, msg_id: Optional[str] = None, entry_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    """Update a assertion's approval status."""
+    """Update a canon_entry's approval status."""
     actual_id = entry_id or msg_id
     msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Spec entry not found")
-    spec = store.get_spec(msg.spec_id)
-    if not spec or not auth.has_department_access(spec.department):
+        raise HTTPException(404, "CanonDomain entry not found")
+    canon_domain = store.get_canon_domain(msg.canon_domain_id)
+    if not canon_domain or not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
-        new_status = AssertionStatus(data.status)
+        new_status = EntryStatus(data.status)
     except ValueError:
         raise HTTPException(400, f"Invalid status: {data.status}")
     # Promotion gate: content_tier required before approving or locking
-    if new_status in (AssertionStatus.APPROVED, AssertionStatus.LOCKED) and not msg.content_tier:
+    if new_status in (EntryStatus.APPROVED, EntryStatus.LOCKED) and not msg.content_tier:
         raise HTTPException(400, "Content tier must be assigned before entry can be approved or locked.")
     msg.status = new_status
-    if msg.status == AssertionStatus.APPROVED and data.approved_by:
+    if msg.status == EntryStatus.APPROVED and data.approved_by:
         msg.approved_by = data.approved_by
         msg.approved_at = _now()
     store.upsert_key_message(msg)
     # Log the review action
     store.log_review_action(
-        spec_id=msg.spec_id,
+        canon_domain_id=msg.canon_domain_id,
         action=f"message_{data.status}",
         performed_by=data.approved_by or "system",
         message_id=UUID(actual_id),
@@ -666,11 +666,11 @@ class TierUpdate(BaseModel):
 @app.patch("/api/entries/{entry_id}/tier")
 @app.patch("/api/messages/{msg_id}/tier")
 def update_entry_tier(data: TierUpdate, entry_id: Optional[str] = None, msg_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    """Set or clear the content tier on a assertion."""
+    """Set or clear the content tier on a canon_entry."""
     actual_id = entry_id or msg_id
     result = store.update_entry_tier(actual_id, data.content_tier)
     if not result:
-        raise HTTPException(404, "Spec entry not found")
+        raise HTTPException(404, "CanonDomain entry not found")
     return {"ok": True, "id": actual_id, "content_tier": result["content_tier"]}
 
 
@@ -679,24 +679,24 @@ class DriUpdate(BaseModel):
 
 
 @app.patch("/api/canon-domains/{domain_id}/dri")
-@app.patch("/api/specs/{spec_id}/dri")
-def update_domain_dri(data: DriUpdate, domain_id: Optional[str] = None, spec_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    """Set the DRI on a spec. Logs a dri_transfer event to the review trail."""
-    actual_id = domain_id or spec_id
+@app.patch("/api/canon_domains/{canon_domain_id}/dri")
+def update_domain_dri(data: DriUpdate, domain_id: Optional[str] = None, canon_domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+    """Set the DRI on a canon_domain. Logs a dri_transfer event to the review trail."""
+    actual_id = domain_id or canon_domain_id
     result = store.set_domain_dri(actual_id, data.dri, performed_by=auth.name)
     if not result:
-        raise HTTPException(404, "Spec domain not found")
+        raise HTTPException(404, "CanonDomain domain not found")
     return {"ok": True, "id": actual_id, "dri": result["dri"]}
 
 
 @app.patch("/api/entries/{entry_id}/dri")
 @app.patch("/api/messages/{msg_id}/dri")
 def update_entry_dri(data: DriUpdate, entry_id: Optional[str] = None, msg_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
-    """Set the DRI on a assertion (overrides domain DRI). Logs a dri_transfer event."""
+    """Set the DRI on a canon_entry (overrides domain DRI). Logs a dri_transfer event."""
     actual_id = entry_id or msg_id
     result = store.set_entry_dri(actual_id, data.dri, performed_by=auth.name)
     if not result:
-        raise HTTPException(404, "Spec entry not found")
+        raise HTTPException(404, "CanonDomain entry not found")
     return {"ok": True, "id": actual_id, "dri": result["dri"]}
 
 
@@ -709,56 +709,56 @@ def get_dri_summary():
 @app.get("/api/entries/{entry_id}/effective-dri")
 @app.get("/api/messages/{msg_id}/effective-dri")
 def get_effective_dri_endpoint(entry_id: Optional[str] = None, msg_id: Optional[str] = None):
-    """Get the effective DRI for a assertion (entry-level if set, else domain-level)."""
+    """Get the effective DRI for a canon_entry (entry-level if set, else domain-level)."""
     actual_id = entry_id or msg_id
     dri = store.get_effective_dri(actual_id)
     return {"ok": True, "id": actual_id, "dri": dri}
 
 
-# --- Spec Review & Staleness ---
+# --- CanonDomain Review & Staleness ---
 
 @app.post("/api/canon-domains/{domain_id}/review")
-@app.post("/api/specs/{spec_id}/review")
-def mark_spec_reviewed(spec_id: Optional[str] = None, domain_id: Optional[str] = None, performed_by: Optional[str] = Query(None)):
-    """Mark a spec as reviewed (updates last_reviewed timestamp)."""
-    actual_id = domain_id or spec_id
+@app.post("/api/canon_domains/{canon_domain_id}/review")
+def mark_spec_reviewed(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, performed_by: Optional[str] = Query(None)):
+    """Mark a canon_domain as reviewed (updates last_reviewed timestamp)."""
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    store.update_spec_last_reviewed(spec_uuid)
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    store.update_house_last_reviewed(spec_uuid)
     store.log_review_action(
-        spec_id=spec_uuid,
+        canon_domain_id=spec_uuid,
         action="spec_reviewed",
         performed_by=performed_by or "system",
-        notes=f"Spec domain '{spec.name}' marked as reviewed.",
+        notes=f"CanonDomain domain '{canon_domain.name}' marked as reviewed.",
     )
     return {"ok": True, "last_reviewed": _now().isoformat()}
 
 
 @app.get("/api/canon-domains/{domain_id}/staleness")
-@app.get("/api/specs/{spec_id}/staleness")
-def check_spec_staleness(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
+@app.get("/api/canon_domains/{canon_domain_id}/staleness")
+def check_spec_staleness(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
     """Check if a domain is stale (>90 days since last review)."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    is_stale = spec.is_stale(days=90)
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    is_stale = canon_domain.is_stale(days=90)
     return {
         "domain_id": actual_id,
-        "spec_id": actual_id,
+        "canon_domain_id": actual_id,
         "is_stale": is_stale,
-        "last_reviewed": spec.last_reviewed.isoformat() if spec.last_reviewed else None,
+        "last_reviewed": canon_domain.last_reviewed.isoformat() if canon_domain.last_reviewed else None,
         "days_since_review": (
-            (datetime.now() - spec.last_reviewed).days if spec.last_reviewed else None
+            (datetime.now() - canon_domain.last_reviewed).days if canon_domain.last_reviewed else None
         ),
     }
 
@@ -772,7 +772,7 @@ class DomainAlignmentScoreRequest(BaseModel):
 def api_score_alignment(domain_id: UUID, req: DomainAlignmentScoreRequest):
     # Verify write scope
     store = get_store()
-    domain = store.get_spec(domain_id)
+    domain = store.get_canon_domain(domain_id)
     if not domain:
         raise HTTPException(404, f"Domain {domain_id} not found")
         
@@ -796,10 +796,10 @@ class AlignmentScoreRequest(BaseModel):
 
 
 @app.post("/api/canon-domains/{domain_id}/score")
-@app.post("/api/specs/{spec_id}/score")
-def score_alignment_endpoint(req: AlignmentScoreRequest, spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    """Score arbitrary content against the spec."""
-    actual_id = domain_id or spec_id
+@app.post("/api/canon_domains/{canon_domain_id}/score")
+def score_alignment_endpoint(req: AlignmentScoreRequest, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Score arbitrary content against the canon_domain."""
+    actual_id = domain_id or canon_domain_id
     from src.pipeline.alignment import AlignmentEngine
     try:
         spec_uuid = UUID(actual_id)
@@ -816,19 +816,19 @@ def score_alignment_endpoint(req: AlignmentScoreRequest, spec_id: Optional[str] 
 
 
 @app.get("/api/canon-domains/{domain_id}/review-trail")
-@app.get("/api/specs/{spec_id}/review-trail")
-def get_spec_review_trail(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
+@app.get("/api/canon_domains/{canon_domain_id}/review-trail")
+def get_spec_review_trail(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
     """Get the full review audit trail for a domain."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
     trail = store.get_review_trail(spec_uuid)
-    return {"domain_id": actual_id, "spec_id": actual_id, "trail": trail, "count": len(trail)}
+    return {"domain_id": actual_id, "canon_domain_id": actual_id, "trail": trail, "count": len(trail)}
 
 
 class MessageReorder(BaseModel):
@@ -836,14 +836,14 @@ class MessageReorder(BaseModel):
 
 
 @app.patch("/api/canon-domains/{domain_id}/entries/reorder")
-@app.patch("/api/specs/{spec_id}/messages/reorder")
-def reorder_messages(data: MessageReorder, spec_id: Optional[str] = None, domain_id: Optional[str] = None):
+@app.patch("/api/canon_domains/{canon_domain_id}/messages/reorder")
+def reorder_messages(data: MessageReorder, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
     """Update priority values so entries appear in the given order."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     count = 0
     for priority, msg_id in enumerate(data.ordered_ids, start=1):
         msg = _find_message(msg_id)
-        if msg and str(msg.spec_id) == actual_id:
+        if msg and str(msg.canon_domain_id) == actual_id:
             msg.priority = priority
             store.upsert_key_message(msg)
             count += 1
@@ -855,18 +855,18 @@ class BulkMessageImport(BaseModel):
 
 
 @app.post("/api/canon-domains/{domain_id}/entries/bulk-import")
-@app.post("/api/specs/{spec_id}/messages/bulk-import")
-def bulk_import_messages(data: BulkMessageImport, spec_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+@app.post("/api/canon_domains/{canon_domain_id}/messages/bulk-import")
+def bulk_import_messages(data: BulkMessageImport, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     """Import multiple entries at once."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    if not auth.has_department_access(spec.department):
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    if not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
 
     if not data.rows:
@@ -887,15 +887,15 @@ def bulk_import_messages(data: BulkMessageImport, spec_id: Optional[str] = None,
                 errors.append({"row": i, "error": "Invalid content: must be non-empty string"})
                 continue
 
-            assertion_type = row.get("assertion_type", "headline")
+            section_type = row.get("section_type", "headline")
             try:
-                st = AssertionType(assertion_type)
+                st = SectionType(section_type)
             except ValueError:
-                st = AssertionType.CAPABILITY
+                st = SectionType.CAPABILITY
 
-            msg = Assertion(
-                spec_id=spec_uuid,
-                assertion_type=st,
+            msg = CanonEntry(
+                canon_domain_id=spec_uuid,
+                section_type=st,
                 priority=row.get("priority", next_priority + i),
                 content=content.strip(),
             )
@@ -910,67 +910,67 @@ def bulk_import_messages(data: BulkMessageImport, spec_id: Optional[str] = None,
 # --- Personas ---
 
 class PersonaCreate(BaseModel):
-    spec_id: str
+    canon_domain_id: str
     name: str
     description: str = ""
-    qa_pairs: list = []
+    objections: list = []
 
 
-@app.post("/api/audiences")
+@app.post("/api/personas")
 def create_audience(data: PersonaCreate, auth: AuthContext = Depends(require_write)):
     try:
-        domain_id = UUID(data.spec_id)
+        domain_id = UUID(data.canon_domain_id)
     except Exception:
-        raise HTTPException(400, "Invalid spec ID")
-    spec = store.get_spec(domain_id)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    if not auth.has_department_access(spec.department):
+        raise HTTPException(400, "Invalid canon_domain ID")
+    canon_domain = store.get_canon_domain(domain_id)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    if not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
-    audience = Audience(
-        spec_id=domain_id,
+    persona = Persona(
+        canon_domain_id=domain_id,
         name=data.name,
         description=data.description,
-        qa_pairs=data.qa_pairs,
+        objections=data.objections,
     )
-    store.upsert_audience(audience)
-    return {"id": str(audience.id)}
+    store.upsert_persona(persona)
+    return {"id": str(persona.id)}
 
 
 class PersonaUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    qa_pairs: Optional[list] = None
+    objections: Optional[list] = None
 
 
-@app.patch("/api/audiences/{audience_id}")
-def update_audience(audience_id: str, data: PersonaUpdate, auth: AuthContext = Depends(require_write)):
-    audience = _find_audience(audience_id)
-    if not audience:
-        raise HTTPException(404, "Audience not found")
-    spec = store.get_spec(audience.spec_id)
-    if not spec or not auth.has_department_access(spec.department):
+@app.patch("/api/personas/{persona_id}")
+def update_audience(persona_id: str, data: PersonaUpdate, auth: AuthContext = Depends(require_write)):
+    persona = _find_audience(persona_id)
+    if not persona:
+        raise HTTPException(404, "Persona not found")
+    canon_domain = store.get_canon_domain(persona.canon_domain_id)
+    if not canon_domain or not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     for k, v in data.model_dump(exclude_none=True).items():
-        setattr(audience, k, v)
-    store.upsert_audience(audience)
-    return {"ok": True, "updated_id": audience_id}
+        setattr(persona, k, v)
+    store.upsert_persona(persona)
+    return {"ok": True, "updated_id": persona_id}
 
 
-@app.delete("/api/audiences/{audience_id}")
-def delete_audience(audience_id: str, auth: AuthContext = Depends(require_write)):
-    audience = _find_audience(audience_id)
-    if not audience:
-        raise HTTPException(404, "Audience not found")
-    spec = store.get_spec(audience.spec_id)
-    if not spec or not auth.has_department_access(spec.department):
+@app.delete("/api/personas/{persona_id}")
+def delete_persona(persona_id: str, auth: AuthContext = Depends(require_write)):
+    persona = _find_audience(persona_id)
+    if not persona:
+        raise HTTPException(404, "Persona not found")
+    canon_domain = store.get_canon_domain(persona.canon_domain_id)
+    if not canon_domain or not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
-    if not store.delete_audience(UUID(audience_id)):
-        raise HTTPException(404, "Audience not found")
-    return {"ok": True, "deleted_id": audience_id}
+    if not store.delete_persona(UUID(persona_id)):
+        raise HTTPException(404, "Persona not found")
+    return {"ok": True, "deleted_id": persona_id}
 
 
-# --- Audience Status ---
+# --- Persona Status ---
 
 class PersonaStatusUpdate(BaseModel):
     status: str
@@ -978,31 +978,31 @@ class PersonaStatusUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-@app.patch("/api/audiences/{audience_id}/status")
-def update_audience_status(audience_id: str, data: PersonaStatusUpdate, auth: AuthContext = Depends(require_write)):
-    """Update a audience's approval status."""
-    audience = _find_audience(audience_id)
-    if not audience:
-        raise HTTPException(404, "Audience not found")
-    spec = store.get_spec(audience.spec_id)
-    if not spec or not auth.has_department_access(spec.department):
+@app.patch("/api/personas/{persona_id}/status")
+def update_audience_status(persona_id: str, data: PersonaStatusUpdate, auth: AuthContext = Depends(require_write)):
+    """Update a persona's approval status."""
+    persona = _find_audience(persona_id)
+    if not persona:
+        raise HTTPException(404, "Persona not found")
+    canon_domain = store.get_canon_domain(persona.canon_domain_id)
+    if not canon_domain or not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
-        audience.status = AssertionStatus(data.status)
+        persona.status = EntryStatus(data.status)
     except ValueError:
         raise HTTPException(400, f"Invalid status: {data.status}")
-    if audience.status == AssertionStatus.APPROVED and data.approved_by:
-        audience.approved_by = data.approved_by
-        audience.approved_at = _now()
-    store.upsert_audience(audience)
+    if persona.status == EntryStatus.APPROVED and data.approved_by:
+        persona.approved_by = data.approved_by
+        persona.approved_at = _now()
+    store.upsert_persona(persona)
     # Log the review action
     store.log_review_action(
-        spec_id=audience.spec_id,
+        canon_domain_id=persona.canon_domain_id,
         action=f"audience_{data.status}",
         performed_by=data.approved_by or "system",
         notes=data.notes or "",
     )
-    return {"ok": True, "id": audience_id, "status": str(audience.status)}
+    return {"ok": True, "id": persona_id, "status": str(persona.status)}
 
 
 # --- Source Upload & Processing ---
@@ -1041,7 +1041,7 @@ async def extract_upload(
     _rl: None = Depends(extract_limiter),
     auth: AuthContext = Depends(require_write),
 ):
-    """Upload a file, extract text, structure it, and save as a Spec.
+    """Upload a file, extract text, structure it, and save as a CanonDomain.
 
     Returns structured error JSON on failure with which stage failed.
     """
@@ -1086,7 +1086,7 @@ async def extract_upload(
         pass
 
     try:
-        spec, indexed, markdown = _commit_structured_spec(
+        canon_domain, indexed, markdown = _commit_structured_spec(
             structured,
             file.filename,
             document_type=document_type,
@@ -1101,12 +1101,12 @@ async def extract_upload(
         })
 
     return {
-        "id": str(spec.id),
-        "name": spec.name,
+        "id": str(canon_domain.id),
+        "name": canon_domain.name,
         "status": "created",
-        "message_count": len(structured.assertions),
-        "entry_count": len(structured.assertions),
-        "audience_count": len(structured.audiences),
+        "message_count": len(structured.canon_entries),
+        "entry_count": len(structured.canon_entries),
+        "audience_count": len(structured.personas),
         "indexed": indexed,
         "markdown": markdown,
         "know_your_market": structured.know_your_market,
@@ -1184,8 +1184,8 @@ async def preview_structure(
         "tagline": structured.tagline,
         "differentiation": structured.differentiation,
         "know_your_market": structured.know_your_market,
-        "assertions": structured.assertions,
-        "audiences": structured.audiences,
+        "canon_entries": structured.canon_entries,
+        "personas": structured.personas,
         "missing_sections": structured.missing_sections,
         "completeness_score": max(0, 100 - len(structured.missing_sections) * 10),
     }
@@ -1208,7 +1208,7 @@ async def confirm_structure(data: dict, auth: AuthContext = Depends(require_writ
 
     # Apply any user edits to top-level fields
     edits = data.get("edits", {})
-    for field in ("name", "summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"):
+    for field in ("name", "summary", "persona", "brand_personality", "positioning", "tagline", "differentiation"):
         if field in edits and edits[field]:
             setattr(structured, field, edits[field])
     
@@ -1222,7 +1222,7 @@ async def confirm_structure(data: dict, auth: AuthContext = Depends(require_writ
 
     try:
         filename = Path(file_path_str).name
-        spec, indexed, markdown = _commit_structured_spec(structured, filename, document_type=document_type, department=department)
+        canon_domain, indexed, markdown = _commit_structured_spec(structured, filename, document_type=document_type, department=department)
     except Exception as e:
         log.error("DB commit failed during confirm-structure: %s", e)
         return JSONResponse(status_code=500, content={
@@ -1231,11 +1231,11 @@ async def confirm_structure(data: dict, auth: AuthContext = Depends(require_writ
         })
 
     return {
-        "id": str(spec.id),
-        "name": spec.name,
+        "id": str(canon_domain.id),
+        "name": canon_domain.name,
         "status": "created",
-        "message_count": len(structured.assertions),
-        "audience_count": len(structured.audiences),
+        "message_count": len(structured.canon_entries),
+        "audience_count": len(structured.personas),
         "indexed": indexed,
         "markdown": markdown,
         "know_your_market": structured.know_your_market,
@@ -1250,70 +1250,70 @@ _LOCKED_MARKER_RE = re.compile(r"\*{0,2}\[LOCKED\]\*{0,2}", re.IGNORECASE)
 
 
 def _commit_structured_spec(
-    structured: StructuredSpec,
+    structured: StructuredHouse,
     filename: str,
     document_type: str = "engineering_spec",
     raw_markdown: Optional[str] = None,
     department: str = "General"
 ) -> tuple:
-    """Save a StructuredSpec to DB, write markdown, and index to Turbovec.
+    """Save a StructuredHouse to DB, write markdown, and index to Turbovec.
 
-    Returns (spec, indexed_bool, markdown_str).
+    Returns (canon_domain, indexed_bool, markdown_str).
     """
     dept = store.get_department(department)
-    g_type = SchemaType(document_type)
-    if g_type == SchemaType.ENGINEERING_SPEC and dept:
-        g_type = SchemaType(dept["primary_schema_type"])
+    g_type = GroundingType(document_type)
+    if g_type == GroundingType.MESSAGE_HOUSE and dept:
+        g_type = GroundingType(dept["primary_grounding_type"])
 
-    spec = Spec(
+    canon_domain = CanonDomain(
         name=structured.name,
         source="upload",
         source_id=filename,
-        schema_type=g_type,
+        grounding_type=g_type,
         summary=structured.summary,
         audience=structured.audience,
         brand_personality=structured.brand_personality,
         positioning=structured.positioning,
         tagline=structured.tagline,
         differentiation=structured.differentiation,
-        status=SpecStatus.ACTIVE,
+        status=DomainStatus.ACTIVE,
         department=department,
         last_synced=_now(),
     )
-    store.upsert_spec(spec)
+    store.upsert_canon_domain(canon_domain)
 
-    # ── Phase 2: Create audiences + sub-attrs FIRST (needed for chunk linking) ──
+    # ── Phase 2: Create personas + sub-attrs FIRST (needed for chunk linking) ──
     qa_pair_map: dict = {}     # statement.lower() → id
 
-    for p in structured.audiences:
-        audience = Audience(
-            spec_id=spec.id,
+    for p in structured.personas:
+        persona = Persona(
+            canon_domain_id=canon_domain.id,
             name=p["name"],
             description=p.get("description", ""),
-            qa_pairs=p.get("qa_pairs", []),
+            objections=p.get("objections", []),
         )
-        store.upsert_audience(audience)
+        store.upsert_persona(persona)
 
-        audience_obj = store.get_audience_by_name(spec.id, p["name"])
+        audience_obj = store.get_persona_by_name(canon_domain.id, p["name"])
         if audience_obj:
-            store.delete_audience_sub_attrs(str(audience_obj.id))
+            store.delete_persona_sub_attrs(str(audience_obj.id))
 
             ob_items = []
-            for ob in p.get("qa_pairs", []):
+            for ob in p.get("objections", []):
                 if isinstance(ob, dict):
                     ob_items.append({"statement": ob.get("statement", ""), "response": ob.get("response")})
                 else:
                     ob_items.append({"statement": str(ob), "response": None})
-            store.bulk_create_qa_pairs(str(audience_obj.id), ob_items)
+            store.bulk_create_objections(str(audience_obj.id), ob_items)
 
-            for ob in store.list_qa_pairs(str(audience_obj.id)):
+            for ob in store.list_objections(str(audience_obj.id)):
                 qa_pair_map[ob.statement.strip().lower()] = ob.id
 
     # ── Pillars ──────────────────────────────────────────────────────────
     pillar_map = {}  # pillar name -> pillar_id
     for pillar in structured.pillars:
         pillar_id = store.create_pillar(
-            domain_id=spec.id,
+            domain_id=canon_domain.id,
             name=pillar["name"],
             description=pillar.get("description", ""),
         )
@@ -1322,15 +1322,15 @@ def _commit_structured_spec(
     # ── Chunks (with Phase 2 linking) ────────────────────────────────
     def _resolve_chunk(chunk_data: dict, pillar_id=None):
         try:
-            assertion_type = AssertionType(chunk_data["assertion_type"])
+            section_type = SectionType(chunk_data["section_type"])
         except ValueError:
-            assertion_type = AssertionType.POSITIONING
+            section_type = SectionType.POSITIONING
 
         # A [LOCKED] marker in the source is metadata about the fact, not part
         # of it. Lift it into status/tier and strip it from the text — the
         # structurer is told to split compound sentences and to reproduce the
         # marker verbatim, so left alone it emits "**[LOCKED]**" as its own
-        # assertion.
+        # canon_entry.
         content = (chunk_data.get("content") or "").strip()
         locked = bool(_LOCKED_MARKER_RE.search(content))
         content = _LOCKED_MARKER_RE.sub("", content).strip(" -—\t")
@@ -1338,16 +1338,16 @@ def _commit_structured_spec(
         if not content:
             return  # marker-only fragment, nothing to record
 
-        msg = Assertion(
-            spec_id=spec.id,
+        msg = CanonEntry(
+            canon_domain_id=canon_domain.id,
             pillar_id=pillar_id,
-            assertion_type=assertion_type,
+            section_type=section_type,
             priority=chunk_data.get("priority", 3),
             content=content,
-            status=AssertionStatus.LOCKED if locked else AssertionStatus.DRAFT,
+            status=EntryStatus.LOCKED if locked else EntryStatus.DRAFT,
             content_tier=ContentTier.TIER_1_LOCKED if locked else None,
             variants=chunk_data.get("variants", {}),
-            audiences=chunk_data.get("audiences", []),
+            personas=chunk_data.get("personas", []),
             channels=[Channel(c) for c in chunk_data.get("channels", ["all"])],
         )
         store.upsert_key_message(msg)
@@ -1362,54 +1362,54 @@ def _commit_structured_spec(
         for chunk in structured.ungrouped_chunks:
             _resolve_chunk(chunk)
     else:
-        for km in structured.assertions:
+        for km in structured.canon_entries:
             try:
-                assertion_type = AssertionType(km["assertion_type"])
+                section_type = SectionType(km["section_type"])
             except ValueError:
-                assertion_type = AssertionType.POSITIONING
-            msg = Assertion(
-                spec_id=spec.id,
+                section_type = SectionType.POSITIONING
+            msg = CanonEntry(
+                canon_domain_id=canon_domain.id,
                 pillar_id=None,
-                assertion_type=assertion_type,
+                section_type=section_type,
                 priority=km.get("priority", 3),
                 content=km["content"],
                 variants=km.get("variants", {}),
-                audiences=km.get("audiences", []),
+                personas=km.get("personas", []),
                 channels=[Channel(c) for c in km.get("channels", ["all"])],
             )
             store.upsert_key_message(msg)
 
     markdown = structurer.to_markdown(structured)
-    save_path = DATA_DIR / "frames" / f"{spec.id}.md"
+    save_path = DATA_DIR / "frames" / f"{canon_domain.id}.md"
     save_path.parent.mkdir(exist_ok=True)
     save_path.write_text(markdown, encoding="utf-8")
 
     if raw_markdown:
-        raw_path = DATA_DIR / "sources" / f"{spec.id}.md"
+        raw_path = DATA_DIR / "sources" / f"{canon_domain.id}.md"
         raw_path.parent.mkdir(exist_ok=True, parents=True)
         raw_path.write_text(raw_markdown, encoding="utf-8")
 
     from src.grounding.search import GroundingEngine
-    spec_row_ws = store.get_spec_workspace_id(spec.id)
+    spec_row_ws = store.get_house_workspace_id(canon_domain.id)
     engine = GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
         namespace=spec_row_ws or "default",
     )
     try:
-        engine.index_spec(spec.id)
+        engine.index_house(canon_domain.id)
         indexed = True
     except Exception as exc:
-        log.warning("Vector indexing skipped for %s: %s", spec.id, exc)
+        log.warning("Vector indexing skipped for %s: %s", canon_domain.id, exc)
         indexed = False
 
-    return spec, indexed, markdown
+    return canon_domain, indexed, markdown
 
 
-@app.get("/api/frames/{spec_id}/markdown")
-def get_frame_markdown(spec_id: str):
+@app.get("/api/frames/{canon_domain_id}/markdown")
+def get_frame_markdown(canon_domain_id: str):
     """Get the saved markdown file for a framework."""
-    path = DATA_DIR / "frames" / f"{spec_id}.md"
+    path = DATA_DIR / "frames" / f"{canon_domain_id}.md"
     if not path.exists():
         raise HTTPException(404, "Markdown file not found")
     return {"markdown": path.read_text()}
@@ -1467,7 +1467,7 @@ def delete_channel(channel_id: str, auth: AuthContext = Depends(require_write)):
 
 class DepartmentCreate(BaseModel):
     name: str
-    primary_schema_type: str = "engineering_spec"
+    primary_grounding_type: str = "engineering_spec"
     description: str = ""
     workspace_id: str = "default"
 
@@ -1484,12 +1484,12 @@ def create_department(req: DepartmentCreate, auth: AuthContext = Depends(require
         raise HTTPException(403, "Only administrators can create departments.")
     if not req.name:
         raise HTTPException(400, "name is required")
-    from src.models import SchemaType
+    from src.models import GroundingType
     try:
-        SchemaType(req.primary_schema_type)
+        GroundingType(req.primary_grounding_type)
     except ValueError:
-        raise HTTPException(400, f"Invalid primary grounding type: {req.primary_schema_type}")
-    return store.create_department(req.name, req.primary_schema_type, req.description, req.workspace_id)
+        raise HTTPException(400, f"Invalid primary grounding type: {req.primary_grounding_type}")
+    return store.create_department(req.name, req.primary_grounding_type, req.description, req.workspace_id)
 
 
 @app.delete("/api/departments/{name}")
@@ -1513,26 +1513,26 @@ def graph_stats():
     return get_graph_engine().get_stats()
 
 
-@app.get("/api/graph/spec/{spec_id}")
-def graph_spec(spec_id: str):
+@app.get("/api/graph/canon_domain/{canon_domain_id}")
+def graph_spec(canon_domain_id: str):
     from src.grounding.graph import get_graph_engine
     try:
-        UUID(spec_id)
+        UUID(canon_domain_id)
     except ValueError:
-        raise HTTPException(400, "Invalid spec_id UUID")
-    chunks = get_graph_engine().get_chunks_for_spec(spec_id)
-    return {"spec_id": spec_id, "chunks": chunks, "count": len(chunks)}
+        raise HTTPException(400, "Invalid canon_domain_id UUID")
+    chunks = get_graph_engine().get_chunks_for_spec(canon_domain_id)
+    return {"canon_domain_id": canon_domain_id, "chunks": chunks, "count": len(chunks)}
 
 
-@app.get("/api/graph/spec/{spec_id}/sections")
-def graph_spec_sections(spec_id: str):
+@app.get("/api/graph/canon_domain/{canon_domain_id}/sections")
+def graph_spec_sections(canon_domain_id: str):
     from src.grounding.graph import get_graph_engine
     try:
-        UUID(spec_id)
+        UUID(canon_domain_id)
     except ValueError:
-        raise HTTPException(400, "Invalid spec_id UUID")
-    sections = get_graph_engine().get_sections_for_spec(spec_id)
-    return {"spec_id": spec_id, "sections": sections, "count": len(sections)}
+        raise HTTPException(400, "Invalid canon_domain_id UUID")
+    sections = get_graph_engine().get_sections_for_spec(canon_domain_id)
+    return {"canon_domain_id": canon_domain_id, "sections": sections, "count": len(sections)}
 
 @app.get("/api/graph/data")
 def graph_data():
@@ -1618,7 +1618,7 @@ def update_artifact_sections(artifact_id: str, data: ArtifactSectionsUpdate):
 
 
 class SectionRegenerate(BaseModel):
-    spec_id: str
+    canon_domain_id: str
     skill_id: str
     section_key: str
     context: Optional[dict] = {}
@@ -1635,7 +1635,7 @@ def regenerate_single_section(data: SectionRegenerate):
     regen_context["focus_section"] = data.section_key
     
     try:
-        artifact = generator.generate(data.skill_id, data.spec_id, regen_context)
+        artifact = generator.generate(data.skill_id, data.canon_domain_id, regen_context)
         # Extract just the section we want
         val = artifact.sections.get(data.section_key, "Regeneration failed to produce this section.")
         return {"section_key": data.section_key, "content": val}
@@ -1647,15 +1647,15 @@ def regenerate_single_section(data: SectionRegenerate):
 
 @app.get("/api/stats")
 def get_stats():
-    specs = store.list_specs()
-    total_messages = sum(len(store.get_key_messages(h.id)) for h in specs)
-    total_audiences = sum(len(store.get_audiences(h.id)) for h in specs)
-    total_artifacts = sum(len(store.list_artifacts(h.id)) for h in specs)
+    canon_domains = store.list_canon_domains()
+    total_messages = sum(len(store.get_key_messages(h.id)) for h in canon_domains)
+    total_audiences = sum(len(store.get_personas(h.id)) for h in canon_domains)
+    total_artifacts = sum(len(store.list_artifacts(h.id)) for h in canon_domains)
     usage = store.get_token_usage_summary()
 
     return {
-        "spec_count": len(specs),
-        "domain_count": len(specs),
+        "spec_count": len(canon_domains),
+        "domain_count": len(canon_domains),
         "message_count": total_messages,
         "entry_count": total_messages,
         "audience_count": total_audiences,
@@ -1669,33 +1669,33 @@ def get_stats():
 
 @app.post("/api/seed")
 def run_seed():
-    """Run the seed script and index all specs to vector index."""
+    """Run the seed script and index all canon_domains to vector index."""
     from seed_data.seed import seed as run_seed_script
     from src.grounding.search import GroundingEngine
 
     newly_seeded = run_seed_script()
 
-    specs = store.list_specs()
-    total_messages = sum(len(store.get_assertions(h.id, include_unapproved=True)) for h in specs)
-    total_audiences = sum(len(store.get_audiences(h.id)) for h in specs)
+    canon_domains = store.list_canon_domains()
+    total_messages = sum(len(store.get_canon_entries(h.id, include_unapproved=True)) for h in canon_domains)
+    total_audiences = sum(len(store.get_personas(h.id)) for h in canon_domains)
 
     indexed_count = 0
-    for spec in specs:
-        ws_id = store.get_spec_workspace_id(spec.id) or "default"
+    for canon_domain in canon_domains:
+        ws_id = store.get_house_workspace_id(canon_domain.id) or "default"
         engine = GroundingEngine(
             store=store,
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
             namespace=ws_id,
         )
         try:
-            engine.index_spec(spec.id)
+            engine.index_house(canon_domain.id)
             indexed_count += 1
         except Exception:
             pass
 
     return {
         "seeded": newly_seeded,
-        "specs": len(specs),
+        "canon_domains": len(canon_domains),
         "indexed": indexed_count,
         "total_assertions": total_messages,
         "total_audiences": total_audiences,
@@ -1705,10 +1705,10 @@ def run_seed():
 
 
 @app.post("/api/canon-domains/{domain_id}/index")
-@app.post("/api/specs/{spec_id}/index")
-def index_spec(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
+@app.post("/api/canon_domains/{canon_domain_id}/index")
+def index_house(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
     """Index a single domain to vector index."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     from src.grounding.search import GroundingEngine
 
     try:
@@ -1716,82 +1716,82 @@ def index_spec(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
     except Exception:
         raise HTTPException(400, "Invalid ID")
 
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
 
-    ws_id = store.get_spec_workspace_id(spec_uuid) or "default"
+    ws_id = store.get_house_workspace_id(spec_uuid) or "default"
     engine = GroundingEngine(
         store=store,
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
         namespace=ws_id,
     )
 
-    vectors_indexed = engine.index_spec(spec_uuid)
+    vectors_indexed = engine.index_house(spec_uuid)
 
     return {
-        "domain_id": str(spec.id),
-        "spec_id": str(spec.id),
-        "spec_name": spec.name,
+        "domain_id": str(canon_domain.id),
+        "canon_domain_id": str(canon_domain.id),
+        "canon_domain_name": canon_domain.name,
         "vectors_indexed": vectors_indexed,
     }
 
 
 @app.post("/api/index-all")
-def index_all_specs():
-    """Index all specs to vector index."""
+def index_all_houses():
+    """Index all canon_domains to vector index."""
     from src.grounding.search import GroundingEngine
 
-    specs = store.list_specs()
+    canon_domains = store.list_canon_domains()
 
     total_vectors = 0
-    for spec in specs:
-        ws_id = store.get_spec_workspace_id(spec.id) or "default"
+    for canon_domain in canon_domains:
+        ws_id = store.get_house_workspace_id(canon_domain.id) or "default"
         engine = GroundingEngine(
             store=store,
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
             namespace=ws_id,
         )
         try:
-            vectors = engine.index_spec(spec.id)
+            vectors = engine.index_house(canon_domain.id)
             total_vectors += vectors
         except Exception as exc:
-            log.warning("Vector index failed for %s: %s", spec.id, exc)
+            log.warning("Vector index failed for %s: %s", canon_domain.id, exc)
 
     return {
-        "indexed_specs": len(specs),
+        "indexed_houses": len(canon_domains),
         "total_vectors": total_vectors,
     }
 
 
 @app.get("/api/canon-domains/{domain_id}/index-status")
-@app.get("/api/specs/{spec_id}/index-status")
-def get_spec_index_status(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
+@app.get("/api/canon_domains/{canon_domain_id}/index-status")
+def get_house_index_status(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
     """Check vector index status for a domain: indexed / not_indexed / stale."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
 
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
 
     try:
         from src.store import VectorMetadataModel
         with store.session() as s:
             record = s.query(VectorMetadataModel).filter(
-                VectorMetadataModel.spec_id == str(spec_uuid)
+                VectorMetadataModel.canon_domain_id == str(spec_uuid)
             ).first()
 
         if not record:
-            return {"status": "not_indexed", "spec_id": spec_id}
+            return {"status": "not_indexed", "canon_domain_id": canon_domain_id}
 
-        # Check staleness: compare last_synced in vector metadata vs spec.last_synced
+        # Check staleness: compare last_synced in vector metadata vs canon_domain.last_synced
         meta_dt = record.last_synced
-        if meta_dt and spec.last_synced:
-            spec_dt = spec.last_synced
+        if meta_dt and canon_domain.last_synced:
+            spec_dt = canon_domain.last_synced
             # Make both offset-naive for comparison
             if meta_dt.tzinfo is not None:
                 meta_dt = meta_dt.replace(tzinfo=None)
@@ -1800,30 +1800,30 @@ def get_spec_index_status(spec_id: Optional[str] = None, domain_id: Optional[str
             stale = meta_dt < spec_dt
             return {
                 "status": "stale" if stale else "indexed",
-                "spec_id": spec_id,
+                "canon_domain_id": canon_domain_id,
                 "indexed_at": meta_dt.isoformat(),
-                "spec_synced": spec.last_synced.isoformat(),
+                "spec_synced": canon_domain.last_synced.isoformat(),
             }
 
-        return {"status": "indexed", "spec_id": spec_id}
+        return {"status": "indexed", "canon_domain_id": canon_domain_id}
 
     except Exception as e:
-        log.error("Index status query failed for %s: %s", spec_id, e)
+        log.error("Index status query failed for %s: %s", canon_domain_id, e)
         return {"status": "error", "message": str(e)}
 
 
 # --- Internal helpers ---
 
-def _find_message(msg_id: str) -> Optional[Assertion]:
+def _find_message(msg_id: str) -> Optional[CanonEntry]:
     try:
         return store.get_key_message(UUID(msg_id))
     except (ValueError, Exception):
         return None
 
 
-def _find_audience(audience_id: str) -> Optional[Audience]:
+def _find_audience(persona_id: str) -> Optional[Persona]:
     try:
-        return store.get_audience(UUID(audience_id))
+        return store.get_persona(UUID(persona_id))
     except (ValueError, Exception):
         return None
 
@@ -1833,7 +1833,7 @@ def _find_audience(audience_id: str) -> Optional[Audience]:
 @app.post("/api/generate")
 def generate_artifact(
     skill_id: str = Form(...),
-    spec_id: str = Form(...),
+    canon_domain_id: str = Form(...),
     extra_context: Optional[str] = Form(None),
     _rl: None = Depends(generate_limiter),
     auth: AuthContext = Depends(require_read),
@@ -1852,7 +1852,7 @@ def generate_artifact(
     generator = ArtifactGenerator(store, skills)
 
     try:
-        artifact = generator.generate(skill_id, spec_id, context)
+        artifact = generator.generate(skill_id, canon_domain_id, context)
         skill_config = skills.get_skill(skill_id)
         artifact_type = skill_config.get("prefab_template", skill_id) if skill_config else skill_id
         visual_url = None
@@ -1860,7 +1860,7 @@ def generate_artifact(
         if artifact.renderer_type not in ("fabric", "reveal"):
             visual_types = {"one_pager", "social_posts", "email_template", "battlecard", "email_sequence"}
             if artifact_type in visual_types:
-                visual_url = f"{settings.base_url}/artifact/{artifact_type}/{spec_id}"
+                visual_url = f"{settings.base_url}/artifact/{artifact_type}/{canon_domain_id}"
                 if skill_id == "battlecard" and context.get("competitor"):
                     visual_url += f"?competitor={context['competitor']}"
                 elif skill_id == "email_template" and context.get("stage"):
@@ -1883,15 +1883,15 @@ def generate_artifact(
         # Auto-save to artifact history
         try:
             from src.pipeline.alignment import AlignmentEngine
-            score = AlignmentEngine(store).score(UUID(spec_id), artifact.raw_content).overall_score
+            score = AlignmentEngine(store).score(UUID(canon_domain_id), artifact.raw_content).overall_score
         except Exception:
             score = None
 
         try:
             saved = store.save_artifact(
-                spec_id=UUID(spec_id),
+                house_id=UUID(canon_domain_id),
                 skill_id=skill_id,
-                spec_name=artifact.spec_name,
+                house_name=artifact.canon_domain_name,
                 sections=artifact.sections,
                 raw_content=artifact.raw_content,
                 alignment_score=score,
@@ -1908,8 +1908,8 @@ def generate_artifact(
 
         return {
             "skill_id": skill_id,
-            "spec_name": artifact.spec_name,
-            "spec_id": spec_id,
+            "canon_domain_name": artifact.canon_domain_name,
+            "canon_domain_id": canon_domain_id,
             "sections": artifact.sections,
             "raw_content": artifact.raw_content,
             "visual_url": visual_url,
@@ -1921,27 +1921,27 @@ def generate_artifact(
 
 _SECTION_PROMPTS = {
     "summary": "Write a 2-3 sentence product summary for {name}. Positioning: {positioning}",
-    "audience": "Describe the target audience for {name} in one focused paragraph. Use: {positioning}",
+    "persona": "Describe the target persona for {name} in one focused paragraph. Use: {positioning}",
     "brand_personality": "Define the brand personality/voice for {name} in 2-3 sentences. Positioning: {positioning}",
     "tagline": "Write a punchy tagline (7 words or fewer) for {name}. Positioning: {positioning}",
     "differentiation": "List 2-3 key differentiators for {name} vs competitors. Positioning: {positioning}",
     "messages:headline": "Write 3 compelling benefit-led headlines for {name}. Positioning: {positioning}. Return as a bulleted list.",
     "messages:benefit": "Write 3 outcome-focused benefit statements for {name}. Positioning: {positioning}. Return as a bulleted list.",
     "messages:proof_point": "Write 3 credible proof points / stats for {name}. If no real stats exist in context, create plausible placeholders clearly marked [PLACEHOLDER]. Positioning: {positioning}. Return as a bulleted list.",
-    "messages:qa_pair": "Write 3 common qa_pair handlers for {name}. Positioning: {positioning}. Return as a bulleted list.",
-    "audiences": "Define 2 key buyer audiences for {name}. For each include: name, role/description, 3 pain points, 2 buying triggers, 2 qa_pairs. Positioning: {positioning}",
+    "messages:objection": "Write 3 common objection handlers for {name}. Positioning: {positioning}. Return as a bulleted list.",
+    "personas": "Define 2 key buyer personas for {name}. For each include: name, role/description, 3 pain points, 2 buying triggers, 2 objections. Positioning: {positioning}",
 }
 
 
 @app.post("/api/generate-section")
-def generate_section(spec_id: str = Form(...), section: str = Form(...)):
+def generate_section(canon_domain_id: str = Form(...), section: str = Form(...)):
     """Generate content for a specific missing section using the LLM."""
     try:
-        h = store.get_spec(UUID(spec_id))
+        h = store.get_canon_domain(UUID(canon_domain_id))
     except Exception:
-        raise HTTPException(400, "Invalid spec_id")
+        raise HTTPException(400, "Invalid canon_domain_id")
     if not h:
-        raise HTTPException(404, "Spec not found")
+        raise HTTPException(404, "CanonDomain not found")
 
     template = _SECTION_PROMPTS.get(section)
     if not template:
@@ -1975,32 +1975,32 @@ def generate_section(spec_id: str = Form(...), section: str = Form(...)):
 
 _SECTION_REGEN_PROMPTS = {
     "summary": "Rewrite the summary for {name}. Positioning: {positioning}. Keep it 2-3 sentences, compelling and specific.",
-    "audience": "Rewrite the target audience description for {name}. Positioning: {positioning}. Be specific about role, company size, industry.",
+    "persona": "Rewrite the target persona description for {name}. Positioning: {positioning}. Be specific about role, company size, industry.",
     "tagline": "Create a new tagline for {name}. Positioning: {positioning}. Must be 7 words or fewer, memorable and ownable.",
     "differentiation": "Rewrite the differentiation for {name}. Positioning: {positioning}. List 2-3 specific ways this is better than alternatives.",
     "headline": "Write 3 new compelling headlines for {name}. Positioning: {positioning}. Benefit-led, specific, punchy. Return as bulleted list.",
     "subhead": "Write 3 new subheadlines for {name}. Positioning: {positioning}. Expand on headlines. Return as bulleted list.",
     "benefit": "Write 3 new benefit statements for {name}. Positioning: {positioning}. Outcome-focused with evidence. Return as bulleted list.",
     "proof_point": "Write 3 new proof points for {name}. Positioning: {positioning}. Quantified stats or customer evidence. Return as bulleted list.",
-    "qa_pair": "Write 3 new qa_pair handlers for {name}. Positioning: {positioning}. Concise rebuttals. Return as bulleted list.",
+    "objection": "Write 3 new objection handlers for {name}. Positioning: {positioning}. Concise rebuttals. Return as bulleted list.",
     "social_proof": "Write 3 new social proof items for {name}. Positioning: {positioning}. Customer quotes, awards, G2 recognition. Return as bulleted list.",
 }
 
 
 @app.post("/api/generate-section-single")
-def generate_section_single(spec_id: str = Query(...), section: str = Query(...)):
+def generate_section_single(canon_domain_id: str = Query(...), section: str = Query(...)):
     """Regenerate a single section of an artifact using LLM."""
     try:
-        h = store.get_spec(UUID(spec_id))
+        h = store.get_canon_domain(UUID(canon_domain_id))
     except Exception:
-        raise HTTPException(400, "Invalid spec_id")
+        raise HTTPException(400, "Invalid canon_domain_id")
     if not h:
-        raise HTTPException(404, "Spec not found")
+        raise HTTPException(404, "CanonDomain not found")
 
     messages = store.get_key_messages(h.id)
     messages_by_section = {}
     for m in messages:
-        st = str(m.assertion_type)
+        st = str(m.section_type)
         messages_by_section.setdefault(st, []).append(m.content)
     existing_msgs = "\n".join(f"- {st}: {msg}" for st, msgs in messages_by_section.items() for msg in msgs[:2])
 
@@ -2034,25 +2034,25 @@ def generate_section_single(spec_id: str = Query(...), section: str = Query(...)
     return {"section": section, "content": resp.choices[0].message.content.strip()}
 
 
-# --- Spec Entry Improve / Variant Generation ---
+# --- CanonDomain Entry Improve / Variant Generation ---
 
 @app.post("/api/entries/{entry_id}/improve")
 @app.post("/api/messages/{msg_id}/improve")
 def improve_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None):
-    """Suggest a stronger version of a assertion via LLM."""
+    """Suggest a stronger version of a canon_entry via LLM."""
     actual_id = entry_id or msg_id
     msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Spec entry not found")
-    spec = store.get_spec(msg.spec_id)
-    positioning = spec.positioning if spec else ""
+        raise HTTPException(404, "CanonDomain entry not found")
+    canon_domain = store.get_canon_domain(msg.canon_domain_id)
+    positioning = canon_domain.positioning if canon_domain else ""
 
     client = _get_oai_client()
     resp = client.chat.completions.create(
         model=llm_model("gpt-4o-mini"),
         messages=[
             {"role": "system", "content": "You are a messaging and positioning expert. Rewrite the entry to be more specific, truth-grounded, and compelling. Return only the improved entry text — no preamble."},
-            {"role": "user", "content": f"Section type: {msg.assertion_type}\nPositioning context: {positioning}\n\nOriginal entry:\n{msg.content}\n\nImproved version:"},
+            {"role": "user", "content": f"Section type: {msg.section_type}\nPositioning context: {positioning}\n\nOriginal entry:\n{msg.content}\n\nImproved version:"},
         ],
         temperature=0.6,
         max_tokens=300,
@@ -2071,11 +2071,11 @@ def improve_message(msg_id: Optional[str] = None, entry_id: Optional[str] = None
 @app.post("/api/entries/{entry_id}/generate-variant")
 @app.post("/api/messages/{msg_id}/generate-variant")
 def generate_variant(channel: str = Form(...), msg_id: Optional[str] = None, entry_id: Optional[str] = None):
-    """Generate a channel-specific variant of a assertion."""
+    """Generate a channel-specific variant of a canon_entry."""
     actual_id = entry_id or msg_id
     msg = _find_message(actual_id)
     if not msg:
-        raise HTTPException(404, "Spec entry not found")
+        raise HTTPException(404, "CanonDomain entry not found")
 
     channel_guidance = {
         "linkedin": "LinkedIn post hook (under 150 chars, stops the scroll)",
@@ -2091,7 +2091,7 @@ def generate_variant(channel: str = Form(...), msg_id: Optional[str] = None, ent
     resp = client.chat.completions.create(
         model=llm_model("gpt-4o-mini"),
         messages=[
-            {"role": "system", "content": f"You are a B2B copywriter. Adapt the assertion for {channel}: {guidance}. Return only the adapted text."},
+            {"role": "system", "content": f"You are a B2B copywriter. Adapt the canon_entry for {channel}: {guidance}. Return only the adapted text."},
             {"role": "user", "content": f"Original entry:\n{msg.content}"},
         ],
         temperature=0.6,
@@ -2116,37 +2116,37 @@ def generate_variant(channel: str = Form(...), msg_id: Optional[str] = None, ent
     return {"channel": channel, "variant": variant_text, "msg_id": actual_id, "entry_id": actual_id}
 
 
-# --- Audience Generation ---
+# --- Persona Generation ---
 
 class GeneratePersonaRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    spec_id: str = Field(validation_alias=AliasChoices('spec_id', 'canon_domain_id'), serialization_alias='spec_id')
+    canon_domain_id: str = Field(validation_alias=AliasChoices('canon_domain_id', 'canon_domain_id'), serialization_alias='canon_domain_id')
     job_title: str
 
 
 
-@app.post("/api/generate-audience")
+@app.post("/api/generate-persona")
 def generate_audience(data: GeneratePersonaRequest):
-    """Generate a full audience from a job title using LLM."""
-    spec = store.get_spec(UUID(data.spec_id))
-    if not spec:
-        raise HTTPException(404, "Spec not found")
+    """Generate a full persona from a job title using LLM."""
+    canon_domain = store.get_canon_domain(UUID(data.canon_domain_id))
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain not found")
 
     client = _get_oai_client()
     resp = client.chat.completions.create(
         model=llm_model("gpt-4o-mini"),
         messages=[
-            {"role": "system", "content": "You are a B2B buyer audience expert. Return JSON only."},
-            {"role": "user", "content": f"""Generate a buyer audience for a '{data.job_title}' who might buy {spec.name}.
+            {"role": "system", "content": "You are a B2B buyer persona expert. Return JSON only."},
+            {"role": "user", "content": f"""Generate a buyer persona for a '{data.job_title}' who might buy {canon_domain.name}.
 
-Context: {spec.positioning or spec.summary or 'B2B SaaS product'}
+Context: {canon_domain.positioning or canon_domain.summary or 'B2B SaaS product'}
 
 Return JSON:
 {{
-  "name": "<descriptive audience name like 'SMB CTO'>",
+  "name": "<descriptive persona name like 'SMB CTO'>",
   "description": "<1-2 sentence role description>",
-  "qa_pairs": ["<common question 1>", "<common question 2>"],
-  "qa_pairs": ["<qa_pair 1>", "<qa_pair 2>"]
+  "objections": ["<common question 1>", "<common question 2>"],
+  "objections": ["<objection 1>", "<objection 2>"]
 }}"""},
         ],
         response_format={"type": "json_object"},
@@ -2155,7 +2155,7 @@ Return JSON:
     )
     store.record_token_usage(
         workspace_id="default",
-        endpoint="generate-audience",
+        endpoint="generate-persona",
         model=llm_model("gpt-4o-mini"),
         input_tokens=resp.usage.prompt_tokens,
         output_tokens=resp.usage.completion_tokens,
@@ -2165,38 +2165,38 @@ Return JSON:
         import json as _json
         audience_data = _json.loads(resp.choices[0].message.content)
     except Exception:
-        raise HTTPException(500, "Failed to parse LLM audience response")
+        raise HTTPException(500, "Failed to parse LLM persona response")
 
-    audience = Audience(
-        spec_id=spec.id,
+    persona = Persona(
+        canon_domain_id=canon_domain.id,
         name=audience_data.get("name", data.job_title),
         description=audience_data.get("description", ""),
-        qa_pairs=audience_data.get("qa_pairs", []),
+        objections=audience_data.get("objections", []),
     )
-    store.upsert_audience(audience)
+    store.upsert_persona(persona)
     return {
-        "id": str(audience.id),
-        "name": audience.name,
-        "description": audience.description,
+        "id": str(persona.id),
+        "name": persona.name,
+        "description": persona.description,
 
-        "qa_pairs": audience.qa_pairs,
+        "objections": persona.objections,
     }
 
 
 # --- Tone Check ---
 
 @app.post("/api/canon-domains/{domain_id}/check-tone")
-@app.post("/api/specs/{spec_id}/check-tone")
-def check_tone(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    """Analyze assertions against brand_personality and flag mismatches."""
-    actual_id = domain_id or spec_id
-    spec = store.get_spec(UUID(actual_id))
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
+@app.post("/api/canon_domains/{canon_domain_id}/check-tone")
+def check_tone(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Analyze canon_entries against brand_personality and flag mismatches."""
+    actual_id = domain_id or canon_domain_id
+    canon_domain = store.get_canon_domain(UUID(actual_id))
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
     messages = store.get_key_messages(UUID(actual_id))
     if not messages:
         return {"warnings": [], "score": 100, "summary": "No entries to check"}
-    if not spec.brand_personality:
+    if not canon_domain.brand_personality:
         return {"warnings": [], "score": 100, "summary": "No brand personality defined — add one in Overview to enable tone checking"}
 
     samples = [m.content for m in messages[:12]]
@@ -2207,9 +2207,9 @@ def check_tone(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
         model=llm_model("gpt-4o-mini"),
         messages=[
             {"role": "system", "content": "You are a brand voice analyst. Return JSON only."},
-            {"role": "user", "content": f"""Brand personality: {spec.brand_personality}
+            {"role": "user", "content": f"""Brand personality: {canon_domain.brand_personality}
 
-Spec entries:
+CanonDomain entries:
 {chr(10).join(f'- {m}' for m in samples)}
 
 Identify which entries (if any) are inconsistent with the brand personality. Return JSON:
@@ -2243,10 +2243,10 @@ Identify which entries (if any) are inconsistent with the brand personality. Ret
 # --- Snapshots ---
 
 @app.post("/api/canon-domains/{domain_id}/snapshots")
-@app.post("/api/specs/{spec_id}/snapshots")
-def create_snapshot(data: dict = {}, spec_id: Optional[str] = None, domain_id: Optional[str] = None):
+@app.post("/api/canon_domains/{canon_domain_id}/snapshots")
+def create_snapshot(data: dict = {}, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
     """Save a snapshot of the current framework state."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     label = (data or {}).get("label", "")
     try:
         snap = store.create_snapshot(UUID(actual_id), label)
@@ -2256,9 +2256,9 @@ def create_snapshot(data: dict = {}, spec_id: Optional[str] = None, domain_id: O
 
 
 @app.get("/api/canon-domains/{domain_id}/snapshots")
-@app.get("/api/specs/{spec_id}/snapshots")
-def list_snapshots(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    actual_id = domain_id or spec_id
+@app.get("/api/canon_domains/{canon_domain_id}/snapshots")
+def list_snapshots(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or canon_domain_id
     return store.list_snapshots(UUID(actual_id))
 
 
@@ -2289,56 +2289,56 @@ def delete_snapshot(snapshot_id: str):
 
 @app.post("/api/snapshots/{snapshot_id}/restore")
 def restore_snapshot(snapshot_id: str):
-    """Restore a framework to a snapshot state (replaces messages and audiences)."""
+    """Restore a framework to a snapshot state (replaces messages and personas)."""
     snap = store.get_snapshot(UUID(snapshot_id))
     if not snap:
         raise HTTPException(404, "Snapshot not found")
 
     data = snap["snapshot_json"]
-    spec_data = data.get("spec", {})
-    spec_id = UUID(spec_data["id"])
+    spec_data = data.get("canon_domain", {})
+    canon_domain_id = UUID(spec_data["id"])
 
-    spec = store.get_spec(spec_id)
-    if not spec:
+    canon_domain = store.get_canon_domain(canon_domain_id)
+    if not canon_domain:
         raise HTTPException(404, "Framework no longer exists")
 
-    # Restore spec fields
-    for field in ("name", "summary", "audience", "brand_personality", "positioning", "tagline", "differentiation"):
+    # Restore canon_domain fields
+    for field in ("name", "summary", "persona", "brand_personality", "positioning", "tagline", "differentiation"):
         if field in spec_data:
-            setattr(spec, field, spec_data[field])
-    store.upsert_spec(spec)
+            setattr(canon_domain, field, spec_data[field])
+    store.upsert_canon_domain(canon_domain)
 
     # Replace messages
-    for m in store.get_key_messages(spec_id):
+    for m in store.get_key_messages(canon_domain_id):
         store.delete_key_message(m.id)
     for md in data.get("messages", []):
         try:
-            msg = Assertion(
-                spec_id=spec_id,
-                assertion_type=AssertionType(md["assertion_type"].split(".")[-1] if "." in md["assertion_type"] else md["assertion_type"]),
+            msg = CanonEntry(
+                canon_domain_id=canon_domain_id,
+                section_type=SectionType(md["section_type"].split(".")[-1] if "." in md["section_type"] else md["section_type"]),
                 priority=md.get("priority", 3),
                 content=md["content"],
                 variants=md.get("variants", {}),
-                audiences=md.get("audiences", []),
+                personas=md.get("personas", []),
                 channels=[Channel(c.split(".")[-1] if "." in c else c) for c in md.get("channels", ["all"])],
             )
             store.upsert_key_message(msg)
         except Exception:
             pass
 
-    # Replace audiences
-    for p in store.get_audiences(spec_id):
-        store.delete_audience(p.id)
-    for pd in data.get("audiences", []):
-        audience = Audience(
-            spec_id=spec_id,
+    # Replace personas
+    for p in store.get_personas(canon_domain_id):
+        store.delete_persona(p.id)
+    for pd in data.get("personas", []):
+        persona = Persona(
+            canon_domain_id=canon_domain_id,
             name=pd["name"],
             description=pd.get("description", ""),
-            qa_pairs=pd.get("qa_pairs", []),
+            objections=pd.get("objections", []),
         )
-        store.upsert_audience(audience)
+        store.upsert_persona(persona)
 
-    return {"ok": True, "spec_id": str(spec_id), "restored_from": snapshot_id}
+    return {"ok": True, "canon_domain_id": str(canon_domain_id), "restored_from": snapshot_id}
 
 
 # --- Artifact History ---
@@ -2347,20 +2347,20 @@ def restore_snapshot(snapshot_id: str):
 def save_artifact(data: dict):
     """Save a generated artifact to history."""
     try:
-        spec_id = UUID(data["spec_id"])
+        canon_domain_id = UUID(data["canon_domain_id"])
     except Exception:
-        raise HTTPException(400, "Invalid spec_id")
+        raise HTTPException(400, "Invalid canon_domain_id")
         
     try:
         from src.pipeline.alignment import AlignmentEngine
-        score = AlignmentEngine(store).score(spec_id, data.get("raw_content", "")).overall_score
+        score = AlignmentEngine(store).score(canon_domain_id, data.get("raw_content", "")).overall_score
     except Exception:
         score = None
 
     record = store.save_artifact(
-        spec_id=spec_id,
+        house_id=canon_domain_id,
         skill_id=data.get("skill_id", ""),
-        spec_name=data.get("spec_name", ""),
+        house_name=data.get("canon_domain_name", ""),
         sections=data.get("sections", {}),
         raw_content=data.get("raw_content", ""),
         alignment_score=score,
@@ -2389,23 +2389,23 @@ def render_artifact(artifact_id: str, renderer: str = Query("fabric")):
                     or sections.get("positioning_statement")
                     or ""
                 )
-                assertions = (
-                    sections.get("assertions")
+                canon_entries = (
+                    sections.get("canon_entries")
                     or sections.get("key_messages_list")
                     or ""
                 )
                 tagline = sections.get("tagline", "")
                 differentiation = sections.get("differentiation", "")
-                audiences = sections.get("audiences", "")
+                personas = sections.get("personas", "")
                 zones = [
-                    {"type": "hero", "text": (tagline or record.spec_name)},
+                    {"type": "hero", "text": (tagline or record.canon_domain_name)},
                     {"type": "positioning", "text": positioning},
-                    {"type": "messages", "text": str(assertions)},
+                    {"type": "messages", "text": str(canon_entries)},
                 ]
                 if differentiation:
                     zones.append({"type": "differentiation", "text": str(differentiation)})
-                if audiences:
-                    zones.append({"type": "audiences", "text": str(audiences)})
+                if personas:
+                    zones.append({"type": "personas", "text": str(personas)})
                 return {"zones": zones, "raw_sections": sections}
             except Exception as e:
                 raise HTTPException(500, f"Failed to format for fabric: {str(e)}")
@@ -2417,7 +2417,7 @@ class DesignSpecUpdate(BaseModel):
 
 @app.get("/api/artifacts/{artifact_id}/design_spec")
 def get_artifact_design_spec(artifact_id: str):
-    """Fetch the Fabric.js design spec for an artifact, falling back to a generated template spec."""
+    """Fetch the Fabric.js design canon_domain for an artifact, falling back to a generated template canon_domain."""
     from src.store import ArtifactHistoryModel
     try:
         aid = UUID(artifact_id)
@@ -2431,8 +2431,8 @@ def get_artifact_design_spec(artifact_id: str):
         
         sections = record.sections_json or {}
         if "design_spec" in sections and sections["design_spec"]:
-            spec = sections["design_spec"]
-            return json.loads(spec) if isinstance(spec, str) else spec
+            canon_domain = sections["design_spec"]
+            return json.loads(canon_domain) if isinstance(canon_domain, str) else canon_domain
         
         # No design_spec saved yet, generate from template
         from src.pipeline.generator import ArtifactGenerator
@@ -2442,17 +2442,17 @@ def get_artifact_design_spec(artifact_id: str):
         artifact_type = record.skill_id
         template = generator._get_template(artifact_type)
         if template:
-            spec = store.get_spec(UUID(record.spec_id)) if record.spec_id else None
-            if spec:
-                messages = store.get_key_messages(spec.id)
-                audiences = store.get_audiences(spec.id)
+            canon_domain = store.get_canon_domain(UUID(record.canon_domain_id)) if record.canon_domain_id else None
+            if canon_domain:
+                messages = store.get_key_messages(canon_domain.id)
+                personas = store.get_personas(canon_domain.id)
                 visual_context = generator._build_visual_context(
-                    record.spec_id, template, artifact_type, spec, messages, audiences
+                    record.canon_domain_id, template, artifact_type, canon_domain, messages, personas
                 )
-                spec = generator._fallback_design_spec(template, generator._build_context(spec, messages, audiences, {}), visual_context)
-                return spec
+                canon_domain = generator._fallback_design_spec(template, generator._build_context(canon_domain, messages, personas, {}), visual_context)
+                return canon_domain
         
-        # Create a minimal fallback design spec if no template matches
+        # Create a minimal fallback design canon_domain if no template matches
         return {
             "version": "2.0",
             "artifact_type": record.skill_id,
@@ -2465,7 +2465,7 @@ def get_artifact_design_spec(artifact_id: str):
 
 @app.patch("/api/artifacts/{artifact_id}/design_spec")
 def update_artifact_design_spec(artifact_id: str, data: DesignSpecUpdate):
-    """Save the updated Fabric.js design spec back to the artifact."""
+    """Save the updated Fabric.js design canon_domain back to the artifact."""
     from src.store import ArtifactHistoryModel
     aid = UUID(artifact_id)
     with store.session() as s:
@@ -2473,7 +2473,7 @@ def update_artifact_design_spec(artifact_id: str, data: DesignSpecUpdate):
         if not record:
             raise HTTPException(404, "Artifact not found")
         
-        # We store the updated spec back into the 'design_spec' section
+        # We store the updated canon_domain back into the 'design_spec' section
         sections = dict(record.sections_json)
         sections["design_spec"] = data.design_spec
         record.sections_json = sections
@@ -2512,11 +2512,11 @@ def update_workspace_brand(workspace_id: str, data: dict):
     return result
 
 
-# --- Design Spec Reset ---
+# --- Design CanonDomain Reset ---
 
 @app.post("/api/artifacts/{artifact_id}/design_spec/reset")
 def reset_artifact_design_spec(artifact_id: str):
-    """Reset design spec to AI-generated version."""
+    """Reset design canon_domain to AI-generated version."""
     try:
         aid = UUID(artifact_id)
     except Exception:
@@ -2539,11 +2539,11 @@ def reset_artifact_design_spec(artifact_id: str):
         try:
             from src.pipeline.generator import ArtifactGenerator
             generator = ArtifactGenerator(store=store, openai_client=_get_oai_client())
-            # Get spec for this artifact
-            spec = store.get_spec(UUID(record.spec_id)) if record.spec_id else None
-            if spec:
+            # Get canon_domain for this artifact
+            canon_domain = store.get_canon_domain(UUID(record.canon_domain_id)) if record.canon_domain_id else None
+            if canon_domain:
                 _, updated_sections = generator.generate_artifact(
-                    spec_id=record.spec_id,
+                    canon_domain_id=record.canon_domain_id,
                     skill_id=record.skill_id,
                     custom_context=record.custom_context,
                     renderer="fabric"
@@ -2554,7 +2554,7 @@ def reset_artifact_design_spec(artifact_id: str):
                     record.sections_json = sections
                     s.commit()
         except Exception as e:
-            log.warning("Failed to regenerate design spec: %s", e)
+            log.warning("Failed to regenerate design canon_domain: %s", e)
 
     return {"ok": True, "reset": True}
 
@@ -2565,9 +2565,9 @@ def list_recent_artifacts(limit: int = Query(5, le=20)):
 
 
 @app.get("/api/canon-domains/{domain_id}/artifacts")
-@app.get("/api/specs/{spec_id}/artifacts")
-def list_spec_artifacts(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    actual_id = domain_id or spec_id
+@app.get("/api/canon_domains/{canon_domain_id}/artifacts")
+def list_spec_artifacts(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    actual_id = domain_id or canon_domain_id
     return store.list_artifacts(UUID(actual_id))
 
 
@@ -2618,10 +2618,10 @@ def get_artifact_ratings(artifact_id: str):
 # --- Usage Heatmap & Coverage ---
 
 @app.get("/api/canon-domains/{domain_id}/heatmap")
-@app.get("/api/specs/{spec_id}/heatmap")
-def get_heatmap(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    """Get chunk usage heatmap for a spec."""
-    actual_id = domain_id or spec_id
+@app.get("/api/canon_domains/{canon_domain_id}/heatmap")
+def get_heatmap(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Get chunk usage heatmap for a canon_domain."""
+    actual_id = domain_id or canon_domain_id
     try:
         hid = UUID(actual_id)
     except Exception:
@@ -2630,15 +2630,15 @@ def get_heatmap(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
 
 
 @app.get("/api/canon-domains/{domain_id}/coverage")
-@app.get("/api/specs/{spec_id}/coverage")
-def get_coverage(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    """Get spec coverage report."""
-    actual_id = domain_id or spec_id
+@app.get("/api/canon_domains/{canon_domain_id}/coverage")
+def get_coverage(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Get canon_domain coverage report."""
+    actual_id = domain_id or canon_domain_id
     try:
         hid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    return store.get_spec_coverage(hid)
+    return store.get_canon_domain_coverage(hid)
 
 
 @app.patch("/api/artifacts/{artifact_id}")
@@ -2727,7 +2727,7 @@ def download_artifact_docx(artifact_id: str):
         raise HTTPException(500, "python-docx not installed")
 
     doc = DocxDocument()
-    doc.add_heading(f"{record['spec_name']} — {record['skill_id'].replace('_', ' ').title()}", 0)
+    doc.add_heading(f"{record['canon_domain_name']} — {record['skill_id'].replace('_', ' ').title()}", 0)
 
     for section_key, section_value in record["sections"].items():
         doc.add_heading(section_key.replace("_", " ").title(), 2)
@@ -2741,7 +2741,7 @@ def download_artifact_docx(artifact_id: str):
     doc.save(buf)
     buf.seek(0)
 
-    filename = f"{record['spec_name'].replace(' ', '_')}_{record['skill_id']}.docx"
+    filename = f"{record['canon_domain_name'].replace(' ', '_')}_{record['skill_id']}.docx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -2775,7 +2775,7 @@ def download_artifact_pdf(artifact_id: str):
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>{record['spec_name']} — {record['skill_id'].replace('_', ' ').title()}</title>
+        <title>{record['canon_domain_name']} — {record['skill_id'].replace('_', ' ').title()}</title>
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -2789,7 +2789,7 @@ def download_artifact_pdf(artifact_id: str):
         </style>
     </head>
     <body>
-        <h1>{record['spec_name']}</h1>
+        <h1>{record['canon_domain_name']}</h1>
         <div class="subtitle">{record['skill_id'].replace('_', ' ').title()} · Generated {record['created_at'][:10]}</div>
         {sections_html}
         <script>window.onload = () => window.print();</script>
@@ -2798,25 +2798,25 @@ def download_artifact_pdf(artifact_id: str):
     return HTMLResponse(content=html)
 
 
-# --- Completeness in specs list ---
+# --- Completeness in canon_domains list ---
 
-def _completeness_score(spec: Spec) -> int:
-    """Return 0-100 completeness score for a spec."""
-    messages = store.get_key_messages(spec.id)
-    audiences = store.get_audiences(spec.id)
+def _completeness_score(canon_domain: CanonDomain) -> int:
+    """Return 0-100 completeness score for a canon_domain."""
+    messages = store.get_key_messages(canon_domain.id)
+    personas = store.get_personas(canon_domain.id)
     score = 0
-    if spec.name: score += 10
-    if spec.summary: score += 10
-    if spec.audience: score += 10
-    if spec.brand_personality: score += 10
-    if spec.positioning: score += 15
-    if spec.tagline: score += 10
-    if spec.differentiation: score += 10
-    headlines = [m for m in messages if str(m.assertion_type).endswith("headline")]
+    if canon_domain.name: score += 10
+    if canon_domain.summary: score += 10
+    if canon_domain.audience: score += 10
+    if canon_domain.brand_personality: score += 10
+    if canon_domain.positioning: score += 15
+    if canon_domain.tagline: score += 10
+    if canon_domain.differentiation: score += 10
+    headlines = [m for m in messages if str(m.section_type).endswith("headline")]
     if headlines: score += 10
-    benefits = [m for m in messages if str(m.assertion_type).endswith("benefit")]
+    benefits = [m for m in messages if str(m.section_type).endswith("benefit")]
     if benefits: score += 10
-    if audiences: score += 5
+    if personas: score += 5
     return min(score, 100)
 
 
@@ -2873,8 +2873,8 @@ def list_workspaces(auth: AuthContext = Depends(require_read)):
     workspaces = store.list_workspaces()
     for ws in workspaces:
         ws["token_usage"] = store.get_token_usage_summary(workspace_id=ws["id"])
-        specs = store.list_specs(workspace_id=ws["id"])
-        ws["spec_count"] = len(specs)
+        canon_domains = store.list_canon_domains(workspace_id=ws["id"])
+        ws["spec_count"] = len(canon_domains)
     return workspaces
 
 
@@ -2894,7 +2894,7 @@ def get_workspace(workspace_id: str, auth: AuthContext = Depends(require_read)):
     if not ws:
         raise HTTPException(404, "Workspace not found")
     ws["token_usage"] = store.get_token_usage_summary(workspace_id=ws["id"])
-    ws["spec_count"] = len(store.list_specs(workspace_id=ws["id"]))
+    ws["spec_count"] = len(store.list_canon_domains(workspace_id=ws["id"]))
     return ws
 
 
@@ -3063,11 +3063,11 @@ _ARTIFACT_SECTION_META = {
     "benefit":      {"label": "Benefit",      "color": "#10b981", "bg": "rgba(16,185,129,.12)"},
     "use_case":     {"label": "Use Case",     "color": "#06b6d4", "bg": "rgba(6,182,212,.12)"},
     "proof_point":  {"label": "Proof Point",  "color": "#3b82f6", "bg": "rgba(59,130,246,.12)"},
-    "qa_pair":    {"label": "QAPair",    "color": "#ef4444", "bg": "rgba(239,68,68,.12)"},
+    "objection":    {"label": "Objection",    "color": "#ef4444", "bg": "rgba(239,68,68,.12)"},
     "social_proof": {"label": "Social Proof", "color": "#f59e0b", "bg": "rgba(245,158,11,.12)"},
     "positioning":  {"label": "Positioning",  "color": "#64748b", "bg": "rgba(100,116,139,.12)"},
 }
-_ARTIFACT_SECTION_ORDER = ["headline", "subhead", "benefit", "use_case", "proof_point", "qa_pair", "social_proof", "positioning"]
+_ARTIFACT_SECTION_ORDER = ["headline", "subhead", "benefit", "use_case", "proof_point", "objection", "social_proof", "positioning"]
 _ARTIFACT_TYPE_LABELS = {
     "one_pager": "One Pager",
     "social_posts": "Social Posts",
@@ -3090,13 +3090,13 @@ def serve_presentation(artifact_id: str):
                 raise HTTPException(404, "Artifact not found")
             
             renderer = get_renderer("reveal")
-            context = {"spec_name": record.spec_name or "Untitled"}
+            context = {"canon_domain_name": record.canon_domain_name or "Untitled"}
             
-            # Try to load workspace brand if possible (requires joining to spec)
-            from src.models import Spec
-            spec = s.query(Spec).filter(Spec.id == record.spec_id).first()
-            if spec and spec.workspace_id:
-                brand = store.get_workspace_brand(spec.workspace_id)
+            # Try to load workspace brand if possible (requires joining to canon_domain)
+            from src.models import CanonDomain
+            canon_domain = s.query(CanonDomain).filter(CanonDomain.id == record.canon_domain_id).first()
+            if canon_domain and canon_domain.workspace_id:
+                brand = store.get_workspace_brand(canon_domain.workspace_id)
                 if brand:
                     context["brand_settings"] = brand
                     
@@ -3106,69 +3106,69 @@ def serve_presentation(artifact_id: str):
         raise HTTPException(500, f"Error rendering presentation: {e}")
 
 
-@app.get("/artifact/{artifact_type}/{spec_id}", response_class=HTMLResponse)
+@app.get("/artifact/{artifact_type}/{canon_domain_id}", response_class=HTMLResponse)
 def serve_artifact(
     request: Request,
     artifact_type: str,
-    spec_id: str,
+    canon_domain_id: str,
     stage: str = "awareness",
     channels: str = "linkedin",
     competitor: str = "",
     auth: AuthContext = Depends(get_auth_context),
 ):
-    """Serve a standalone HTML artifact page for a message spec."""
+    """Serve a standalone HTML artifact page for a message canon_domain."""
     if settings.auth_enabled and "read" not in auth.scopes:
         raise HTTPException(403, "Read scope required to view artifacts.")
     try:
-        hid = UUID(spec_id)
+        hid = UUID(canon_domain_id)
     except ValueError:
-        raise HTTPException(400, "Invalid spec_id UUID")
+        raise HTTPException(400, "Invalid canon_domain_id UUID")
 
     valid_types = list(_ARTIFACT_TYPE_LABELS.keys())
     if artifact_type not in valid_types:
         raise HTTPException(400, f"Unknown artifact_type. Use: {', '.join(valid_types)}")
 
-    spec = store.get_spec(hid)
-    if not spec:
-        raise HTTPException(404, "Spec not found")
+    canon_domain = store.get_canon_domain(hid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain not found")
 
     messages = store.get_key_messages(hid)
-    audiences = store.get_audiences(hid)
+    personas = store.get_personas(hid)
 
     if artifact_type == "one_pager":
         grouped: dict[str, list] = {}
         for m in messages:
-            st = str(m.assertion_type).split(".")[-1].lower().replace(" ", "_")
+            st = str(m.section_type).split(".")[-1].lower().replace(" ", "_")
             grouped.setdefault(st, []).append(m.content)
-        synced = spec.last_synced.strftime("%Y-%m-%d") if spec.last_synced else "—"
+        synced = canon_domain.last_synced.strftime("%Y-%m-%d") if canon_domain.last_synced else "—"
         return templates.TemplateResponse(request, "artifact_visual.html", {
-            "spec": spec,
-            "domain": spec,
+            "canon_domain": canon_domain,
+            "domain": canon_domain,
             "grouped": grouped,
-            "audiences": audiences,
+            "personas": personas,
             "section_meta": _ARTIFACT_SECTION_META,
             "section_order": _ARTIFACT_SECTION_ORDER,
             "message_count": len(messages),
             "entry_count": len(messages),
-            "audience_count": len(audiences),
+            "audience_count": len(personas),
             "artifact_type_label": "One Pager",
             "synced_date": synced,
         })
 
     grouped_legacy: dict[str, list] = {}
     for m in messages:
-        key = str(m.assertion_type).replace("_", " ").title()
+        key = str(m.section_type).replace("_", " ").title()
         grouped_legacy.setdefault(key, []).append(m.content)
 
     if artifact_type == "social_posts":
         target = channels.split(",")
-        html = _render_social_posts(spec, messages, target)
+        html = _render_social_posts(canon_domain, messages, target)
     elif artifact_type == "battlecard":
-        html = _render_battlecard(spec, messages, competitor or "Competitor")
+        html = _render_battlecard(canon_domain, messages, competitor or "Competitor")
     elif artifact_type == "email_sequence":
-        html = _render_email_sequence(spec, messages)
+        html = _render_email_sequence(canon_domain, messages)
     else:
-        html = _render_email_template(spec, messages, stage)
+        html = _render_email_template(canon_domain, messages, stage)
 
     return HTMLResponse(content=html)
 
@@ -3179,7 +3179,7 @@ _SECTION_META = {
     "Benefit":     {"icon": "◉", "color": "#059669", "bg": "#ecfdf5"},
     "Use Case":    {"icon": "⬡", "color": "#0891b2", "bg": "#ecfeff"},
     "Proof Point": {"icon": "◆", "color": "#0284c7", "bg": "#e0f2fe"},
-    "QAPair":   {"icon": "◇", "color": "#dc2626", "bg": "#fef2f2"},
+    "Objection":   {"icon": "◇", "color": "#dc2626", "bg": "#fef2f2"},
     "Social Proof":{"icon": "★", "color": "#d97706", "bg": "#fffbeb"},
     "Positioning": {"icon": "◎", "color": "#475569", "bg": "#f8fafc"},
 }
@@ -3199,7 +3199,7 @@ _BASE_STYLES = """
   .hero-label { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 12px; border-radius: 100px; margin-bottom: 20px; }
   .hero h1 { font-size: 42px; font-weight: 800; color: #fff; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 12px; position: relative; }
   .hero-tagline { font-size: 18px; color: rgba(255,255,255,0.65); font-weight: 400; line-height: 1.5; margin-bottom: 24px; position: relative; max-width: 580px; }
-  .hero-audience { display: inline-block; background: rgba(99,102,241,0.25); border: 1px solid rgba(99,102,241,0.4); color: #a5b4fc; font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 100px; position: relative; }
+  .hero-persona { display: inline-block; background: rgba(99,102,241,0.25); border: 1px solid rgba(99,102,241,0.4); color: #a5b4fc; font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 100px; position: relative; }
   .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04); }
   .card-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
   .card-label::after { content: ''; flex: 1; height: 1px; background: #f1f5f9; }
@@ -3214,11 +3214,11 @@ _BASE_STYLES = """
   .msg-item:last-child { border-bottom: none; padding-bottom: 0; }
   .msg-num { min-width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; margin-top: 1px; flex-shrink: 0; }
   .msg-text { font-size: 13.5px; color: #334155; line-height: 1.5; }
-  .audiences-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-  .audience-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; background: #fafafa; }
-  .audience-avatar { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 15px; margin-bottom: 12px; }
-  .audience-name { font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 4px; }
-  .audience-desc { font-size: 12.5px; color: #64748b; line-height: 1.5; margin-bottom: 12px; }
+  .personas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  .persona-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; background: #fafafa; }
+  .persona-avatar { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+  .persona-name { font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 4px; }
+  .persona-desc { font-size: 12.5px; color: #64748b; line-height: 1.5; margin-bottom: 12px; }
   .pain-tag { display: inline-block; background: #fef2f2; color: #dc2626; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 6px; margin: 2px 2px 0 0; }
   .footer { text-align: center; margin-top: 32px; }
   .footer-badge { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e2e8f0; color: #94a3b8; font-size: 11px; font-weight: 500; padding: 6px 14px; border-radius: 100px; }
@@ -3260,27 +3260,27 @@ def _base_html(title: str, body: str, extra_styles: str = "") -> str:
 </html>"""
 
 
-def _render_one_pager(spec, grouped: dict, audiences: list) -> str:
-    last_synced = spec.last_synced.strftime("%Y-%m-%d") if spec.last_synced else "—"
+def _render_one_pager(canon_domain, grouped: dict, personas: list) -> str:
+    last_synced = canon_domain.last_synced.strftime("%Y-%m-%d") if canon_domain.last_synced else "—"
     msg_count = sum(len(v) for v in grouped.values())
 
     # Hero
     hero = f"""<div class="hero">
-      <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Message Spec</div>
-      <h1>{spec.name}</h1>
-      <p class="hero-tagline">{spec.tagline or spec.positioning[:100] if spec.positioning else ""}</p>
-      {"<span class='hero-audience'>"+spec.audience+"</span>" if spec.audience else ""}
+      <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Message CanonDomain</div>
+      <h1>{canon_domain.name}</h1>
+      <p class="hero-tagline">{canon_domain.tagline or canon_domain.positioning[:100] if canon_domain.positioning else ""}</p>
+      {"<span class='hero-persona'>"+canon_domain.audience+"</span>" if canon_domain.audience else ""}
     </div>"""
 
     # Positioning card
     pos_card = f"""<div class="card">
       <div class="card-label">Positioning</div>
-      <p class="positioning-text">{spec.positioning or "—"}</p>
-      {"<p class='diff-text'>"+spec.differentiation+"</p>" if spec.differentiation else ""}
+      <p class="positioning-text">{canon_domain.positioning or "—"}</p>
+      {"<p class='diff-text'>"+canon_domain.differentiation+"</p>" if canon_domain.differentiation else ""}
     </div>"""
 
     # Key messages grid
-    section_order = ["Headline", "Subhead", "Benefit", "Use Case", "Proof Point", "QAPair", "Social Proof", "Positioning"]
+    section_order = ["Headline", "Subhead", "Benefit", "Use Case", "Proof Point", "Objection", "Social Proof", "Positioning"]
     blocks = ""
     for sec in section_order:
         msgs = grouped.get(sec, [])
@@ -3297,36 +3297,36 @@ def _render_one_pager(spec, grouped: dict, audiences: list) -> str:
       </div>"""
 
     msgs_card = f"""<div class="card">
-      <div class="card-label">Spec Entries &nbsp;·&nbsp; {msg_count} total</div>
+      <div class="card-label">CanonDomain Entries &nbsp;·&nbsp; {msg_count} total</div>
       <div class="messages-grid">{blocks}</div>
     </div>"""
 
     # Personas
     audience_items = ""
-    for p in audiences:
+    for p in personas:
         initials = "".join(w[0].upper() for w in p.name.split()[:2])
-        pain_tags = "".join(f'<span class="pain-tag">{qa[:40]}</span>' for qa in (p.qa_pairs or [])[:3])
-        audience_items += f"""<div class="audience-card">
-        <div class="audience-avatar">{initials}</div>
-        <div class="audience-name">{p.name}</div>
-        <div class="audience-desc">{(p.description or "")[:160]}</div>
+        pain_tags = "".join(f'<span class="pain-tag">{qa[:40]}</span>' for qa in (p.objections or [])[:3])
+        audience_items += f"""<div class="persona-card">
+        <div class="persona-avatar">{initials}</div>
+        <div class="persona-name">{p.name}</div>
+        <div class="persona-desc">{(p.description or "")[:160]}</div>
         {pain_tags}
       </div>"""
 
     audiences_card = f"""<div class="card">
-      <div class="card-label">Target Personas &nbsp;·&nbsp; {len(audiences)} defined</div>
-      <div class="audiences-grid">{audience_items}</div>
+      <div class="card-label">Target Personas &nbsp;·&nbsp; {len(personas)} defined</div>
+      <div class="personas-grid">{audience_items}</div>
     </div>"""
 
     footer = f"""<div class="footer">
-      <span class="footer-badge">⬡ msgstack MCP &nbsp;·&nbsp; {last_synced} &nbsp;·&nbsp; {msg_count} messages &nbsp;·&nbsp; {len(audiences)} audiences</span>
+      <span class="footer-badge">⬡ msgstack MCP &nbsp;·&nbsp; {last_synced} &nbsp;·&nbsp; {msg_count} messages &nbsp;·&nbsp; {len(personas)} personas</span>
     </div>"""
 
     body = hero + pos_card + msgs_card + audiences_card + footer
-    return _base_html(f"{spec.name} — Messaging One Pager", body)
+    return _base_html(f"{canon_domain.name} — Messaging One Pager", body)
 
 
-def _render_social_posts(spec, messages: list, channels: list) -> str:
+def _render_social_posts(canon_domain, messages: list, channels: list) -> str:
     posts = []
     for m in messages:
         for ch in channels:
@@ -3334,7 +3334,7 @@ def _render_social_posts(spec, messages: list, channels: list) -> str:
             if variant:
                 posts.append({
                     "channel": ch.title(),
-                    "section": str(m.assertion_type).replace("_", " ").title(),
+                    "section": str(m.section_type).replace("_", " ").title(),
                     "content": variant,
                     "priority": m.priority,
                 })
@@ -3342,9 +3342,9 @@ def _render_social_posts(spec, messages: list, channels: list) -> str:
     ch_label = ", ".join(c.title() for c in channels)
     hero = f"""<div class="hero">
       <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Social Posts</div>
-      <h1>{spec.name}</h1>
+      <h1>{canon_domain.name}</h1>
       <p class="hero-tagline">{len(posts)} posts ready for {ch_label}</p>
-      {"<span class='hero-audience'>"+spec.audience+"</span>" if spec.audience else ""}
+      {"<span class='hero-persona'>"+canon_domain.audience+"</span>" if canon_domain.audience else ""}
     </div>"""
 
     if not posts:
@@ -3365,31 +3365,31 @@ def _render_social_posts(spec, messages: list, channels: list) -> str:
       </div>"""
 
     footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP</span></div>'
-    return _base_html(f"{spec.name} — Social Posts", hero + posts_html + footer)
+    return _base_html(f"{canon_domain.name} — Social Posts", hero + posts_html + footer)
 
 
-def _render_email_template(spec, messages: list, stage: str) -> str:
-    headlines = [m for m in messages if str(m.assertion_type) == "headline"]
-    benefits  = [m for m in messages if str(m.assertion_type) == "benefit"]
-    proofs    = [m for m in messages if str(m.assertion_type) == "proof_point"]
+def _render_email_template(canon_domain, messages: list, stage: str) -> str:
+    headlines = [m for m in messages if str(m.section_type) == "headline"]
+    benefits  = [m for m in messages if str(m.section_type) == "benefit"]
+    proofs    = [m for m in messages if str(m.section_type) == "proof_point"]
 
     stage_map = {
         "awareness": {
-            "subject": headlines[0].content[:70] if headlines else (spec.tagline or ""),
-            "hook": benefits[0].content if benefits else spec.positioning,
-            "body": spec.differentiation or spec.positioning,
-            "cta": f"See how {spec.name} works →",
+            "subject": headlines[0].content[:70] if headlines else (canon_domain.tagline or ""),
+            "hook": benefits[0].content if benefits else canon_domain.positioning,
+            "body": canon_domain.differentiation or canon_domain.positioning,
+            "cta": f"See how {canon_domain.name} works →",
         },
         "consideration": {
-            "subject": f"How teams like yours use {spec.name}",
-            "hook": proofs[0].content if proofs else (benefits[0].content if benefits else spec.positioning),
-            "body": spec.positioning,
+            "subject": f"How teams like yours use {canon_domain.name}",
+            "hook": proofs[0].content if proofs else (benefits[0].content if benefits else canon_domain.positioning),
+            "body": canon_domain.positioning,
             "cta": "Book a 30-min demo →",
         },
         "decision": {
-            "subject": f"Ready to get started with {spec.name}?",
-            "hook": (benefits[0].variants or {}).get("email", benefits[0].content) if benefits else spec.positioning,
-            "body": spec.differentiation or spec.positioning,
+            "subject": f"Ready to get started with {canon_domain.name}?",
+            "hook": (benefits[0].variants or {}).get("email", benefits[0].content) if benefits else canon_domain.positioning,
+            "body": canon_domain.differentiation or canon_domain.positioning,
             "cta": "Start your free trial →",
         },
     }
@@ -3402,7 +3402,7 @@ def _render_email_template(spec, messages: list, stage: str) -> str:
 
     hero = f"""<div class="hero">
       <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Email Template</div>
-      <h1>{spec.name}</h1>
+      <h1>{canon_domain.name}</h1>
       <p class="hero-tagline">{stage.title()} stage · outbound email</p>
     </div>"""
 
@@ -3417,13 +3417,13 @@ def _render_email_template(spec, messages: list, stage: str) -> str:
     </div>"""
 
     footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP</span></div>'
-    return _base_html(f"{spec.name} — Email ({stage.title()})", hero + email_card + footer)
+    return _base_html(f"{canon_domain.name} — Email ({stage.title()})", hero + email_card + footer)
 
 
-def _render_battlecard(spec, messages: list, competitor: str) -> str:
-    qa_pairs = [m for m in messages if str(m.assertion_type).endswith("qa_pair")]
-    proofs = [m for m in messages if str(m.assertion_type).endswith("proof_point")]
-    benefits = [m for m in messages if str(m.assertion_type).endswith("benefit")]
+def _render_battlecard(canon_domain, messages: list, competitor: str) -> str:
+    objections = [m for m in messages if str(m.section_type).endswith("objection")]
+    proofs = [m for m in messages if str(m.section_type).endswith("proof_point")]
+    benefits = [m for m in messages if str(m.section_type).endswith("benefit")]
 
     extra = """
   .bc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -3436,25 +3436,25 @@ def _render_battlecard(spec, messages: list, competitor: str) -> str:
   .bc-col.theirs .bc-col-title { color: #dc2626; }
   .bc-row { font-size: 13.5px; color: #334155; padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.06); line-height: 1.5; }
   .bc-row:last-child { border-bottom: none; }
-  .qa_pair-row { padding: 10px 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
-  .qa_pair-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; margin-bottom: 4px; }
-  .qa_pair-text { font-size: 13.5px; color: #1e293b; line-height: 1.5; }
+  .objection-row { padding: 10px 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; }
+  .objection-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; margin-bottom: 4px; }
+  .objection-text { font-size: 13.5px; color: #1e293b; line-height: 1.5; }
 """
     hero = f"""<div class="hero">
       <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Battlecard</div>
-      <h1>{spec.name} vs {competitor}</h1>
-      <p class="hero-tagline">{spec.tagline or spec.positioning[:80] if spec.positioning else ""}</p>
+      <h1>{canon_domain.name} vs {competitor}</h1>
+      <p class="hero-tagline">{canon_domain.tagline or canon_domain.positioning[:80] if canon_domain.positioning else ""}</p>
     </div>"""
 
     our_items = "".join(f'<div class="bc-row">✓ {b.content}</div>' for b in benefits[:5])
-    their_items = "".join(f'<div class="bc-row">✗ {o.content}</div>' for o in qa_pairs[:4]) or \
-        '<div class="bc-row" style="color:#94a3b8;">Add competitor weaknesses via qa_pair messages</div>'
+    their_items = "".join(f'<div class="bc-row">✗ {o.content}</div>' for o in objections[:4]) or \
+        '<div class="bc-row" style="color:#94a3b8;">Add competitor weaknesses via objection messages</div>'
 
     compare_card = f"""<div class="card">
       <div class="card-label">Head-to-Head Comparison</div>
       <div class="bc-grid">
         <div class="bc-col ours">
-          <div class="bc-col-title">✦ {spec.name}</div>
+          <div class="bc-col-title">✦ {canon_domain.name}</div>
           {our_items or '<div class="bc-row" style="color:#94a3b8;">Add benefit messages</div>'}
         </div>
         <div class="bc-col theirs">
@@ -3466,8 +3466,8 @@ def _render_battlecard(spec, messages: list, competitor: str) -> str:
 
     pos_card = f"""<div class="card">
       <div class="card-label">Positioning Against {competitor}</div>
-      <p class="positioning-text">{spec.positioning or "—"}</p>
-      {"<p class='diff-text'>" + spec.differentiation + "</p>" if spec.differentiation else ""}
+      <p class="positioning-text">{canon_domain.positioning or "—"}</p>
+      {"<p class='diff-text'>" + canon_domain.differentiation + "</p>" if canon_domain.differentiation else ""}
     </div>"""
 
     proof_items = "".join(f'<div class="bc-row">◆ {p.content}</div>' for p in proofs[:5])
@@ -3476,23 +3476,23 @@ def _render_battlecard(spec, messages: list, competitor: str) -> str:
       {proof_items or '<p style="color:#94a3b8;font-size:13px;">Add proof_point messages to populate this section</p>'}
     </div>""" if proofs else ""
 
-    obj_items = "".join(f'''<div class="qa_pair-row">
-        <div class="qa_pair-label">QAPair {i+1}</div>
-        <div class="qa_pair-text">{o.content}</div>
-      </div>''' for i, o in enumerate(qa_pairs[:6]))
+    obj_items = "".join(f'''<div class="objection-row">
+        <div class="objection-label">Objection {i+1}</div>
+        <div class="objection-text">{o.content}</div>
+      </div>''' for i, o in enumerate(objections[:6]))
     obj_card = f"""<div class="card">
-      <div class="card-label">QAPair Responses</div>
-      {obj_items or '<p style="color:#94a3b8;font-size:13px;">Add qa_pair messages to populate this section</p>'}
+      <div class="card-label">Objection Responses</div>
+      {obj_items or '<p style="color:#94a3b8;font-size:13px;">Add objection messages to populate this section</p>'}
     </div>"""
 
     footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP · Battlecard</span></div>'
-    return _base_html(f"{spec.name} vs {competitor} — Battlecard", hero + compare_card + pos_card + proof_card + obj_card + footer, extra)
+    return _base_html(f"{canon_domain.name} vs {competitor} — Battlecard", hero + compare_card + pos_card + proof_card + obj_card + footer, extra)
 
 
-def _render_email_sequence(spec, messages: list) -> str:
-    headlines = [m for m in messages if str(m.assertion_type).endswith("headline")]
-    benefits = [m for m in messages if str(m.assertion_type).endswith("benefit")]
-    proofs = [m for m in messages if str(m.assertion_type).endswith("proof_point")]
+def _render_email_sequence(canon_domain, messages: list) -> str:
+    headlines = [m for m in messages if str(m.section_type).endswith("headline")]
+    benefits = [m for m in messages if str(m.section_type).endswith("benefit")]
+    proofs = [m for m in messages if str(m.section_type).endswith("proof_point")]
 
     extra = """
   .seq-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
@@ -3509,27 +3509,27 @@ def _render_email_sequence(spec, messages: list) -> str:
     stages = [
         {
             "num": "1", "color": "#6366f1", "stage": "Awareness",
-            "subject": headlines[0].content[:70] if headlines else (spec.tagline or spec.name),
-            "body": benefits[0].content if benefits else spec.positioning or "",
-            "cta": f"Learn how {spec.name} works →",
+            "subject": headlines[0].content[:70] if headlines else (canon_domain.tagline or canon_domain.name),
+            "body": benefits[0].content if benefits else canon_domain.positioning or "",
+            "cta": f"Learn how {canon_domain.name} works →",
         },
         {
             "num": "2", "color": "#0891b2", "stage": "Consideration",
-            "subject": f"How teams like yours use {spec.name}",
-            "body": proofs[0].content if proofs else (benefits[1].content if len(benefits) > 1 else spec.differentiation or spec.positioning or ""),
+            "subject": f"How teams like yours use {canon_domain.name}",
+            "body": proofs[0].content if proofs else (benefits[1].content if len(benefits) > 1 else canon_domain.differentiation or canon_domain.positioning or ""),
             "cta": "See the case study →",
         },
         {
             "num": "3", "color": "#059669", "stage": "Decision",
-            "subject": f"Ready to get started with {spec.name}?",
-            "body": spec.differentiation or spec.positioning or "",
+            "subject": f"Ready to get started with {canon_domain.name}?",
+            "body": canon_domain.differentiation or canon_domain.positioning or "",
             "cta": "Start your free trial →",
         },
     ]
 
     hero = f"""<div class="hero">
       <div class="hero-label">⬡ MsgStack &nbsp;·&nbsp; Email Sequence</div>
-      <h1>{spec.name}</h1>
+      <h1>{canon_domain.name}</h1>
       <p class="hero-tagline">3-stage nurture sequence · Awareness → Consideration → Decision</p>
     </div>"""
 
@@ -3549,11 +3549,11 @@ def _render_email_sequence(spec, messages: list) -> str:
     </div>"""
 
     footer = '<div class="footer"><span class="footer-badge">⬡ msgstack MCP · Email Sequence</span></div>'
-    return _base_html(f"{spec.name} — Email Sequence", hero + seq_card + footer, extra)
+    return _base_html(f"{canon_domain.name} — Email Sequence", hero + seq_card + footer, extra)
 
 
-@app.get("/api/preview/{skill_id}/{spec_id}")
-def get_artifact_preview(skill_id: str, spec_id: str, request: Request):
+@app.get("/api/preview/{skill_id}/{canon_domain_id}")
+def get_artifact_preview(skill_id: str, canon_domain_id: str, request: Request):
     """Get Prefab preview HTML for an artifact."""
     from src.pipeline.generator import ArtifactGenerator
     from src.artifacts.prefab_generator import build_artifact_preview
@@ -3561,8 +3561,8 @@ def get_artifact_preview(skill_id: str, spec_id: str, request: Request):
     generator = ArtifactGenerator(store, skills)
 
     try:
-        artifact = generator.generate(skill_id, spec_id, {})
-        prefab_app = build_artifact_preview(skill_id, artifact.sections, artifact.spec_name, artifact.spec_id)
+        artifact = generator.generate(skill_id, canon_domain_id, {})
+        prefab_app = build_artifact_preview(skill_id, artifact.sections, artifact.canon_domain_name, artifact.canon_domain_id)
         
         # Check if it's an HTMX request
         if request.headers.get("HX-Request"):
@@ -3591,7 +3591,7 @@ def get_artifact_image(artifact_id: str):
     <div style="display: flex; flex-direction: column; width: 100%; height: 100%; background-color: white; padding: 40px; font-family: 'WorkSans';">
         <div style="display: flex; align-items: center; margin-bottom: 20px;">
             <div style="width: 40px; height: 40px; background-color: #6366f1; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 20px; margin-right: 15px;">M</div>
-            <div style="font-size: 24px; font-weight: 700; color: #1e293b;">{record['spec_name']}</div>
+            <div style="font-size: 24px; font-weight: 700; color: #1e293b;">{record['canon_domain_name']}</div>
         </div>
         <div style="font-size: 48px; font-weight: 800; color: #0f172a; margin-bottom: 10px; line-height: 1.1;">{record['skill_id'].replace('_', ' ').title()}</div>
         <div style="font-size: 20px; color: #64748b; margin-bottom: 30px;">Generated via MsgStack MCP</div>
@@ -3760,10 +3760,10 @@ def resync_source_file(connection_id: str, drive_file_id: str):
     sf = store.get_source_file_by_drive_id(connection_id, drive_file_id)
     if not sf:
         raise HTTPException(404, "Source file not found")
-    # Delete the existing spec so a fresh one is created on re-ingest
-    if sf.get("spec_id"):
+    # Delete the existing canon_domain so a fresh one is created on re-ingest
+    if sf.get("canon_domain_id"):
         try:
-            store.delete_spec(UUID(sf["spec_id"]))
+            store.delete_canon_domain(UUID(sf["canon_domain_id"]))
         except Exception:
             pass
     # Reset to error so the error-file retry loop picks it up on next sync
@@ -3788,7 +3788,7 @@ def resync_source_file(connection_id: str, drive_file_id: str):
 @app.get("/artifacts", response_class=HTMLResponse)
 @app.get("/skills", response_class=HTMLResponse)
 @app.get("/settings", response_class=HTMLResponse)
-@app.get("/spec-detail", response_class=HTMLResponse)
+@app.get("/canon_domain-detail", response_class=HTMLResponse)
 @app.get("/connections", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(request, "dashboard.html")
@@ -3878,18 +3878,18 @@ class BulkStatusUpdate(BaseModel):
 
 
 @app.patch("/api/canon-domains/{domain_id}/entries/bulk-status")
-@app.patch("/api/specs/{spec_id}/messages/bulk-status")
-def bulk_update_message_status(data: BulkStatusUpdate, spec_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
+@app.patch("/api/canon_domains/{canon_domain_id}/messages/bulk-status")
+def bulk_update_message_status(data: BulkStatusUpdate, canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None, auth: AuthContext = Depends(require_write)):
     """Bulk approve/lock/flag multiple entries at once."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    spec = store.get_spec(spec_uuid)
-    if not spec:
-        raise HTTPException(404, "Spec domain not found")
-    if not auth.has_department_access(spec.department):
+    canon_domain = store.get_canon_domain(spec_uuid)
+    if not canon_domain:
+        raise HTTPException(404, "CanonDomain domain not found")
+    if not auth.has_department_access(canon_domain.department):
         raise HTTPException(403, f"You do not have permission to write to this domain's department.")
     try:
         count = store.bulk_update_message_status(
@@ -3903,33 +3903,33 @@ def bulk_update_message_status(data: BulkStatusUpdate, spec_id: Optional[str] = 
 # ── v0.7: Review Log ──────────────────────────────────────────────────────────
 
 @app.get("/api/canon-domains/{domain_id}/review-log")
-@app.get("/api/specs/{spec_id}/review-log")
-def get_message_review_log(limit: int = Query(50, ge=1, le=200), spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    """Return review log for a spec (approvals, locks, reviews)."""
-    actual_id = domain_id or spec_id
+@app.get("/api/canon_domains/{canon_domain_id}/review-log")
+def get_message_review_log(limit: int = Query(50, ge=1, le=200), canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Return review log for a canon_domain (approvals, locks, reviews)."""
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    if not store.get_spec(spec_uuid):
-        raise HTTPException(404, "Spec domain not found")
+    if not store.get_canon_domain(spec_uuid):
+        raise HTTPException(404, "CanonDomain domain not found")
     return store.get_review_log(actual_id, limit=limit)
 
 
-# ── v0.7: Mark Spec Domain Reviewed ──────────────────────────────────────────
+# ── v0.7: Mark CanonDomain Domain Reviewed ──────────────────────────────────────────
 
 @app.post("/api/canon-domains/{domain_id}/mark-reviewed")
-@app.post("/api/specs/{spec_id}/mark-reviewed")
-def mark_spec_reviewed_v2(reviewed_by: Optional[str] = Query(None), spec_id: Optional[str] = None, domain_id: Optional[str] = None):
+@app.post("/api/canon_domains/{canon_domain_id}/mark-reviewed")
+def mark_spec_reviewed_v2(reviewed_by: Optional[str] = Query(None), canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
     """Mark a domain as reviewed (updates last_reviewed, appends review log)."""
-    actual_id = domain_id or spec_id
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
     result = store.mark_spec_reviewed(str(spec_uuid), reviewed_by or "admin")
     if not result:
-        raise HTTPException(404, "Spec domain not found")
+        raise HTTPException(404, "CanonDomain domain not found")
     return {"ok": True, **result}
 
 
@@ -3959,20 +3959,20 @@ def rate_artifact(artifact_id: str, data: ArtifactRatingCreate):
 
 
 @app.get("/api/canon-domains/{domain_id}/usage-stats")
-@app.get("/api/specs/{spec_id}/usage-stats")
-def get_spec_usage_stats(spec_id: Optional[str] = None, domain_id: Optional[str] = None):
-    """Return assertion usage heatmap — times used and avg rating, sorted by usage."""
-    actual_id = domain_id or spec_id
+@app.get("/api/canon_domains/{canon_domain_id}/usage-stats")
+def get_spec_usage_stats(canon_domain_id: Optional[str] = None, domain_id: Optional[str] = None):
+    """Return canon_entry usage heatmap — times used and avg rating, sorted by usage."""
+    actual_id = domain_id or canon_domain_id
     try:
         spec_uuid = UUID(actual_id)
     except Exception:
         raise HTTPException(400, "Invalid ID")
-    if not store.get_spec(spec_uuid):
-        raise HTTPException(404, "Spec domain not found")
+    if not store.get_canon_domain(spec_uuid):
+        raise HTTPException(404, "CanonDomain domain not found")
     return store.get_message_usage_stats(actual_id)
 
 
-# --- Spec Navigator Chat ---
+# --- CanonDomain Navigator Chat ---
 
 class ChatRequest(BaseModel):
     query: str
@@ -3981,13 +3981,13 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 def api_chat_stream(req: ChatRequest, auth: AuthContext = Depends(get_auth_context)):
-    """SSE streaming endpoint for the Spec Navigator conversational chat."""
+    """SSE streaming endpoint for the CanonDomain Navigator conversational chat."""
     try:
-        from src.pipeline.agents import SpecNavigator
+        from src.pipeline.agents import CanonNavigator
         from src.config import llm_client
 
         client = llm_client()
-        navigator = SpecNavigator(client, store)
+        navigator = CanonNavigator(client, store)
 
         def event_generator():
             for chunk in navigator.chat_stream(req.query, workspace_id=req.workspace_id):

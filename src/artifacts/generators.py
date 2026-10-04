@@ -27,7 +27,7 @@ from prefab_ui.components import (
 from prefab_ui.actions.mcp import CallTool, SendMessage
 
 from src.store import Store
-from src.models import AssertionType
+from src.models import SectionType
 
 
 def _get_store() -> Store:
@@ -36,19 +36,19 @@ def _get_store() -> Store:
     return store
 
 
-def build_one_pager(spec_id: str, app_config=None):
+def build_one_pager(canon_domain_id: str, app_config=None):
     from prefab_ui import PrefabApp
 
     store = _get_store()
-    spec = store.get_spec(UUID(spec_id))
-    if not spec:
-        return {"error": f"Spec {spec_id} not found"}
-    messages = store.get_key_messages(UUID(spec_id))
-    audiences = store.get_audiences(UUID(spec_id))
+    canon_domain = store.get_canon_domain(UUID(canon_domain_id))
+    if not canon_domain:
+        return {"error": f"CanonDomain {canon_domain_id} not found"}
+    messages = store.get_key_messages(UUID(canon_domain_id))
+    personas = store.get_personas(UUID(canon_domain_id))
 
     table_data = [
         {
-            "section": str(m.assertion_type).replace("_", " ").title(),
+            "section": str(m.section_type).replace("_", " ").title(),
             "message": m.content[:100] + ("..." if len(m.content) > 100 else ""),
             "priority": str(m.priority),
             "channels": ", ".join(str(c) for c in m.channels),
@@ -56,34 +56,34 @@ def build_one_pager(spec_id: str, app_config=None):
         for m in messages
     ]
 
-    with Page(title=spec.name) as view:
+    with Page(title=canon_domain.name) as view:
         with Card():
             with CardHeader():
                 with Row(align="center", gap=3):
-                    CardTitle(spec.name)
-                    if spec.status:
-                        Badge(spec.status.upper(), variant="outline")
-                if spec.audience:
-                    Muted(spec.audience[:120])
+                    CardTitle(canon_domain.name)
+                    if canon_domain.status:
+                        Badge(canon_domain.status.upper(), variant="outline")
+                if canon_domain.audience:
+                    Muted(canon_domain.audience[:120])
 
         with Card():
             with CardHeader():
                 CardTitle("Positioning")
             with CardContent():
-                P(spec.positioning[:500] if spec.positioning else "Not set")
-                if spec.tagline:
+                P(canon_domain.positioning[:500] if canon_domain.positioning else "Not set")
+                if canon_domain.tagline:
                     with Row(gap=2, wrap=True):
-                        Badge("Tagline: " + spec.tagline, variant="default")
-                if spec.differentiation:
-                    Muted(spec.differentiation[:300] + ("..." if len(spec.differentiation) > 300 else ""))
+                        Badge("Tagline: " + canon_domain.tagline, variant="default")
+                if canon_domain.differentiation:
+                    Muted(canon_domain.differentiation[:300] + ("..." if len(canon_domain.differentiation) > 300 else ""))
 
         with Card():
             with CardHeader():
                 CardTitle("Key Messages")
             with CardContent():
                 with Column(gap=3):
-                    for section in AssertionType:
-                        msgs = [m for m in messages if str(m.assertion_type) == section.value]
+                    for section in SectionType:
+                        msgs = [m for m in messages if str(m.section_type) == section.value]
                         if not msgs:
                             continue
                         with Column(gap=2):
@@ -98,16 +98,16 @@ def build_one_pager(spec_id: str, app_config=None):
                 CardTitle("Personas")
             with CardContent():
                 with Row(gap=3, wrap=True):
-                    for p in audiences:
+                    for p in personas:
                         with Card():
                             with CardHeader():
                                 CardTitle(p.name)
                             with CardContent():
                                 P(p.description[:200] + ("..." if len(p.description) > 200 else ""))
-                                if p.qa_pairs:
+                                if p.objections:
                                     with Column(gap=1):
                                         Muted("Pain points:")
-                                        for pp in p.qa_pairs[:2]:
+                                        for pp in p.objections[:2]:
                                             Text("• " + pp[:80])
 
         if table_data:
@@ -133,37 +133,37 @@ def build_one_pager(spec_id: str, app_config=None):
                     Button(
                         "Use This Messaging",
                         variant="outline",
-                        on_click=SendMessage(f"Ground my next content in '{spec.name}'"),
+                        on_click=SendMessage(f"Ground my next content in '{canon_domain.name}'"),
                     )
                     Button(
                         "Generate LinkedIn Post",
                         variant="default",
-                        on_click=CallTool("generate_social_posts", arguments={"spec_id": str(spec.id), "channels": ["linkedin"]}),
+                        on_click=CallTool("generate_social_posts", arguments={"canon_domain_id": str(canon_domain.id), "channels": ["linkedin"]}),
                     )
                     Button(
                         "Generate Email",
                         variant="outline",
-                        on_click=CallTool("generate_email_template", arguments={"spec_id": str(spec.id), "stage": "awareness"}),
+                        on_click=CallTool("generate_email_template", arguments={"canon_domain_id": str(canon_domain.id), "stage": "awareness"}),
                     )
                 with Row(gap=2, align="center"):
                     Muted(
-                        f"Last synced: {spec.last_synced.strftime('%Y-%m-%d') if spec.last_synced else 'Never'}"
+                        f"Last synced: {canon_domain.last_synced.strftime('%Y-%m-%d') if canon_domain.last_synced else 'Never'}"
                     )
-                    Muted(f"• {len(messages)} messages • {len(audiences)} audiences")
+                    Muted(f"• {len(messages)} messages • {len(personas)} personas")
 
-    return PrefabApp(view=view, title=spec.name)
+    return PrefabApp(view=view, title=canon_domain.name)
 
 
-def build_social_posts(spec_id: str, channels: list[str] = None, app_config=None):
+def build_social_posts(canon_domain_id: str, channels: list[str] = None, app_config=None):
     from prefab_ui import PrefabApp
 
     channels = channels or ["linkedin"]
     store = _get_store()
-    spec = store.get_spec(UUID(spec_id))
-    if not spec:
-        return {"error": f"Spec {spec_id} not found"}
+    canon_domain = store.get_canon_domain(UUID(canon_domain_id))
+    if not canon_domain:
+        return {"error": f"CanonDomain {canon_domain_id} not found"}
 
-    messages = store.get_key_messages(UUID(spec_id))
+    messages = store.get_key_messages(UUID(canon_domain_id))
     posts = []
     for i, msg in enumerate(messages[:9]):
         variant = msg.variants.get("linkedin") if msg.variants else None
@@ -173,13 +173,13 @@ def build_social_posts(spec_id: str, channels: list[str] = None, app_config=None
             {
                 "id": f"post-{i+1}",
                 "channel": "LinkedIn",
-                "section": str(msg.assertion_type).replace("_", " ").title(),
+                "section": str(msg.section_type).replace("_", " ").title(),
                 "content": variant,
                 "priority": msg.priority,
             }
         )
 
-    with Page(title=f"Social Posts — {spec.name}") as view:
+    with Page(title=f"Social Posts — {canon_domain.name}") as view:
         with Card():
             with CardHeader():
                 with Row(align="center", gap=2):
@@ -206,47 +206,47 @@ def build_social_posts(spec_id: str, channels: list[str] = None, app_config=None
                                         "Rewrite",
                                         variant="ghost",
                                         on_click=CallTool("search_assertions", arguments={
-                                            "query": f"linkedin {post['section']} for {spec.name}",
+                                            "query": f"linkedin {post['section']} for {canon_domain.name}",
                                             "assertion_types": [post["section"].lower()],
                                             "channels": ["linkedin"],
                                         }),
                                     )
 
-    return PrefabApp(view=view, title=spec.name)
+    return PrefabApp(view=view, title=canon_domain.name)
 
 
-def build_email_template(spec_id: str, stage: str = "awareness", app_config=None):
+def build_email_template(canon_domain_id: str, stage: str = "awareness", app_config=None):
     from prefab_ui import PrefabApp
 
     stages = {"awareness": "Awareness", "consideration": "Consideration", "decision": "Decision"}
     stage_labels = stages.get(stage, "Awareness")
 
     store = _get_store()
-    spec = store.get_spec(UUID(spec_id))
-    if not spec:
-        return {"error": f"Spec {spec_id} not found"}
+    canon_domain = store.get_canon_domain(UUID(canon_domain_id))
+    if not canon_domain:
+        return {"error": f"CanonDomain {canon_domain_id} not found"}
 
-    messages = store.get_key_messages(UUID(spec_id))
-    benefits = [m for m in messages if str(m.assertion_type) == "benefit"]
-    headlines = [m for m in messages if str(m.assertion_type) == "headline"]
+    messages = store.get_key_messages(UUID(canon_domain_id))
+    benefits = [m for m in messages if str(m.section_type) == "benefit"]
+    headlines = [m for m in messages if str(m.section_type) == "headline"]
 
     stage_content = {
         "awareness": {
-            "subject": (headlines[0].content[:70] if headlines else spec.tagline or spec.positioning[:70]),
-            "hook": benefits[0].content if benefits else spec.positioning,
-            "body": f"With Acme CloudOps, {spec.differentiation[:180]}...",
+            "subject": (headlines[0].content[:70] if headlines else canon_domain.tagline or canon_domain.positioning[:70]),
+            "hook": benefits[0].content if benefits else canon_domain.positioning,
+            "body": f"With Acme CloudOps, {canon_domain.differentiation[:180]}...",
             "cta": "See how it works",
         },
         "consideration": {
             "subject": "What teams like yours are doing differently with cloud ops",
             "hook": "Teams running Acme report 60% less time on infra ops.",
-            "body": f"{spec.tagline} — {spec.positioning[:150]}",
+            "body": f"{canon_domain.tagline} — {canon_domain.positioning[:150]}",
             "cta": "Book a 30-min demo",
         },
         "decision": {
             "subject": "40% cloud cost reduction, no refactoring required",
             "hook": benefits[0].variants.get("email", benefits[0].content) if benefits else "Ready to cut costs?",
-            "body": f"We help companies like yours optimize cloud spend without touching your application. {spec.differentiation[:150]}",
+            "body": f"We help companies like yours optimize cloud spend without touching your application. {canon_domain.differentiation[:150]}",
             "cta": "Start your free trial",
         },
     }
@@ -276,7 +276,7 @@ def build_email_template(spec_id: str, stage: str = "awareness", app_config=None
                                     "Rewrite Subject",
                                     variant="ghost",
                                     on_click=CallTool("search_assertions", arguments={
-                                        "query": f"email subject {stage} for {spec.name}",
+                                        "query": f"email subject {stage} for {canon_domain.name}",
                                         "assertion_types": ["headline", "subhead"],
                                         "channels": ["email"],
                                     }),
@@ -322,7 +322,7 @@ def build_email_template(spec_id: str, stage: str = "awareness", app_config=None
                                 f"Switch to {label}",
                                 variant="ghost",
                                 size="sm",
-                                on_click=CallTool("generate_email_template", arguments={"spec_id": str(spec.id), "stage": s}),
+                                on_click=CallTool("generate_email_template", arguments={"canon_domain_id": str(canon_domain.id), "stage": s}),
                             )
 
-    return PrefabApp(view=view, title=spec.name)
+    return PrefabApp(view=view, title=canon_domain.name)

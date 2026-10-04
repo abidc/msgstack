@@ -91,20 +91,20 @@ class SyncEngine:
             for file_info in changed:
                 self._ingest_file(conn, file_info, access_token)
 
-            # Heal source files whose spec was deleted externally (e.g. via the UI or a
+            # Heal source files whose canon_domain was deleted externally (e.g. via the UI or a
             # previous orphan cleanup). Re-queue them so the error retry loop below re-ingests.
             from src.store import get_store as _get_store
             _live_store = _get_store()
             for _sf in self.store.list_source_files(connection_id):
-                if _sf.get("sync_status") == "synced" and _sf.get("spec_id"):
+                if _sf.get("sync_status") == "synced" and _sf.get("canon_domain_id"):
                     try:
-                        _spec = _live_store.get_spec(_sf["spec_id"])
+                        _spec = _live_store.get_canon_domain(_sf["canon_domain_id"])
                     except Exception:
                         _spec = None
                     if not _spec:
                         log.info(
-                            "Spec %s missing for source file %s — re-queuing for re-ingest",
-                            _sf["spec_id"], _sf["file_name"],
+                            "CanonDomain %s missing for source file %s — re-queuing for re-ingest",
+                            _sf["canon_domain_id"], _sf["file_name"],
                         )
                         self.store.upsert_source_file(
                             connection_id=connection_id,
@@ -113,7 +113,7 @@ class SyncEngine:
                             mime_type=_sf["mime_type"],
                             drive_modified_at=_sf.get("drive_modified_at", ""),
                             sync_status="error",
-                            error_message="spec missing, re-queued for re-ingest",
+                            error_message="canon_domain missing, re-queued for re-ingest",
                         )
 
             # Retry any files still in error state (e.g. from a previous failed attempt)
@@ -134,10 +134,10 @@ class SyncEngine:
 
             for drive_file_id in deleted_ids:
                 sf = self.store.get_source_file_by_drive_id(connection_id, drive_file_id)
-                if sf and sf.get("spec_id"):
+                if sf and sf.get("canon_domain_id"):
                     try:
                         from src.store import get_store
-                        get_store().delete_spec(sf["spec_id"])
+                        get_store().delete_canon_domain(sf["canon_domain_id"])
                     except Exception:
                         pass
                 self.store.delete_source_file(connection_id, drive_file_id)
@@ -158,8 +158,8 @@ class SyncEngine:
         import tempfile
         from pathlib import Path
         from src.pipeline.extract import extract_text
-        from src.pipeline.structure import SpecStructurer, detect_document_type
-        from src.models import Spec, SpecStatus, SchemaType
+        from src.pipeline.structure import HouseStructurer, detect_document_type
+        from src.models import CanonDomain, DomainStatus, GroundingType
         from src.store import get_store
 
         store = get_store()
@@ -219,7 +219,7 @@ class SyncEngine:
             return
 
         doc_type = detect_document_type(raw_text, file_info.name)
-        structurer = SpecStructurer()
+        structurer = HouseStructurer()
         try:
             structured, _usage = structurer.structure(raw_text, source_name=file_info.name, document_type=doc_type)
         except Exception as exc:
@@ -235,22 +235,22 @@ class SyncEngine:
             )
             return
 
-        # Delete all specs previously created for this Drive file (including orphans
+        # Delete all canon_domains previously created for this Drive file (including orphans
         # from failed retries that were never linked back to the source_file record).
-        store.delete_specs_by_source_id(file_info.file_id)
+        store.delete_canon_domains_by_source_id(file_info.file_id)
 
         # Commit to DB + Turbovec + graph
         from src.web_app import _commit_structured_spec
         try:
-            spec, indexed, _ = _commit_structured_spec(
+            canon_domain, indexed, _ = _commit_structured_spec(
                 structured,
                 filename=file_info.file_id,
                 document_type=doc_type,
                 raw_markdown=raw_text,
             )
-            spec.source = "google_drive"
-            spec.source_id = file_info.file_id
-            store.upsert_spec(spec)
+            canon_domain.source = "google_drive"
+            canon_domain.source_id = file_info.file_id
+            store.upsert_canon_domain(canon_domain)
         except Exception as exc:
             log.error("Commit failed for %s: %s", file_info.name, exc, exc_info=True)
             self.store.upsert_source_file(
@@ -270,19 +270,19 @@ class SyncEngine:
             file_name=file_info.name,
             mime_type=file_info.mime_type,
             drive_modified_at=file_info.modified_at,
-            spec_id=str(spec.id),
+            canon_domain_id=str(canon_domain.id),
             sync_status="synced",
             error_message="",
         )
 
-        # Rebuild graph so MCP tools see the newly ingested spec immediately
+        # Rebuild graph so MCP tools see the newly ingested canon_domain immediately
         try:
             from src.grounding.graph import get_graph_engine
             get_graph_engine().rebuild()
         except Exception as exc:
             log.warning("Graph rebuild after sync skipped: %s", exc)
 
-        log.info("Ingested %s → spec %s (indexed=%s)", file_info.name, spec.id, indexed)
+        log.info("Ingested %s → canon_domain %s (indexed=%s)", file_info.name, canon_domain.id, indexed)
 
     def initial_sync(self, connection_id: str):
         """Full folder scan for a newly-connected source. Called once after OAuth."""
