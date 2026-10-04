@@ -386,6 +386,26 @@ class Persona(BaseModel):
         self.canon_domain_id = value
 
 
+class AudienceProfile(BaseModel):
+    """First-class audience/channel generation profile — formalizes what was
+    previously an ad-hoc per-entry `variants` dict into enforced tone/style
+    constraints applied at generation time. Workspace-scoped, not domain-scoped:
+    "LinkedIn executives" is a reusable targeting profile across any canon domain,
+    the same way Jasper's Audience Profiles aren't tied to one brand doc.
+    """
+    model_config = ConfigDict(populate_by_name=True)
+    id: UUID = Field(default_factory=uuid4)
+    workspace_id: str = "default"
+    name: str
+    description: str = ""
+    tone_professionalism: float = Field(default=0.5, ge=0.0, le=1.0)
+    tone_warmth: float = Field(default=0.5, ge=0.0, le=1.0)
+    reading_level: str = "general"  # "general" | "technical" | "executive"
+    preferred_channels: list[str] = Field(default_factory=list)
+    banned_phrases: list[str] = Field(default_factory=list)
+    required_cta: str | None = None
+
+
 class PainPoint(BaseModel):
     id: int
     persona_id: str

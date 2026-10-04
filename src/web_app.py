@@ -4053,6 +4053,50 @@ def get_house_usage_stats(house_id: Optional[str] = None, domain_id: Optional[st
     return store.get_message_usage_stats(actual_id)
 
 
+# --- Audience Profiles ---
+
+class AudienceProfileRequest(BaseModel):
+    name: str
+    description: str = ""
+    tone_professionalism: float = 0.5
+    tone_warmth: float = 0.5
+    reading_level: str = "general"
+    preferred_channels: list[str] = []
+    banned_phrases: list[str] = []
+    required_cta: Optional[str] = None
+    workspace_id: str = "default"
+
+
+@app.get("/api/audience-profiles")
+def api_list_audience_profiles(workspace_id: str = "default", auth: AuthContext = Depends(get_auth_context)):
+    return [p.model_dump(mode="json") for p in store.list_audience_profiles(workspace_id)]
+
+
+@app.post("/api/audience-profiles", status_code=201)
+def api_create_audience_profile(req: AudienceProfileRequest, auth: AuthContext = Depends(get_auth_context)):
+    from src.models import AudienceProfile
+    profile = AudienceProfile(**req.model_dump())
+    store.upsert_audience_profile(profile)
+    return profile.model_dump(mode="json")
+
+
+@app.put("/api/audience-profiles/{profile_id}")
+def api_update_audience_profile(profile_id: UUID, req: AudienceProfileRequest, auth: AuthContext = Depends(get_auth_context)):
+    from src.models import AudienceProfile
+    if store.get_audience_profile(profile_id) is None:
+        raise HTTPException(404, "Audience profile not found")
+    profile = AudienceProfile(id=profile_id, **req.model_dump())
+    store.upsert_audience_profile(profile)
+    return profile.model_dump(mode="json")
+
+
+@app.delete("/api/audience-profiles/{profile_id}")
+def api_delete_audience_profile(profile_id: UUID, auth: AuthContext = Depends(get_auth_context)):
+    if not store.delete_audience_profile(profile_id):
+        raise HTTPException(404, "Audience profile not found")
+    return {"deleted": True}
+
+
 # --- Competitive Intel ---
 
 class CompetitiveExtractRequest(BaseModel):

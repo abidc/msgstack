@@ -41,7 +41,7 @@ from src.models import (
     InheritancePolicy, ArtifactEntryBinding,
     Entity, Edge, NodeType, RelType, PROPAGATING_RELS,
     LEGACY_ASSERTION_TYPE_MAP, LEGACY_SCHEMA_TYPE_MAP, QueryAuditLog,
-    GROUNDING_TYPE_SECTION_TYPES,
+    GROUNDING_TYPE_SECTION_TYPES, AudienceProfile,
 )
 
 
@@ -421,6 +421,21 @@ class PersonaModel(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     canon_domain: Mapped["CanonDomainModel"] = relationship(back_populates="personas")
+
+
+class AudienceProfileModel(Base):
+    __tablename__ = "audience_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(100), default="default")
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), default="")
+    tone_professionalism: Mapped[float] = mapped_column(Float, default=0.5)
+    tone_warmth: Mapped[float] = mapped_column(Float, default=0.5)
+    reading_level: Mapped[str] = mapped_column(String(20), default="general")
+    preferred_channels: Mapped[list] = mapped_column(JSON, default=list)
+    banned_phrases: Mapped[list] = mapped_column(JSON, default=list)
+    required_cta: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class PainPointModel(Base):
@@ -1671,6 +1686,37 @@ class Store:
             return _entry_from_row(row) if row else None
 
     get_key_message = get_canon_entry  # Deprecated alias
+
+    def upsert_audience_profile(self, profile: AudienceProfile) -> None:
+        with self.session() as s:
+            existing = s.get(AudienceProfileModel, str(profile.id))
+            data = _to_db(profile.model_dump())
+            if existing:
+                for k, v in data.items():
+                    if k != "id":
+                        setattr(existing, k, v)
+            else:
+                s.add(AudienceProfileModel(**data))
+            s.commit()
+
+    def get_audience_profile(self, profile_id: UUID) -> AudienceProfile | None:
+        with self.session() as s:
+            row = s.get(AudienceProfileModel, str(profile_id))
+            return _audience_profile_from_row(row) if row else None
+
+    def list_audience_profiles(self, workspace_id: str = "default") -> list[AudienceProfile]:
+        with self.session() as s:
+            rows = s.query(AudienceProfileModel).filter(AudienceProfileModel.workspace_id == workspace_id).all()
+            return [_audience_profile_from_row(r) for r in rows]
+
+    def delete_audience_profile(self, profile_id: UUID) -> bool:
+        with self.session() as s:
+            row = s.get(AudienceProfileModel, str(profile_id))
+            if not row:
+                return False
+            s.delete(row)
+            s.commit()
+            return True
 
     def get_persona(self, persona_id: UUID) -> Persona | None:
         with self.session() as s:
@@ -4049,6 +4095,21 @@ def _persona_from_row(row: PersonaModel) -> Persona:
         status=EntryStatus(row.status) if row.status else EntryStatus.DRAFT,
         approved_by=row.approved_by,
         approved_at=row.approved_at,
+    )
+
+
+def _audience_profile_from_row(row: AudienceProfileModel) -> AudienceProfile:
+    return AudienceProfile(
+        id=UUID(row.id),
+        workspace_id=row.workspace_id,
+        name=row.name,
+        description=row.description,
+        tone_professionalism=row.tone_professionalism,
+        tone_warmth=row.tone_warmth,
+        reading_level=row.reading_level,
+        preferred_channels=row.preferred_channels or [],
+        banned_phrases=row.banned_phrases or [],
+        required_cta=row.required_cta,
     )
 
 
