@@ -1,0 +1,48 @@
+{
+  "id": "sales_deck",
+  "name": "Sales Deck",
+  "description": "Structured sales presentation with slide-based layout for B2B sales meetings.",
+  "channels": [
+    "all"
+  ],
+  "artifact_type": "sales_deck",
+  "sections": [
+    {
+      "key": "title_slide",
+      "label": "Title Slide",
+      "required": true
+    },
+    {
+      "key": "agenda",
+      "label": "Agenda",
+      "required": true
+    },
+    {
+      "key": "problem",
+      "label": "Problem / Pain",
+      "required": true
+    },
+    {
+      "key": "solution",
+      "label": "Solution Overview",
+      "required": true
+    },
+    {
+      "key": "differentiation",
+      "label": "Why Us",
+      "required": true
+    },
+    {
+      "key": "proof_points",
+      "label": "Social Proof",
+      "required": true
+    },
+    {
+      "key": "next_steps",
+      "label": "Next Steps",
+      "required": true
+    }
+  ],
+  "prompt_template": "Generate a sales deck for {house_name} using the messaging framework below.\n\nGROUNDING CONTEXT:\n{context}\n\nGenerate exactly 7 slides as a JSON array. Each slide must have:\n- \"layout\": one of [\"title\", \"agenda\", \"content\", \"side_by_side\", \"quote\", \"closing\"]\n- \"heading\": slide heading (max 8 words)\n- \"content\": array of strings (bullet points or paragraphs)\n- \"notes\": speaker notes (2-3 sentences for the presenter)\n- \"image_prompt\": optional description for a visual placeholder\n\nSlide structure:\n1. Title Slide — company name, tagline, presenter name placeholder\n2. Agenda — 4-6 agenda items from the framework\n3. Problem/Pain — top 3 pain points from personas\n4. Solution Overview — positioning + top 3 key messages\n5. Why Us — differentiation points with proof\n6. Social Proof — testimonial/results placeholder + key proof points\n7. Next Steps — 3 concrete action items\n\nOutput ONLY valid JSON array. No markdown fences. Example:\n[\n  {\"layout\":\"title\",\"heading\":\"...\",\"content\":[\"...\"],\"notes\":\"...\",\"image_prompt\":\"...\"},\n  ...\n]",
+  "prefab_template": "reveal_presentation"
+}
