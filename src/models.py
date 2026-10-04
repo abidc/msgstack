@@ -29,6 +29,19 @@ class SectionType(str, Enum):
     FOUNDING_STORY = "founding_story"
     PERSONA_DETAIL = "persona_detail"
     SOURCE_MARKDOWN = "source_markdown"
+    # Engineering Spec grounding type — not reused from message_house types,
+    # since "benefit"/"proof_point" don't mean anything for an API contract.
+    API_CONTRACT = "api_contract"
+    SLA_COMMITMENT = "sla_commitment"
+    VERSIONING_POLICY = "versioning_policy"
+    DEPRECATION_NOTICE = "deprecation_notice"
+    SECURITY_REQUIREMENT = "security_requirement"
+    # Policy Shield grounding type — legal/compliance claims, always Tier 1
+    # in practice (see GROUNDING_TYPE_SECTION_TYPES below), never paraphrased.
+    LEGAL_DISCLAIMER = "legal_disclaimer"
+    PRIVACY_RULE = "privacy_rule"
+    COMPLIANCE_ASSERTION = "compliance_assertion"
+    COMPLIANCE_RESPONSE = "compliance_response"
 
 
 class GroundingType(str, Enum):
@@ -54,6 +67,35 @@ DEPARTMENT_PRIMARY_GROUNDING = {
     "Product Management": GroundingType.COMPETITIVE_BRIEF,
     "Engineering": GroundingType.ENGINEERING_SPEC,
     "Legal": GroundingType.POLICY_SHIELD,
+}
+
+
+#: Which SectionType values make sense for a domain of a given GroundingType.
+#: Soft validation only (see pipeline/conflict.py check_grounding_type_mismatch) —
+#: flags a likely-wrong section_type for human review rather than rejecting it
+#: outright, consistent with how ingestion conflicts are already handled.
+#: GroundingTypes not listed here (brand_guide, corp_narrative, persona_library)
+#: have no dedicated vocabulary yet and accept any SectionType.
+GROUNDING_TYPE_SECTION_TYPES: dict[GroundingType, set[SectionType]] = {
+    GroundingType.MESSAGE_HOUSE: {
+        SectionType.HEADLINE, SectionType.SUBHEAD, SectionType.BENEFIT, SectionType.USE_CASE,
+        SectionType.PROOF_POINT, SectionType.OBJECTION, SectionType.SOCIAL_PROOF, SectionType.POSITIONING,
+        SectionType.KNOW_YOUR_MARKET, SectionType.BRAND_VOICE, SectionType.STYLE_RULE, SectionType.WORD_LIST,
+        SectionType.NARRATIVE_PILLAR, SectionType.COMPANY_VALUE, SectionType.FOUNDING_STORY,
+        SectionType.PERSONA_DETAIL, SectionType.SOURCE_MARKDOWN,
+    },
+    GroundingType.COMPETITIVE_BRIEF: {
+        SectionType.COMPETITOR_STRENGTH, SectionType.COMPETITOR_WEAKNESS, SectionType.COMPETITIVE_RESPONSE,
+        SectionType.POSITIONING, SectionType.SOURCE_MARKDOWN,
+    },
+    GroundingType.ENGINEERING_SPEC: {
+        SectionType.API_CONTRACT, SectionType.SLA_COMMITMENT, SectionType.VERSIONING_POLICY,
+        SectionType.DEPRECATION_NOTICE, SectionType.SECURITY_REQUIREMENT, SectionType.SOURCE_MARKDOWN,
+    },
+    GroundingType.POLICY_SHIELD: {
+        SectionType.LEGAL_DISCLAIMER, SectionType.PRIVACY_RULE, SectionType.COMPLIANCE_ASSERTION,
+        SectionType.COMPLIANCE_RESPONSE, SectionType.SOURCE_MARKDOWN,
+    },
 }
 
 

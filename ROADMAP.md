@@ -405,8 +405,8 @@ Replaces the static 90-day staleness flag with a per-domain operational contract
 
 ### Cross-Department Canon Domains & Hierarchy
 - [ ] **Dynamic Grounding Schemas:** Support dynamic Pydantic/JSON Schema validation per domain, allowing custom schemas by department beyond just the default `message_house` layout.
-- [ ] **`engineering_spec` Grounding Type:** API constraints, system SLAs, versioning policy, deprecation notices, security requirements. Keeps developer copilots aligned with real specs — not hallucinated rate limits.
-- [ ] **`policy_shield` Grounding Type:** Legal disclaimers, privacy policy rules, compliance assertions (SOC2/GDPR), pre-approved compliance responses. AI tools retrieve legal language verbatim — no paraphrasing.
+- [x] **`engineering_spec` Grounding Type:** Real second grounding type — 5 dedicated SectionType values (`api_contract`, `sla_commitment`, `versioning_policy`, `deprecation_notice`, `security_requirement`), soft validation flagging a message-house-shaped entry on an engineering domain, admin UI department-creation dropdown fixed to offer it (was offering retired pivot-era values), seed demo domain.
+- [x] **`policy_shield` Grounding Type:** Real third grounding type — 4 dedicated SectionType values (`legal_disclaimer`, `privacy_rule`, `compliance_assertion`, `compliance_response`), same soft validation + UI + seed demo domain as engineering_spec.
 - [x] **Sub-Canons ("Canons within Canons"):** Nested canons via `parent_domain_id` with configurable parent-child inheritance resolved at entry/persona read time.
 - [x] **Inheritance Relationship Types:** All 4 parent-child relationship types codified: *Full Inheritance*, *Selective Override*, *Autonomy with Vocabulary Constraints*, and *Complete Autonomy*.
 - [x] **Canon Health Scoring:** Dashboard health gauge exposing where narrative coherence and graph connections are breaking down.

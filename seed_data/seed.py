@@ -40,6 +40,9 @@ def seed():
             store.upsert_persona(persona)
             total_personas += 1
 
+    from seed_data.seed_grounding_types import seed_grounding_types
+    seed_grounding_types(store)
+
     return len(houses_data)
 
 
