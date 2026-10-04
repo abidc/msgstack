@@ -817,10 +817,13 @@
                     <div class="form-group" style="margin-bottom:10px;">
                         <label class="form-label" for="new-dept-grounding">Primary Grounding Type</label>
                         <select id="new-dept-grounding" class="form-select">
-                            <option value="engineering_spec" selected>Messaging House</option>
-                    <option value="service_catalog">Messaging Portfolio</option>
-                    <option value="policy_shield">Claims Review</option>
-                    <option value="incident_record">Campaign Retro</option>
+                            <option value="message_house" selected>Message House</option>
+                            <option value="engineering_spec">Engineering Spec</option>
+                            <option value="policy_shield">Policy Shield</option>
+                            <option value="competitive_brief">Competitive Brief</option>
+                            <option value="corp_narrative">Corporate Narrative</option>
+                            <option value="persona_library">Persona Library</option>
+                            <option value="brand_guide">Brand Guide</option>
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom:12px;">
@@ -886,35 +889,28 @@
     let _dragSrcEl = null;
     let activeDept = 'All';
     const GROUNDING_LABELS = {
-        'engineering_spec': 'Messaging House',
-        'service_catalog':  'Messaging Portfolio',
-        'policy_shield':    'Claims Review',
-        'incident_record':  'Campaign Retro'
+        'message_house':     'Message House',
+        'brand_guide':       'Brand Guide',
+        'competitive_brief': 'Competitive Brief',
+        'corp_narrative':    'Corporate Narrative',
+        'persona_library':   'Persona Library',
+        'engineering_spec':  'Engineering Spec',
+        'policy_shield':     'Policy Shield',
     };
-    const ASSERTION_TYPE_LABELS = {
-        constraint:         'Guardrail',
-        sla:                'Commitment',
-        deprecation:        'Retired Claim',
-        config_default:     'Default Message',
-        dependency:         'Dependency',
-        capability:         'Proof Point',
-        limitation:         'Limitation',
-        security_posture:   'Trust Claim',
-        interface_contract: 'Usage Rule',
-        version_policy:     'Governance Rule',
-        runbook_step:       'Playbook Step',
-        decision:           'Decision',
-        positioning:        'Positioning Statement',
-        source_markdown:    'Source Document',
-    };
+    // Generic humanizer for any section_type not in SECTION_META (e.g. a
+    // custom type on a non-message_house domain). No per-value label table —
+    // SECTION_META below is the source of truth for types with curated
+    // labels/colors; this is just the fallback.
     function assertionTypeLabel(v) {
-        return ASSERTION_TYPE_LABELS[v] || (v||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+        return (v||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
     }
     let DEPT_PRIMARY_GROUNDING = {
-        "Platform":    "engineering_spec",
-        "Engineering": "engineering_spec",
-        "Security":    "policy_shield",
-        "General":     "engineering_spec"
+        "Product Marketing":  "message_house",
+        "Company Marketing":  "corp_narrative",
+        "Enablement":         "persona_library",
+        "Product Management": "competitive_brief",
+        "Engineering":        "engineering_spec",
+        "Legal":              "policy_shield",
     };
     function switchDept(dept) {
         activeDept = dept;
@@ -965,16 +961,9 @@
 
     // ── Routing ────────────────────────────────────────────────────────────────
 
-    const DOC_TYPE_LABELS = {
-        'engineering_spec': 'Messaging House',
-        'service_catalog':  'Messaging Portfolio',
-        'policy_shield':    'Claims Review',
-        'incident_record':  'Campaign Retro',
-    };
-
     function docTypeBadge(docType) {
         if (!docType) return '';
-        const label = DOC_TYPE_LABELS[docType] || docType;
+        const label = GROUNDING_LABELS[docType] || docType.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
         return `<span class="doc-type-badge doc-type-${esc(docType)}">${esc(label)}</span>`;
     }
 
@@ -2636,10 +2625,10 @@ const NODE_COLORS = {
         Objection:    14,
     };
     const NODE_TYPE_LABELS = {
-        CanonDomain:      'Messaging House',
-        CanonEntry: 'Claim',
-        Entity:    'Concept',
-        Objection:    'Q&A',
+        CanonDomain: 'Canon Domain',
+        CanonEntry:  'Canon Entry',
+        Entity:      'Entity',
+        Objection:   'Objection',
     };
     function nodeTypeLabel(t) {
         return NODE_TYPE_LABELS[t] || (t||'').replace('Grounding','');
@@ -3766,7 +3755,7 @@ const NODE_COLORS = {
             
             document.getElementById('new-dept-name').value = '';
             document.getElementById('new-dept-desc').value = '';
-            document.getElementById('new-dept-grounding').value = 'canon_domain';
+            document.getElementById('new-dept-grounding').value = 'message_house';
             
             await fetchDepartments();
             await loadSettingsDepartments();

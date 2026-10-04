@@ -41,6 +41,7 @@ from src.models import (
     InheritancePolicy, ArtifactEntryBinding,
     Entity, Edge, NodeType, RelType, PROPAGATING_RELS,
     LEGACY_ASSERTION_TYPE_MAP, LEGACY_SCHEMA_TYPE_MAP, QueryAuditLog,
+    GROUNDING_TYPE_SECTION_TYPES,
 )
 
 
@@ -1529,6 +1530,21 @@ class Store:
 
     def upsert_canon_entry(self, entry: CanonEntry) -> None:
         with self.session() as s:
+            domain_row = s.get(CanonDomainModel, str(entry.canon_domain_id))
+            if domain_row is not None and domain_row.document_type is not None:
+                try:
+                    allowed = GROUNDING_TYPE_SECTION_TYPES.get(GroundingType(domain_row.document_type))
+                except ValueError:
+                    allowed = None
+                if allowed is not None:
+                    section_values = {getattr(a, "value", a) for a in allowed}
+                    entry_section_value = getattr(entry.section_type, "value", entry.section_type)
+                    if entry_section_value not in section_values:
+                        log.warning(
+                            "canon_entry %s has section_type %r, not one of the expected types for a %s domain (%s)",
+                            entry.id, entry_section_value, domain_row.document_type, domain_row.name,
+                        )
+
             channel_models = []
             if entry.channels:
                 for ch in entry.channels:
