@@ -1003,7 +1003,7 @@
     async function loadDriSummary() {
         const el = document.getElementById('dri-summary-container');
         try {
-            const data = await apiFetch('/api/dri/summary').then(r => r.json());
+            const data = await apiFetch('/api/dri/summary');
             let html = '';
             if (data.unowned?.length) {
                 html += `<div style="font-weight:600;color:var(--warning);margin-bottom:6px;">Unowned (${data.unowned.length})</div>`;
@@ -1036,7 +1036,7 @@
         if (caller) params.set('caller', caller);
         if (source) params.set('source', source);
         try {
-            _queryLogRows = await apiFetch(`/api/query-log?${params}`).then(r => r.json());
+            _queryLogRows = await apiFetch(`/api/query-log?${params}`);
             if (!_queryLogRows.length) {
                 body.innerHTML = '<tr><td colspan="7" style="padding:14px 8px;color:var(--text-3);">No queries logged yet.</td></tr>';
                 return;
@@ -1129,7 +1129,7 @@
         try {
             const [data, domains, artifacts] = await Promise.all([
                 fetch(`${API}/stats`).then(r => r.json()),
-                fetch(`${API}/canon_domains`).then(r => r.json()),
+                fetch(`${API}/canon-domains`).then(r => r.json()),
                 fetch(`${API}/recent-artifacts?limit=5`).then(r => r.json()),
             ]);
 
@@ -1186,7 +1186,7 @@
         const list = document.getElementById('domains-list');
         list.innerHTML = '<div style="grid-column:1/-1;color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
         try {
-            const domains = await fetch(`${API}/canon_domains`).then(r => r.json());
+            const domains = await fetch(`${API}/canon-domains`).then(r => r.json());
             if (!domains.length) {
                 list.innerHTML = `<div style="grid-column:1/-1;" class="card"><div style="color:var(--text-3);font-size:14px;text-align:center;padding:32px 0;">No frameworks yet. <button class="btn btn-ghost btn-sm" onclick="showSection('upload')">Upload a document →</button></div></div>`;
                 return;
@@ -1202,7 +1202,7 @@
                     <div style="font-size:12.5px;color:var(--text-2);line-height:1.5;margin-bottom:12px;min-height:36px;">${esc(h.summary)}</div>
                     <div class="domain-card-footer" style="display:flex;gap:12px;font-size:11px;color:var(--text-3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;align-items:center;">
                         <span>${h.entry_count} Claims</span>
-                        <span>${h.audience_count} Personas</span>
+                        <span>${h.persona_count} Personas</span>
                         <span style="margin-left:auto;color:${h.completeness_score>=75?'var(--success)':h.completeness_score>=50?'var(--warn)':'var(--text-3)'};">${h.completeness_score}%</span>
                         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--danger);" onclick="event.stopPropagation();deleteDomain('${h.id}')">Delete</button>
                     </div>
@@ -1235,8 +1235,8 @@
         detail.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span></div>';
         try {
             const [domain, pillars] = await Promise.all([
-                fetch(`${API}/canon_domains/${id}`).then(r => r.json()),
-                fetch(`${API}/canon_domains/${id}/pillars`).then(r => r.json()).catch(() => [])
+                fetch(`${API}/canon-domains/${id}`).then(r => r.json()),
+                fetch(`${API}/canon-domains/${id}/pillars`).then(r => r.json()).catch(() => [])
             ]);
             domain._pillars = pillars; // Attach pillars to domain for rendering
             _renderDomainDetail(domain);
@@ -1462,7 +1462,7 @@
 
     async function markDomainReviewedFromDetail(domainId) {
         try {
-            await apiFetch(`${API}/canon_domains/${domainId}/mark-reviewed`, { method: 'POST' });
+            await apiFetch(`${API}/canon-domains/${domainId}/mark-reviewed`, { method: 'POST' });
             toast('Messaging house marked as reviewed', 'success');
             viewDomain(domainId);
         } catch(e) {
@@ -1475,7 +1475,7 @@
         if (!container) return;
         container.innerHTML = '<span class="spinner"></span> Loading review log...';
         try {
-            const logs = await apiFetch(`${API}/canon_domains/${domainId}/review-log`);
+            const logs = await apiFetch(`${API}/canon-domains/${domainId}/review-log`);
             if (!logs || !logs.length) {
                 container.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:12px 0;">No review logs recorded yet. Changes and status updates will be logged here.</div>';
                 return;
@@ -1534,7 +1534,7 @@
         _dragSrcEl = null;
         const orderedIds = [...document.querySelectorAll('#entries-container .msg-row')].map(r=>r.dataset.id);
         try {
-            await fetch(`${API}/canon_domains/${domainId}/entries/reorder`, {
+            await fetch(`${API}/canon-domains/${domainId}/entries/reorder`, {
                 method:'PATCH', headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({ordered_ids: orderedIds}),
             });
@@ -1550,12 +1550,12 @@
             if (el) data[f] = el.value;
         });
         try {
-            const res = await fetch(`${API}/canon_domains/${domainId}`, {
+            const res = await fetch(`${API}/canon-domains/${domainId}`, {
                 method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data),
             });
             if (!res.ok) throw new Error(await res.text());
             toast('Saved', 'success');
-            const domain = await fetch(`${API}/canon_domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
             milestoneToast(domain.completeness_score||0, domain.name);
         } catch(e) { toast('Save failed: '+e.message, 'error'); }
     }
@@ -1590,7 +1590,7 @@
                 body:JSON.stringify({canon_domain_id:domainId,section_type,content,priority:3})});
             if (!res.ok) throw new Error(await res.text());
             closeModal(); toast('Entry added','success');
-            const domain = await fetch(`${API}/canon_domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('entries');
             milestoneToast(domain.completeness_score||0, domain.name);
         } catch(e) { toast('Failed: '+e.message,'error'); }
@@ -1602,7 +1602,7 @@
             const res = await fetch(`${API}/entries/${msgId}`,{method:'DELETE'});
             if (!res.ok) throw new Error(await res.text());
             toast('Deleted','success');
-            const domain = await fetch(`${API}/canon_domains/${currentDomainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/canon-domains/${currentDomainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('entries');
         } catch(e) { toast('Delete failed: '+e.message,'error'); }
     }
@@ -1641,12 +1641,12 @@
         }).filter(r=>r.content);
         if (!rows.length) { toast('No valid rows found','error'); return; }
         try {
-            const res = await fetch(`${API}/canon_domains/${domainId}/entries/bulk-import`,{method:'POST',
+            const res = await fetch(`${API}/canon-domains/${domainId}/entries/bulk-import`,{method:'POST',
                 headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})});
             if (!res.ok) throw new Error(await res.text());
             const result = await res.json();
             closeModal(); toast(`Imported ${result.created} entries`,'success');
-            const domain = await fetch(`${API}/canon_domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('entries');
         } catch(e) { toast('Import failed: '+e.message,'error'); }
     }
@@ -1680,7 +1680,7 @@
                 body:JSON.stringify({canon_domain_id:domainId,name,description})});
             if (!res.ok) throw new Error(await res.text());
             closeModal(); toast('Persona added','success');
-            const domain = await fetch(`${API}/canon_domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('personas');
         } catch(e) { toast('Failed: '+e.message,'error'); }
     }
@@ -1693,7 +1693,7 @@
                 body:JSON.stringify({canon_domain_id:domainId,job_title:jobTitle})});
             if (!res.ok) throw new Error(await res.text());
             toast('Persona generated','success');
-            const domain = await fetch(`${API}/canon_domains/${domainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/canon-domains/${domainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('personas');
         } catch(e) { toast('Failed: '+e.message,'error'); }
     }
@@ -1704,7 +1704,7 @@
             const res = await fetch(`${API}/personas/${personaId}`,{method:'DELETE'});
             if (!res.ok) throw new Error(await res.text());
             toast('Deleted','success');
-            const domain = await fetch(`${API}/canon_domains/${currentDomainId}`).then(r=>r.json());
+            const domain = await fetch(`${API}/canon-domains/${currentDomainId}`).then(r=>r.json());
             _renderDomainDetail(domain); switchDomainTab('personas');
         } catch(e) { toast('Delete failed: '+e.message,'error'); }
     }
@@ -1736,7 +1736,7 @@
     // ── Alignment Scoring ───────────────────────────────────────────────────────
     
     async function loadScoringDomains() {
-        const domains = await fetch(`${API}/canon_domains`).then(r=>r.json());
+        const domains = await fetch(`${API}/canon-domains`).then(r=>r.json());
         const sel = document.getElementById('scoring-domain');
         sel.innerHTML = '<option value="">Select a framework…</option>' +
             domains.map(h => `<option value="${h.id}">${esc(h.name)}</option>`).join('');
@@ -1753,7 +1753,7 @@
         btn.disabled = true;
         
         try {
-            const data = await apiFetch(`${API}/canon_domains/${domainId}/score`, {
+            const data = await apiFetch(`${API}/canon-domains/${domainId}/score`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ content })
@@ -1808,7 +1808,7 @@
     // ── Artifact generator ────────────────────────────────────────────────────────
 
     async function loadArtifactDomains() {
-        const domains = await fetch(`${API}/canon_domains`).then(r=>r.json());
+        const domains = await fetch(`${API}/canon-domains`).then(r=>r.json());
         const sel = document.getElementById('artifact-domain');
         sel.innerHTML = '<option value="">Select a framework…</option>' +
             domains.map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join('');
@@ -2382,7 +2382,7 @@
         document.getElementById('upload-preview-card').style.display = 'none';
         document.getElementById('structure-preview').style.display = '';
         document.getElementById('preview-name').textContent = data.name || 'Untitled';
-        document.getElementById('preview-meta').textContent = `${data.word_count?.toLocaleString()||0} words · ${data.entry_count||data.canon_entries?.length||0} entries · ${data.audience_count||data.personas?.length||0} personas`;
+        document.getElementById('preview-meta').textContent = `${data.word_count?.toLocaleString()||0} words · ${data.entry_count||data.canon_entries?.length||0} entries · ${data.persona_count||data.personas?.length||0} personas`;
 
         const score = data.completeness_score || 0;
         document.getElementById('preview-completeness-fill').style.width = score + '%';
@@ -2420,7 +2420,7 @@
             document.getElementById('structure-preview').style.display = 'none';
             document.getElementById('extraction-result').style.display = '';
             document.getElementById('extraction-name').textContent = data.name;
-            document.getElementById('extraction-meta').textContent = `${data.entry_count} entries · ${data.audience_count} personas · ${data.completeness_score}% complete`;
+            document.getElementById('extraction-meta').textContent = `${data.entry_count} entries · ${data.persona_count} personas · ${data.completeness_score}% complete`;
             document.getElementById('completeness-fill').style.width = (data.completeness_score||0) + '%';
             document.getElementById('completeness-label').textContent = `${data.completeness_score||0}% complete`;
             toast('Messaging house saved','success');
@@ -3032,7 +3032,7 @@ const NODE_COLORS = {
             }
         }
         try {
-            await apiFetch(`${API}/canon_domains/${id}`, {method: 'DELETE'});
+            await apiFetch(`${API}/canon-domains/${id}`, {method: 'DELETE'});
             showToast('Messaging house deleted', 'success');
             if (!card) showSection('frameworks');
         } catch(e) {
@@ -3160,7 +3160,7 @@ const NODE_COLORS = {
         const btn = document.getElementById('bulk-approve-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
         try {
-            const r = await apiFetch(`${API}/canon_domains/${currentDomainId}/entries/bulk-status`, {
+            const r = await apiFetch(`${API}/canon-domains/${currentDomainId}/entries/bulk-status`, {
                 method: 'PATCH',
                 headers: {'Content-Type':'application/json'},
                 body: JSON.stringify({ entry_ids: [..._bulkSelected], status: 'approved', approved_by: 'admin' }),
@@ -3180,7 +3180,7 @@ const NODE_COLORS = {
 
     async function loadUsageStats(domainId) {
         try {
-            const rows = await apiFetch(`${API}/canon_domains/${domainId}/usage-stats`);
+            const rows = await apiFetch(`${API}/canon-domains/${domainId}/usage-stats`);
             _usageStats = {};
             for (const r of rows) _usageStats[r.id] = r;
         } catch(_) { _usageStats = {}; }
@@ -3300,8 +3300,8 @@ const NODE_COLORS = {
         detail.innerHTML = '<div style="padding:60px;text-align:center;"><span class="spinner"></span></div>';
         try {
             const [domain, pillars] = await Promise.all([
-                fetch(`${API}/canon_domains/${id}`).then(r => r.json()),
-                fetch(`${API}/canon_domains/${id}/pillars`).then(r => r.json()).catch(() => []),
+                fetch(`${API}/canon-domains/${id}`).then(r => r.json()),
+                fetch(`${API}/canon-domains/${id}/pillars`).then(r => r.json()).catch(() => []),
             ]);
             await loadUsageStats(id);  // load heatmap data before render
             domain._pillars = pillars;
@@ -3327,7 +3327,7 @@ const NODE_COLORS = {
     async function markDomainReviewed(domainId, event) {
         if (event) event.stopPropagation();
         try {
-            await apiFetch(`${API}/canon_domains/${domainId}/mark-reviewed`, { method: 'POST' });
+            await apiFetch(`${API}/canon-domains/${domainId}/mark-reviewed`, { method: 'POST' });
             toast('Messaging house marked as reviewed', 'success');
             loadDomains();
         } catch(e) {
@@ -3341,7 +3341,7 @@ const NODE_COLORS = {
         const list = document.getElementById('domains-list');
         list.innerHTML = '<div style="grid-column:1/-1;color:var(--text-3);font-size:13px;"><span class="spinner"></span> Loading…</div>';
         try {
-            const domains = await fetch(`${API}/canon_domains`).then(r => r.json());
+            const domains = await fetch(`${API}/canon-domains`).then(r => r.json());
             
             // Build unique list of departments dynamically from existing domains and defaults
             const deptsSet = new Set(domains.map(h => h.department || "General"));
@@ -3414,7 +3414,7 @@ const NODE_COLORS = {
                     <div style="font-size:12.5px;color:var(--text-2);line-height:1.5;margin-bottom:12px;min-height:36px;">${esc(h.summary)}</div>
                     <div class="domain-card-footer" style="display:flex;gap:12px;font-size:11px;color:var(--text-3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;align-items:center;">
                         <span>${h.entry_count} Claims</span>
-                        <span>${h.audience_count} Personas</span>
+                        <span>${h.persona_count} Personas</span>
                         <span style="margin-left:auto;color:${h.completeness_score>=75?'var(--success)':h.completeness_score>=50?'var(--warn)':'var(--text-3)'};">${h.completeness_score}%</span>
                         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--warn);" onclick="markDomainReviewed('${h.id}',event)">Mark Reviewed</button>
                         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--danger);" onclick="event.stopPropagation();deleteDomain('${h.id}')">Delete</button>
