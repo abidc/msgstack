@@ -448,7 +448,7 @@
 </section>
 
 <!-- Connect Modal -->
-<div id="connect-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)hideConnectModal()">
+<div id="connect-modal" style="display:none;position:fixed;inset:0;background:rgba(11,14,20,0.45);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)hideConnectModal()">
     <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:480px;max-width:95vw;">
         <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Connect Google Drive Folder</div>
         <div style="font-size:12px;color:var(--text-2);margin-bottom:20px;">MsgStack will watch this folder and auto-ingest any Google Docs, DOCX, PDF, or TXT files into your knowledge graph.</div>
@@ -494,7 +494,7 @@
             position: fixed !important;
             inset: 0 !important;
             z-index: 9999 !important;
-            background: #191825 !important;
+            background: #F7F8FA !important;
             padding: 24px !important;
             display: flex !important;
             flex-direction: column !important;
@@ -538,7 +538,7 @@
                             </button>
                         </div>
                     </div>
-                    <div id="cy" style="width:100%;height:calc(100vh - 280px);min-height:420px;background:#191825;flex:1;"></div>
+                    <div id="cy" style="width:100%;height:calc(100vh - 280px);min-height:420px;background:#F7F8FA;flex:1;"></div>
                 </div>
                 <div class="card" id="graph-node-detail" style="margin-bottom:0;">
                     <div style="color:var(--text-3);font-size:12px;padding-top:8px;">Click a node to inspect its attributes.</div>
@@ -630,7 +630,7 @@
 </section>
 
 <!-- Plaintext Key Modal -->
-<div id="key-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:1000; align-items:center; justify-content:center;">
+<div id="key-modal" style="display:none; position:fixed; inset:0; background:rgba(11,14,20,0.45); backdrop-filter:blur(4px); z-index:1000; align-items:center; justify-content:center;">
     <div style="background:var(--bg-1); border:1px solid var(--border); padding:24px; border-radius:var(--radius-lg); max-width:480px; width:90%; box-shadow:0 10px 25px rgba(0,0,0,0.25); text-align:center;">
         <h3 style="font-size:16px; font-weight:700; margin-bottom:12px; color:var(--text);">API Key Generated</h3>
         <p style="font-size:13px; color:var(--text-2); margin-bottom:16px;">Copy this API key now. For security, it will not be shown again.</p>
@@ -845,7 +845,7 @@
 <!-- Floating Graph Navigator Button -->
 <div id="navigator-launcher" style="position:fixed;bottom:24px;right:24px;z-index:50;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);border-radius:50%;width:54px;height:54px;background:var(--primary);border:2px solid var(--border);"
      onclick="toggleNavigator()">
-    <span style="color:#0B0C0E;font-size:22px;line-height:1;font-family:var(--font-mono);font-weight:700;">&gt;_</span>
+    <span style="color:#FFFFFF;font-size:22px;line-height:1;font-family:var(--font-mono);font-weight:700;">&gt;_</span>
 </div>
 
 <!-- Sliding Chat Panel (hidden by default) -->
@@ -1215,14 +1215,14 @@
 
     // ATLAS palette — muted, inky hues only (no neon, no purple)
     const SECTION_META = {
-        headline:     { label:'Headline',     color:'#3E4E80', bg:'rgba(62,78,128,.10)' },
+        headline:     { label:'Headline',     color:'#2451E0', bg:'rgba(36,81,224,.10)' },
         subhead:      { label:'Subhead',      color:'#5E6E8A', bg:'rgba(94,110,138,.10)' },
         benefit:      { label:'Benefit',      color:'#56673F', bg:'rgba(86,103,63,.10)' },
         use_case:     { label:'Use Case',     color:'#4E6E6A', bg:'rgba(78,110,106,.10)' },
-        proof_point:  { label:'Proof Point',  color:'#2F3D68', bg:'rgba(47,61,104,.10)' },
+        proof_point:  { label:'Proof Point',  color:'#1B3DB8', bg:'rgba(47,61,104,.10)' },
         objection:    { label:'Objection',    color:'#9E3B2E', bg:'rgba(158,59,46,.10)' },
         social_proof: { label:'Social Proof', color:'#8A6A1F', bg:'rgba(138,106,31,.10)' },
-        positioning:  { label:'Positioning Statement', color:'#9C947F', bg:'rgba(156,148,127,.10)' },
+        positioning:  { label:'Positioning Statement', color:'#8891A0', bg:'rgba(136,145,160,.10)' },
     };
     const SECTION_ORDER = ['headline','subhead','benefit','use_case','proof_point','objection','social_proof','positioning'];
 
@@ -1364,7 +1364,7 @@
             .concat(Object.keys(grouped).filter(s=>!SECTION_ORDER.includes(s)&&grouped[s]?.length));
         if (!sections.length) return '<div class="card" style="text-align:center;padding:32px;color:var(--text-3);">No entries yet. Add one above or use Bulk Import.</div>';
         return sections.map(st => {
-            const meta = SECTION_META[st]||{label:assertionTypeLabel(st),color:'#9C947F',bg:'rgba(156,148,127,.10)'};
+            const meta = SECTION_META[st]||{label:assertionTypeLabel(st),color:'#8891A0',bg:'rgba(136,145,160,.10)'};
             const msgs = grouped[st]||[];
             return `<div class="card" style="margin-bottom:12px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">
@@ -1494,7 +1494,7 @@
                         ${logs.map(log => {
                             const date = new Date(log.timestamp).toLocaleString();
                             return `
-                            <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                            <tr style="border-bottom:1px solid var(--border);">
                                 <td style="padding:8px 6px;white-space:nowrap;">${esc(date)}</td>
                                 <td style="padding:8px 6px;">${esc(log.performed_by || 'system')}</td>
                                 <td style="padding:8px 6px;"><span style="font-weight:600;color:var(--primary);">${esc(log.action)}</span></td>
@@ -1716,7 +1716,7 @@
         if (!overlay) {
             overlay = document.createElement('div');
             overlay.id = 'modal-overlay';
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:1000;';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(11,14,20,.45);display:flex;align-items:center;justify-content:center;z-index:1000;';
             overlay.onclick = e => { if (e.target===overlay) closeModal(); };
             document.body.appendChild(overlay);
         }
@@ -2078,7 +2078,7 @@
             if (!overlay) {
                 overlay = document.createElement('div');
                 overlay.id = 'skill-edit-overlay';
-                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(11,14,20,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;';
                 overlay.onclick = e => { if (e.target===overlay) overlay.style.display='none'; };
                 document.body.appendChild(overlay);
             }
@@ -2398,8 +2398,8 @@
         }
         const sections = SECTION_ORDER.filter(s=>grouped[s]?.length).concat(Object.keys(grouped).filter(s=>!SECTION_ORDER.includes(s)&&grouped[s]?.length));
         sectionsEl.innerHTML = sections.map(st => {
-            const meta = SECTION_META[st]||{label:assertionTypeLabel(st),color:'#9C947F',bg:'rgba(156,148,127,.10)'};
-            const items = (grouped[st]||[]).map(m=>`<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px;color:var(--text-2);line-height:1.5;">${esc(m.content)}</div>`).join('');
+            const meta = SECTION_META[st]||{label:assertionTypeLabel(st),color:'#8891A0',bg:'rgba(136,145,160,.10)'};
+            const items = (grouped[st]||[]).map(m=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text-2);line-height:1.5;">${esc(m.content)}</div>`).join('');
             return `<div style="margin-bottom:12px;padding:12px;background:${meta.bg};border-radius:var(--radius);">
                 <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:8px;">${meta.label} (${(grouped[st]||[]).length})</div>
                 ${items}
@@ -2605,8 +2605,8 @@
     });
 
 const NODE_COLORS = {
-        CanonDomain:      '#3E4E80',
-        Section:   '#9C947F',
+        CanonDomain:      '#2451E0',
+        Section:   '#8891A0',
         CanonEntry: '#56673F',
         Entity:    '#B0553E',
         Pillar:    '#8A6A1F',
@@ -2634,9 +2634,9 @@ const NODE_COLORS = {
         return NODE_TYPE_LABELS[t] || (t||'').replace('Grounding','');
     }
     const REL_COLORS = {
-        CONTAINS:     '#9C947F',
-        HAS_SECTION:  '#9C947F',
-        TARGETS:      '#3E4E80',
+        CONTAINS:     '#8891A0',
+        HAS_SECTION:  '#8891A0',
+        TARGETS:      '#2451E0',
         ADDRESSES:    '#4E6E6A',
         APPLIES_TO:   '#56673F',
         HAS_PILLAR:   '#8A6A1F',
@@ -2729,15 +2729,15 @@ const NODE_COLORS = {
                         'background-color': 'data(color)',
                         'width': 'data(size)', 'height': 'data(size)',
                         'label': 'data(label)',
-                        'color': '#ccc', 'font-size': 8,
+                        'color': '#3F4757', 'font-size': 8,
                         'text-valign': 'bottom', 'text-margin-y': 3,
                         'text-wrap': 'ellipsis', 'text-max-width': 70,
                     }},
                     { selector: 'node[type="CanonDomain"]', style: {
-                        'shape': 'round-rectangle', 'color': '#eee', 'font-size': 9,
+                        'shape': 'round-rectangle', 'color': '#0B0E14', 'font-size': 9,
                     }},
                     { selector: 'node:selected', style: {
-                        'border-width': 2, 'border-color': '#fff',
+                        'border-width': 2, 'border-color': '#0B0E14',
                     }},
                     { selector: 'edge', style: {
                         'width': 1, 'line-color': 'data(color)',
@@ -3044,10 +3044,10 @@ const NODE_COLORS = {
     // ── v0.7: Entry Status ─────────────────────────────────────────────────────────
 
     const MSG_STATUS_META = {
-        draft:      { label: 'DRAFT',       color: 'var(--text-3)',   bg: 'rgba(156,148,127,.10)', border: 'var(--border)' },
+        draft:      { label: 'DRAFT',       color: 'var(--text-3)',   bg: 'rgba(136,145,160,.10)', border: 'var(--border)' },
         in_review:  { label: 'IN REVIEW',   color: 'var(--warn)',     bg: 'var(--warn-dim)',       border: 'rgba(138,106,31,.35)' },
         approved:   { label: 'APPROVED',    color: 'var(--success)',  bg: 'var(--success-dim)',    border: 'rgba(86,103,63,.35)' },
-        locked:     { label: 'LOCKED',    color: 'var(--ember)',    bg: 'var(--ember-dim)',      border: 'rgba(245,158,11,.45)' },
+        locked:     { label: 'LOCKED',    color: 'var(--ember)',    bg: 'var(--ember-dim)',      border: 'rgba(36,81,224,.45)' },
         outdated:   { label: 'OUTDATED',    color: 'var(--danger)',   bg: 'var(--danger-dim)',     border: 'rgba(158,59,46,.35)' },
     };
 
@@ -3190,7 +3190,7 @@ const NODE_COLORS = {
         if (times === 0) return 'var(--text-3)';
         if (times < 3)  return '#8A6A1F';
         if (times < 8)  return '#56673F';
-        return '#3E4E80';
+        return '#2451E0';
     }
 
     // Override _renderGrouped to add status badges + heatmap
@@ -3219,7 +3219,7 @@ const NODE_COLORS = {
         </div>`;
 
         const msgCards = sections.map(st => {
-            const meta = SECTION_META[st] || { label: assertionTypeLabel(st), color:'#9C947F', bg:'rgba(156,148,127,.10)' };
+            const meta = SECTION_META[st] || { label: assertionTypeLabel(st), color:'#8891A0', bg:'rgba(136,145,160,.10)' };
             const msgs = grouped[st] || [];
             return `<div class="card msg-section" data-section="${st}" style="margin-bottom:12px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${meta.color};margin-bottom:10px;display:flex;align-items:center;gap:6px;">

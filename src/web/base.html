@@ -4,108 +4,72 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MsgStack{% endblock %}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
-    <script>(function(){var t=localStorage.getItem('msgstack-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');})()</script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        /* ── MsgStack Design System v5 "ATLAS" — ink on paper ──
-           Paper canvas, warm ink, one printed-ink blue accent.
-           Ember orange marks LOCKED/verified ONLY. Dark theme = night chapter.
-           No gradients on UI surfaces, no glassmorphism, no glow, no purple. */
         /* ============================================================
-           TERMINAL design system (v6) — ported from msgstack.ai so the
-           admin UI and the marketing site read as one product. Dark-first
-           and developer-native; replaces ATLAS (parchment, Lora serif,
-           atlas-blue), which belonged to the retired "atlas of
-           organizational record" concept.
-
-           Token NAMES are inherited so every existing rule keeps working;
-           only the values changed. --primary is the accent slot and now
-           holds signal green.
+           MsgStack Design System v6 "LEDGER" — light, structured,
+           enterprise-credible. Source of truth: msgstack-website
+           design-system/tokens.css. Replaces TERMINAL (dark/green) and
+           ATLAS. One accent (deep blue) carries every interactive,
+           locked and verified state; distinguish by fill, not hue.
+           Token NAMES are inherited so existing rules keep working;
+           only the values changed. No gradients, glow or glass.
            ============================================================ */
         :root {
-            --bg: #0B0C0E;            /* ground */
-            --bg-1: #121417;          /* raised surface */
-            --bg-2: #1A1D21;          /* pressed */
-            --bg-3: #24282E;
-            --border: #24282E;
-            --border-light: #2E333A;
-            --text: #E6E8EA;
-            --text-2: #9BA1A8;
-            --text-3: #5F666E;
-            --primary: #4ADE80;       /* signal green */
-            --primary-dim: rgba(74,222,128,0.10);
-            --primary-hover: #22C55E;
-            --ember: #F59E0B;         /* LOCKED / verified only */
-            --ember-dim: rgba(245,158,11,0.14);
-            --accent-graph: #4ADE80;
-            --accent-purple: #22C55E;
-            --success: #4ADE80;
-            --success-dim: rgba(74,222,128,0.12);
-            --warn: #F59E0B;
-            --warn-dim: rgba(245,158,11,0.12);
-            --warning: #F59E0B;
-            --danger: #F87171;
-            --danger-dim: rgba(248,113,113,0.12);
+            --bg: #FFFFFF;
+            --bg-1: #F7F8FA;          /* cards, sidebar */
+            --bg-2: #EEF1F5;          /* hover, nested */
+            --bg-3: #E3E7ED;
+            --border: #E3E7ED;
+            --border-light: #CDD3DC;
+            --text: #0B0E14;
+            --text-2: #3F4757;
+            --text-3: #8891A0;
+            --primary: #2451E0;       /* the accent */
+            --primary-dim: #EEF2FF;
+            --primary-hover: #1B3DB8;
+            --ember: #2451E0;         /* LOCKED/verified reuse the accent */
+            --ember-dim: #EEF2FF;
+            --accent-graph: #2451E0;
+            --accent-purple: #1B3DB8;
+            /* status colours are functional, not brand */
+            --success: #15803D;
+            --success-dim: rgba(21,128,61,0.10);
+            --warn: #B45309;
+            --warn-dim: rgba(180,83,9,0.10);
+            --warning: #B45309;
+            --danger: #DC2626;
+            --danger-dim: rgba(220,38,38,0.08);
             --radius: 8px;
-            --radius-lg: 14px;
-            --font-logo: 'JetBrains Mono', ui-monospace, monospace;
-            --font-display: 'JetBrains Mono', ui-monospace, monospace;
+            --radius-lg: 12px;
+            --font-heading: 'Space Grotesk', -apple-system, sans-serif;
+            --font-logo: var(--font-heading);
+            --font-display: var(--font-heading);
             --font-sans: 'Inter', -apple-system, sans-serif;
             --font-mono: 'JetBrains Mono', Consolas, monospace;
             --ease-drift: cubic-bezier(0.25, 0.8, 0.25, 1);
-        }
-        /* TERMINAL is dark-first. The toggle now selects a light surface
-           rather than a separate palette — accents are unchanged so the
-           two modes stay recognisably the same product. */
-        [data-theme="light"] {
-            --bg: #FFFFFF;
-            --bg-1: #F7F8F8;
-            --bg-2: #EEF0F1;
-            --bg-3: #E3E6E8;
-            --border: #E3E6E8;
-            --border-light: #D3D7DA;
-            --text: #0B0C0E;
-            --text-2: #4B5259;
-            --text-3: #858C93;
-            --primary: #16A34A;
-            --primary-dim: rgba(22,163,74,0.10);
-            --primary-hover: #15803D;
-            --ember: #B45309;
-            --ember-dim: rgba(180,83,9,0.12);
-            --success: #16A34A;
-            --success-dim: rgba(22,163,74,0.12);
-            --warn: #B45309;
-            --warn-dim: rgba(180,83,9,0.12);
-            --warning: #B45309;
-            --danger: #DC2626;
-            --danger-dim: rgba(220,38,38,0.10);
         }
         body { font-family: var(--font-sans); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
         h1, h2, .page-title, .stat-value { font-family: var(--font-display); font-weight: 600; }
         h3, .card-title { font-family: var(--font-sans); font-weight: 600; }
         .logo { font-family: var(--font-logo); }
-        code, pre, .monospace { font-family: var(--font-mono); color: var(--primary); font-size: 0.92em; }
+        code, pre, .monospace { font-family: var(--font-mono); color: var(--text-2); font-size: 0.92em; }
         .app { display: flex; height: 100vh; overflow: hidden; }
 
         /* ── Sidebar ── */
         .sidebar { width: 216px; background: var(--bg-1); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; flex-shrink: 0; }
-        .logo { font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 24px; padding: 0 8px; display: flex; align-items: baseline; gap: 3px; letter-spacing: -0.02em; }
-        /* Terminal caret, drawn rather than typed so its weight is exact and
-           does not shift with the font. Matches the site header. */
-        .logo-caret { display: inline-block; width: 2px; height: 0.9em; background: var(--primary); transform: translateY(0.04em); }
+        .logo { font-family: var(--font-heading); font-size: 19px; font-weight: 700; color: var(--text); margin-bottom: 24px; padding: 0 8px; display: flex; align-items: baseline; gap: 3px; letter-spacing: -0.02em; }
         .nav-section { font-family: var(--font-mono); font-size: 9.5px; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); padding: 0 8px; margin: 18px 0 6px; }
         .nav-item { padding: 7px 8px; border-radius: var(--radius); cursor: pointer; color: var(--text-2); transition: all 0.12s; margin-bottom: 1px; display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 500; }
         .nav-item:hover { background: var(--bg-2); color: var(--text); }
         .nav-item.active { background: var(--primary-dim); color: var(--primary); }
         .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.8; }
         .nav-item.active svg { opacity: 1; }
-        .sidebar-footer { margin-top: auto; padding: 0 8px; font-size: 11px; color: var(--text-3); display: flex; align-items: center; justify-content: space-between; }
-        .theme-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius); padding: 3px 8px; cursor: pointer; color: var(--text-2); font-size: 12px; line-height: 1.5; transition: all .12s; }
-        .theme-btn:hover { background: var(--bg-2); color: var(--text); }
+        .sidebar-footer { margin-top: auto; padding: 0 8px; font-size: 11px; color: var(--text-3); display: flex; align-items: center; }
 
         /* ── Main ── */
         .main { flex: 1; overflow-y: auto; background: var(--bg); }
@@ -116,16 +80,13 @@
 
         /* ── Buttons ── */
         .btn { padding: 7px 14px; border-radius: var(--radius); font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: all 0.16s; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-family: inherit; white-space: nowrap; }
-        .btn-primary { background: var(--primary); color: #fff; }
-        .btn-primary:hover { background: var(--primary-hover); }
-        .btn-primary { color: #0B0C0E; }
-        [data-theme="light"] .btn-primary { color: #FFFFFF; }
+        .btn-primary { background: var(--primary); color: #FFFFFF; }
         .btn-primary:hover { background: var(--primary-hover); }
         .btn-ghost { background: transparent; color: var(--text-2); border-color: var(--border-light); }
         .btn-ghost:hover { background: transparent; color: var(--primary); border-color: var(--primary); }
-        .btn-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(248,113,113,0.25); }
-        .btn-danger:hover { background: rgba(248,113,113,0.2); }
-        .btn-success { background: var(--success-dim); color: var(--success); border: 1px solid rgba(52,211,153,0.25); }
+        .btn-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(220,38,38,0.25); }
+        .btn-danger:hover { background: rgba(220,38,38,0.14); }
+        .btn-success { background: var(--success-dim); color: var(--success); border: 1px solid rgba(21,128,61,0.25); }
         .btn-sm { padding: 4px 9px; font-size: 12px; }
         .btn-xs { padding: 3px 7px; font-size: 11px; }
         .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
@@ -149,7 +110,7 @@
 
         /* ── Table ── */
         .table { width: 100%; border-collapse: collapse; }
-        .table th { text-align: left; padding: 9px 12px; border-bottom: 1.5px solid var(--text); color: var(--text-3); font-family: var(--font-mono); font-weight: 400; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.14em; }
+        .table th { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border-light); color: var(--text-3); font-family: var(--font-mono); font-weight: 400; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.14em; }
         .table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
         .table tr:last-child td { border-bottom: none; }
         .table tbody tr { cursor: pointer; transition: background 0.1s; }
@@ -183,8 +144,7 @@
 
         /* ── Toasts ── */
         .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
-        .toast { padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; color: var(--text); background: var(--bg-1); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.12); transform: translateY(20px); opacity: 0; transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .toast { color: #0B0C0E; box-shadow: 0 4px 12px rgba(0,0,0,0.45); }
+        .toast { padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; color: var(--text); background: var(--bg-1); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(11,14,20,0.10); transform: translateY(20px); opacity: 0; transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         .toast.show { transform: translateY(0); opacity: 1; }
         .toast-success { border-left: 3px solid var(--success); }
         .toast-error { border-left: 3px solid var(--danger); }
@@ -192,25 +152,23 @@
         /* ── Utilities ── */
         .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.12); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .spinner { border-color: rgba(255,255,255,0.15); border-top-color: var(--primary); }
 
-        /* ── ATLAS: the UI is a printed page — no texture, no glow ── */
+        /* ── LEDGER: flat, structured surfaces — no texture, no glow ── */
         .app { position:relative; z-index:1; }
 
-        /* ── Atlas stamp & badge grammar ── */
+        /* ── Stamp & badge grammar ── */
         .stamp { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); }
-        .badge-locked { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid rgba(232,118,58,0.45); color: var(--ember); background: var(--ember-dim); }
-        .badge-active { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid rgba(62,78,128,0.35); color: var(--primary); background: var(--primary-dim); }
-        .badge-draft  { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-3); background: rgba(156,148,127,0.10); }
+        .badge-locked { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--primary); color: #FFFFFF; background: var(--primary); }
+        .badge-active { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid rgba(36,81,224,0.30); color: var(--primary); background: var(--primary-dim); }
+        .badge-draft  { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-3); background: var(--bg-2); }
 
         /* ── Document-type badges (muted, inky — no neon, no purple) ── */
         .doc-type-badge { display: inline-block; font-family: var(--font-mono); font-size: 9px; padding: 2px 8px; border-radius: 6px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 8px; vertical-align: middle; border: 1px solid transparent; }
-        .doc-type-canon_domain, .doc-type-canon_domain { background: var(--primary-dim); color: var(--primary); border-color: rgba(62,78,128,0.30); }
-        .doc-type-brand_guide       { background: rgba(95,89,74,0.10);   color: var(--text-2); border-color: var(--border); }
-        .doc-type-competitive_brief { background: rgba(138,106,31,0.10); color: var(--warn); border-color: rgba(138,106,31,0.30); }
-        .doc-type-corp_narrative    { background: rgba(86,103,63,0.10);  color: var(--success); border-color: rgba(86,103,63,0.30); }
-        .doc-type-audience_library   { background: rgba(78,110,106,0.10); color: #4E6E6A; border-color: rgba(78,110,106,0.30); }
-        .doc-type-audience_library { color: var(--text-2); }
+        .doc-type-canon_domain      { background: var(--primary-dim);       color: var(--primary); border-color: rgba(36,81,224,0.30); }
+        .doc-type-brand_guide       { background: var(--bg-2);              color: var(--text-2);  border-color: var(--border); }
+        .doc-type-competitive_brief { background: var(--warn-dim);          color: var(--warn);    border-color: rgba(180,83,9,0.30); }
+        .doc-type-corp_narrative    { background: var(--success-dim);       color: var(--success); border-color: rgba(21,128,61,0.30); }
+        .doc-type-audience_library  { background: var(--bg-2);              color: var(--text-2);  border-color: var(--border); }
 
         /* ── QoL UX Enhancements ── */
 
@@ -263,11 +221,7 @@
         }
         .card:hover {
             border-color: var(--border-light);
-            box-shadow: 0 4px 14px rgba(35, 32, 26, 0.05);
-        }
-        .card:hover {
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
-            border-color: var(--border-light);
+            box-shadow: 0 4px 14px rgba(11, 14, 20, 0.06);
         }
 
         /* Sidebar Nav Comfort */
@@ -275,17 +229,6 @@
             padding: 9px 12px !important;
             font-size: 14px !important;
             transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease !important;
-        }
-
-        /* Theme Toggle Button Spin */
-        #theme-toggle {
-            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-        }
-        #theme-toggle:hover {
-            transform: scale(1.1);
-        }
-        #theme-toggle:active {
-            transform: rotate(360deg) scale(0.9);
         }
 
         /* Interactive Lists (interactive items in dashboard lists) */
@@ -305,7 +248,7 @@
         }
 
         /* Global Transition Smoothness */
-        .btn, .theme-btn, .form-input, .form-textarea, .form-select, .tab-item {
+        .btn, .form-input, .form-textarea, .form-select, .tab-item {
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
 
@@ -316,8 +259,7 @@
     <div class="app">
         <aside class="sidebar">
             <div class="logo" onclick="showSection('dashboard')" style="cursor:pointer;">
-                <span>msgstack</span>
-                <span class="logo-caret" aria-hidden="true"></span>
+                <span>MsgStack</span>
             </div>
             
             <div class="nav-section">Management</div>
@@ -348,9 +290,6 @@
             
             <div class="sidebar-footer">
                 <span class="stamp" style="font-size:9px;">v0.9</span>
-                <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()" title="Toggle light mode">
-                    <span id="theme-icon">☾</span>
-                </button>
             </div>
         </aside>
         
@@ -360,24 +299,5 @@
     </div>
     
     {% block scripts %}{% endblock %}
-    <script>
-        function toggleTheme() {
-            // TERMINAL is dark-first, so the stored preference selects light.
-            var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-            if (isLight) {
-                document.documentElement.removeAttribute('data-theme');
-                localStorage.removeItem('msgstack-theme');
-            } else {
-                document.documentElement.setAttribute('data-theme', 'light');
-                localStorage.setItem('msgstack-theme', 'light');
-            }
-            _syncThemeIcon();
-        }
-        function _syncThemeIcon() {
-            var icon = document.getElementById('theme-icon');
-            if (icon) icon.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☾' : '☀';
-        }
-        document.addEventListener('DOMContentLoaded', _syncThemeIcon);
-    </script>
 </body>
 </html>

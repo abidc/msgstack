@@ -2,48 +2,32 @@
 /* Workspace-brandable via CSS variables */
 
 :root {
-  /* Brand colors — ATLAS defaults, overridden per-workspace */
-  --brand-primary: #8A97C0;
-  --brand-primary-dim: rgba(138,151,192,.15);
-  --brand-secondary: #ADA89E;
-  --brand-accent: #8A97C0;
+  /* Brand colors — LEDGER defaults, overridden per-workspace */
+  --brand-primary: #2451E0;
+  --brand-primary-dim: #EEF2FF;
+  --brand-secondary: #3F4757;
+  --brand-accent: #2451E0;
 
-  /* Backgrounds — ATLAS night chapter */
-  --bg-main: #191825;
-  --bg-slide: #232231;
-  --bg-card: #2C2B3D;
+  /* Backgrounds — LEDGER light */
+  --bg-main: #FFFFFF;
+  --bg-slide: #F7F8FA;
+  --bg-card: #EEF1F5;
 
   /* Text */
-  --text-primary: #EFEBE0;
-  --text-secondary: #ADA89E;
-  --text-muted: #77738A;
+  --text-primary: #0B0E14;
+  --text-secondary: #3F4757;
+  --text-muted: #8891A0;
 
   /* Borders */
-  --border: #383650;
+  --border: #E3E7ED;
 
-  /* Fonts — ATLAS defaults, overridden per-workspace */
-  --font-heading: 'Newsreader', Georgia, serif;
-  --font-body: 'Instrument Sans', -apple-system, sans-serif;
-  --font-mono: 'Martian Mono', Consolas, monospace;
+  /* Fonts — LEDGER defaults, overridden per-workspace */
+  --font-heading: 'Space Grotesk', -apple-system, sans-serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
 
   /* Logo — set via inline style or JS */
   --logo-url: none;
-}
-
-/* Light mode */
-.reveal.light,
-.reveal[data-theme="light"] {
-  /* ATLAS paper */
-  --bg-main: #F6F3EA;
-  --bg-slide: #EFEADD;
-  --bg-card: #E5DECB;
-  --text-primary: #23201A;
-  --text-secondary: #5F594A;
-  --text-muted: #9C947F;
-  --border: #DAD2BE;
-  --brand-primary: #3E4E80;
-  --brand-primary-dim: rgba(62,78,128,.08);
-  --brand-accent: #3E4E80;
 }
 
 /* ── Reveal.js overrides ── */
