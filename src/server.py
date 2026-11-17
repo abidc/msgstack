@@ -1145,6 +1145,164 @@ def get_query_audit_log(
     return {"entries": log, "count": len(log)}
 
 
+# ── Marketing slice: brand voice → gated drafts → approval → schedule → results ──
+# Thin wrappers over src/marketing/tools.py (the behaviour and the tests live there).
+# Every tool is scoped by brand_id; the brand is the tenant. See docs/MVP_SPEC.md.
+
+from src.marketing import tools as _mkt  # noqa: E402
+
+
+@mcp.tool()
+def brand_intake(
+    name: str,
+    one_liner: str = "",
+    audience: str = "",
+    tone: Optional[list[str]] = None,
+    we_say: Optional[list[str]] = None,
+    we_never_say: Optional[list[str]] = None,
+    locked_claims: Optional[list[str]] = None,
+    topics: Optional[list[str]] = None,
+    off_limits: Optional[list[str]] = None,
+    cta: str = "",
+    example_posts: Optional[list[str]] = None,
+    owner: str = "",
+    kind: str = "solo",
+    workspace_id: str = "default",
+) -> dict:
+    """Start a brand (the tenant) and version 1 of its voice canon from a ten-minute intake.
+
+    Partial answers are fine. The response lists what is still missing and the next
+    three questions to ask, so you can run the intake as a conversation and fill gaps
+    with `update_voice_canon`. Fields: one_liner (what/for whom), audience (one reader),
+    tone (3-5 words), we_say / we_never_say (phrases), locked_claims (verbatim-or-absent
+    numbers, prices, taglines), topics (3-6 pillars rotated weekly), off_limits (topics
+    never written about), cta, example_posts (1-3 real pieces by the owner).
+    Returns brand_id: pass it to every other marketing tool.
+    """
+    return _mkt.brand_intake(name=name, one_liner=one_liner, audience=audience, tone=tone, we_say=we_say,
+                             we_never_say=we_never_say, locked_claims=locked_claims, topics=topics,
+                             off_limits=off_limits, cta=cta, example_posts=example_posts, owner=owner,
+                             kind=kind, workspace_id=workspace_id)
+
+
+@mcp.tool()
+def update_voice_canon(
+    brand_id: str,
+    one_liner: Optional[str] = None,
+    audience: Optional[str] = None,
+    tone: Optional[list[str]] = None,
+    we_say: Optional[list[str]] = None,
+    we_never_say: Optional[list[str]] = None,
+    locked_claims: Optional[list[str]] = None,
+    topics: Optional[list[str]] = None,
+    off_limits: Optional[list[str]] = None,
+    cta: Optional[str] = None,
+    example_posts: Optional[list[str]] = None,
+    notes: Optional[str] = None,
+) -> dict:
+    """Add answers to a brand's voice canon. Writes a new immutable canon version; lists
+    replace rather than merge. Returns completeness and the next questions to ask."""
+    fields = {k: v for k, v in dict(one_liner=one_liner, audience=audience, tone=tone, we_say=we_say,
+                                    we_never_say=we_never_say, locked_claims=locked_claims, topics=topics,
+                                    off_limits=off_limits, cta=cta, example_posts=example_posts, notes=notes).items()
+              if v is not None}
+    return _mkt.update_voice_canon(brand_id, **fields)
+
+
+@mcp.tool()
+def get_brand(brand_id: str) -> dict:
+    """Read a brand and its current voice canon (with completeness and missing fields)."""
+    return _mkt.get_brand(brand_id)
+
+
+@mcp.tool()
+def list_brands(workspace_id: Optional[str] = None) -> dict:
+    """List brands (tenants) with their canon version and completeness. Call first if you
+    do not have a brand_id."""
+    return _mkt.list_brands(workspace_id)
+
+
+@mcp.tool()
+def check_voice(brand_id: str, text: str, channel: str = "linkedin", kind: str = "post", source_text: str = "") -> dict:
+    """Run the deterministic voice gate on any text against a brand's canon BEFORE handing
+    it to a scheduler or ESP. Hard violations (invented numbers, paraphrased locked claims,
+    banned phrases, off-limits topics, invented first-hand experience) block approval; soft
+    ones (dashes, antithesis, hedges, stock openers, length) are shown to the approver.
+    kind="comment" adds the rules for replying to someone else's post. source_text is the
+    brief the text was written from: any figure must appear there or in the canon."""
+    return _mkt.check_voice(brand_id, text, channel=channel, kind=kind, source_text=source_text)
+
+
+@mcp.tool()
+def generate_week(
+    brand_id: str,
+    channel: str = "linkedin",
+    start_date: Optional[str] = None,
+    count: int = 3,
+    brief: str = "",
+    topics: Optional[list[str]] = None,
+    use_llm: Optional[bool] = None,
+) -> dict:
+    """Generate up to `count` gated drafts for ONE channel for the week containing
+    start_date (ISO date; default today). Each draft is run through the voice gate; a
+    draft with violations gets one automatic rewrite and the better version is kept.
+    Items land in the review queue as draft (gate ok) or needs_rework (hard violation).
+    Nothing is published by this tool. Refuses if the canon is not ready and caps open
+    drafts per channel per week at the brand's weekly quota (default 5). With no LLM key
+    configured (or use_llm=False) it writes plain template scaffolds instead of copy.
+    Pass real material in `brief`: it is the only source of facts and figures allowed."""
+    return _mkt.generate_week(brand_id, channel=channel, start_date=start_date, count=count, brief=brief,
+                              topics=topics, use_llm=use_llm)
+
+
+@mcp.tool()
+def review_queue(brand_id: str, status: Optional[str] = "open", channel: Optional[str] = None) -> dict:
+    """List drafts awaiting a human decision (status=open), or any status: draft,
+    needs_rework, approved, rejected, published."""
+    return _mkt.review_queue(brand_id, status=status, channel=channel)
+
+
+@mcp.tool()
+def approve_content(
+    brand_id: str,
+    content_id: str,
+    decided_by: str = "",
+    publish_at: Optional[str] = None,
+    destination: str = "manual",
+    reason: str = "",
+    override: bool = False,
+    edited_body: Optional[str] = None,
+) -> dict:
+    """Approve a draft on the owner's behalf ONLY when they have said yes. Creates the
+    scheduled record (publish_at ISO datetime; default 09:00 on the draft's slot date;
+    destination = manual | buffer | listmonk | linkedin ...). An edited_body is re-gated
+    first. A draft with hard violations is refused unless override=True with a reason,
+    and the override is recorded against the approver."""
+    return _mkt.approve_content(brand_id, content_id, decided_by=decided_by, publish_at=publish_at,
+                                destination=destination, reason=reason, override=override, edited_body=edited_body)
+
+
+@mcp.tool()
+def reject_content(brand_id: str, content_id: str, reason: str, decided_by: str = "") -> dict:
+    """Reject a draft with a reason (required: rejections are the training signal)."""
+    return _mkt.reject_content(brand_id, content_id, reason=reason, decided_by=decided_by)
+
+
+@mcp.tool()
+def mark_published(brand_id: str, content_id: str, external_ref: str = "", published_at: Optional[str] = None,
+                   metrics: Optional[dict] = None) -> dict:
+    """Record that an approved item actually shipped (URL/id at the destination, when, and
+    any metrics you have). Closes the loop so `get_results` can read back what went out."""
+    return _mkt.mark_published(brand_id, content_id, external_ref=external_ref, published_at=published_at, metrics=metrics)
+
+
+@mcp.tool()
+def get_results(brand_id: str, since: Optional[str] = None) -> dict:
+    """What shipped for this brand (and what is still scheduled): each published item with
+    its gate result, who approved it, whether a hard violation was overridden, and metrics."""
+    return _mkt.get_results(brand_id, since=since)
+
+
 # ── MCP Prompts ──────────────────────────────────────────────────────────────
 # Clients that support prompts/list (OpenWebUI, Claude Desktop, etc.) will
 # discover these and can inject them as system messages automatically.

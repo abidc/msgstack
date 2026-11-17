@@ -186,6 +186,20 @@ Navigate to `http://localhost:8001/` for the web interface (styled with the [ATL
 
 ---
 
+## Brand-voice slice (proposal, `src/marketing/`)
+
+A self-contained vertical slice for small-business and agency use, behind the strategy proposal in [`docs/STRATEGY_V3_MARKETING_OS.md`](docs/STRATEGY_V3_MARKETING_OS.md) (roadmap: [`docs/ROADMAP_90_DAYS.md`](docs/ROADMAP_90_DAYS.md), spec: [`docs/MVP_SPEC.md`](docs/MVP_SPEC.md)). Every tool is scoped by `brand_id`; nothing in it publishes anywhere.
+
+| Tool | What it does |
+|------|-------------|
+| `brand_intake` / `update_voice_canon` / `get_brand` / `list_brands` | Ten-minute intake → versioned voice canon (tone, we say / never say, locked claims, topics, off-limits, CTA, examples) |
+| `check_voice` | Deterministic voice gate on any text: hard violations (invented numbers, paraphrased locked claims, banned phrases, off-limits topics) block; soft ones are shown |
+| `generate_week` | Up to N gated drafts for one channel for one week; one automatic rewrite; quota-capped; template mode without an LLM key |
+| `review_queue` / `approve_content` / `reject_content` | Human decision; approval creates the schedule record, rejection requires a reason |
+| `mark_published` / `get_results` | Record what shipped and read it back |
+
+REST mirror under `/api/marketing/*`. Tests: `pytest tests/test_marketing_*.py`.
+
 ## Architecture
 
 ```

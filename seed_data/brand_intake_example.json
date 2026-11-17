@@ -1,0 +1,18 @@
+{
+  "_comment": "Example payload for the brand_intake MCP tool / POST /api/marketing/brands. This is a STARTER for Abid's coaching practice, not approved copy: every string below is a placeholder to be edited in the first dogfood session. locked_claims is deliberately empty because no claim should be locked until the owner has verified it.",
+  "name": "The Climb with Abid",
+  "one_liner": "Coaching for engineers and product people stepping into leadership.",
+  "audience": "One newly promoted manager who still writes code and is not sure which parts of the old job to let go of.",
+  "tone": ["plain", "direct", "warm", "specific"],
+  "we_say": ["judgment", "the work", "what done looks like"],
+  "we_never_say": ["unlock your potential", "synergy", "level up", "game changer", "thought leader"],
+  "locked_claims": [],
+  "topics": ["delegation", "feedback that lands", "saying no", "the first 90 days", "running a 1:1"],
+  "off_limits": ["layoffs", "firing people", "politics"],
+  "cta": "Reply and tell me what you are working on.",
+  "example_posts": [],
+  "owner": "abid",
+  "kind": "solo",
+  "workspace_id": "default",
+  "weekly_quota": {"linkedin": 3, "newsletter": 1}
+}

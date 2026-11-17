@@ -58,6 +58,11 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 store = init_store()
 
+# Marketing slice (brand voice canon → gated drafts → approval queue → schedule → results).
+# Tables are created lazily on first use against the same engine; see src/marketing/.
+from src.marketing.api import router as _marketing_router  # noqa: E402
+app.include_router(_marketing_router)
+
 skills = SkillManager(skills_dir=str(DATA_DIR / "skills"))
 
 # Initialize sync engine eagerly so it's available regardless of lifespan routing
